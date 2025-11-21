@@ -433,6 +433,346 @@ const AddPodcastModal = {
     },
 };
 
+// Analytics Component
+const Analytics = {
+    template: `
+        <div class="pit-analytics">
+            <div class="pit-stats-grid">
+                <div class="pit-stat-card">
+                    <h3>This Week</h3>
+                    <div class="stat-value">\${{ costStats?.this_week?.toFixed(2) || '0.00' }}</div>
+                    <small>API costs</small>
+                </div>
+                <div class="pit-stat-card">
+                    <h3>This Month</h3>
+                    <div class="stat-value">\${{ costStats?.this_month?.toFixed(2) || '0.00' }}</div>
+                    <small>API costs</small>
+                </div>
+                <div class="pit-stat-card">
+                    <h3>Budget Status</h3>
+                    <div class="stat-value" :class="'budget-' + (budgetStatus?.status || 'healthy')">
+                        {{ budgetStatus?.status || 'Healthy' }}
+                    </div>
+                    <small>{{ budgetStatus?.remaining || 'N/A' }} remaining</small>
+                </div>
+                <div class="pit-stat-card">
+                    <h3>Efficiency</h3>
+                    <div class="stat-value">{{ efficiency }}%</div>
+                    <small>Successful requests</small>
+                </div>
+            </div>
+
+            <div class="analytics-grid">
+                <div class="analytics-card">
+                    <h3>Cost by Platform</h3>
+                    <table class="widefat striped">
+                        <thead>
+                            <tr><th>Platform</th><th>Cost</th><th>Requests</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(data, platform) in platformCosts" :key="platform">
+                                <td>{{ platform }}</td>
+                                <td>\${{ data.cost?.toFixed(4) || '0.00' }}</td>
+                                <td>{{ data.count || 0 }}</td>
+                            </tr>
+                            <tr v-if="Object.keys(platformCosts).length === 0">
+                                <td colspan="3" style="text-align:center">No cost data yet</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="analytics-card">
+                    <h3>Recent Activity</h3>
+                    <table class="widefat striped">
+                        <thead>
+                            <tr><th>Date</th><th>Action</th><th>Platform</th><th>Cost</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="activity in recentActivity" :key="activity.id">
+                                <td>{{ formatDate(activity.logged_at) }}</td>
+                                <td>{{ activity.action_type }}</td>
+                                <td>{{ activity.platform || '-' }}</td>
+                                <td>\${{ parseFloat(activity.cost_usd).toFixed(4) }}</td>
+                            </tr>
+                            <tr v-if="recentActivity.length === 0">
+                                <td colspan="4" style="text-align:center">No recent activity</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="analytics-grid" style="margin-top:20px">
+                <div class="analytics-card">
+                    <h3>Discovery Stats</h3>
+                    <ul style="list-style:none;padding:0;margin:0">
+                        <li style="padding:8px 0;border-bottom:1px solid #eee">
+                            <strong>Total Podcasts:</strong> {{ stats?.discovery?.total_podcasts || 0 }}
+                        </li>
+                        <li style="padding:8px 0;border-bottom:1px solid #eee">
+                            <strong>With Social Links:</strong> {{ stats?.discovery?.podcasts_with_links || 0 }}
+                        </li>
+                        <li style="padding:8px 0;border-bottom:1px solid #eee">
+                            <strong>Total Social Links:</strong> {{ stats?.discovery?.total_social_links || 0 }}
+                        </li>
+                        <li style="padding:8px 0">
+                            <strong>Links per Podcast:</strong> {{ stats?.discovery?.avg_links_per_podcast || 0 }}
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="analytics-card">
+                    <h3>Enrichment Stats</h3>
+                    <ul style="list-style:none;padding:0;margin:0">
+                        <li style="padding:8px 0;border-bottom:1px solid #eee">
+                            <strong>Tracked Podcasts:</strong> {{ stats?.enrichment?.tracked_podcasts || 0 }}
+                        </li>
+                        <li style="padding:8px 0;border-bottom:1px solid #eee">
+                            <strong>Total Metrics:</strong> {{ stats?.enrichment?.total_metrics || 0 }}
+                        </li>
+                        <li style="padding:8px 0;border-bottom:1px solid #eee">
+                            <strong>Jobs Queued:</strong> {{ stats?.jobs?.queued || 0 }}
+                        </li>
+                        <li style="padding:8px 0">
+                            <strong>Jobs Completed:</strong> {{ stats?.jobs?.completed || 0 }}
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    `,
+    data() {
+        return {
+            costStats: null,
+            stats: null,
+            budgetStatus: null,
+            platformCosts: {},
+            recentActivity: [],
+        };
+    },
+    computed: {
+        efficiency() {
+            if (!this.stats?.jobs) return 100;
+            const total = (this.stats.jobs.completed || 0) + (this.stats.jobs.failed || 0);
+            if (total === 0) return 100;
+            return Math.round((this.stats.jobs.completed / total) * 100);
+        },
+    },
+    methods: {
+        formatDate(dateStr) {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        },
+        async fetchData() {
+            try {
+                // Fetch stats
+                const statsRes = await fetch(`${pitData.apiUrl}/stats/overview`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                this.stats = await statsRes.json();
+
+                // Fetch cost stats
+                const costRes = await fetch(`${pitData.apiUrl}/stats/costs`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                const costData = await costRes.json();
+                this.costStats = costData;
+                this.budgetStatus = costData.budget_status;
+                this.platformCosts = costData.by_platform || {};
+                this.recentActivity = costData.recent || [];
+            } catch (error) {
+                console.error('Failed to fetch analytics:', error);
+            }
+        },
+    },
+    mounted() {
+        this.fetchData();
+    },
+};
+
+// Settings Component
+const Settings = {
+    template: `
+        <div class="pit-settings">
+            <form @submit.prevent="saveSettings">
+                <div class="settings-section">
+                    <h3>API Configuration</h3>
+
+                    <div class="setting-row">
+                        <label for="youtube_api_key">YouTube API Key</label>
+                        <input type="text" id="youtube_api_key" v-model="settings.youtube_api_key"
+                            placeholder="AIza..." class="regular-text">
+                        <span class="description">Free tier: 10,000 quota units/day (~98 channels)</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="apify_api_token">Apify API Token</label>
+                        <input type="text" id="apify_api_token" v-model="settings.apify_api_token"
+                            placeholder="apify_api_..." class="regular-text">
+                        <span class="description">Required for Twitter, Instagram, Facebook, LinkedIn, TikTok</span>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Budget Limits</h3>
+
+                    <div class="setting-row">
+                        <label for="weekly_budget">Weekly Budget (USD)</label>
+                        <input type="number" id="weekly_budget" v-model="settings.weekly_budget"
+                            min="0" step="0.01" class="small-text">
+                        <span class="description">Maximum spend per week. Processing stops when exceeded.</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="monthly_budget">Monthly Budget (USD)</label>
+                        <input type="number" id="monthly_budget" v-model="settings.monthly_budget"
+                            min="0" step="0.01" class="small-text">
+                        <span class="description">Maximum spend per month. Processing stops when exceeded.</span>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Tracking Configuration</h3>
+
+                    <div class="setting-row">
+                        <label for="cache_duration">Cache Duration (days)</label>
+                        <input type="number" id="cache_duration" v-model="settings.cache_duration"
+                            min="1" max="30" class="small-text">
+                        <span class="description">How long to cache metrics before refreshing (default: 7)</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="auto_refresh">
+                            <input type="checkbox" id="auto_refresh" v-model="settings.auto_refresh">
+                            Enable automatic weekly refresh
+                        </label>
+                        <span class="description">Automatically refresh tracked podcasts every week</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="default_platforms">Default Platforms to Track</label>
+                        <div style="display:flex;flex-wrap:wrap;gap:15px;margin-top:5px">
+                            <label v-for="platform in availablePlatforms" :key="platform" style="font-weight:normal">
+                                <input type="checkbox" :value="platform" v-model="settings.default_platforms">
+                                {{ formatPlatform(platform) }}
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Formidable Forms Integration</h3>
+
+                    <div class="setting-row">
+                        <label for="tracker_form_id">Interview Tracker Form ID</label>
+                        <input type="number" id="tracker_form_id" v-model="settings.tracker_form_id"
+                            min="0" class="small-text">
+                        <span class="description">The Formidable form ID for the Interview Tracker</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="rss_field_id">RSS Feed Field ID</label>
+                        <input type="number" id="rss_field_id" v-model="settings.rss_field_id"
+                            min="0" class="small-text">
+                        <span class="description">Field ID that contains the RSS feed URL</span>
+                    </div>
+                </div>
+
+                <p class="submit">
+                    <button type="submit" class="button button-primary" :disabled="saving">
+                        {{ saving ? 'Saving...' : 'Save Settings' }}
+                    </button>
+                    <span v-if="saved" class="success-message" style="margin-left:10px">Settings saved!</span>
+                    <span v-if="error" class="error-message" style="margin-left:10px">{{ error }}</span>
+                </p>
+            </form>
+        </div>
+    `,
+    data() {
+        return {
+            settings: {
+                youtube_api_key: '',
+                apify_api_token: '',
+                weekly_budget: 50,
+                monthly_budget: 200,
+                cache_duration: 7,
+                auto_refresh: true,
+                default_platforms: ['youtube', 'twitter', 'instagram'],
+                tracker_form_id: '',
+                rss_field_id: '',
+            },
+            availablePlatforms: ['youtube', 'twitter', 'instagram', 'facebook', 'linkedin', 'tiktok', 'spotify', 'apple_podcasts'],
+            saving: false,
+            saved: false,
+            error: null,
+        };
+    },
+    methods: {
+        formatPlatform(platform) {
+            const names = {
+                youtube: 'YouTube',
+                twitter: 'Twitter/X',
+                instagram: 'Instagram',
+                facebook: 'Facebook',
+                linkedin: 'LinkedIn',
+                tiktok: 'TikTok',
+                spotify: 'Spotify',
+                apple_podcasts: 'Apple Podcasts',
+            };
+            return names[platform] || platform;
+        },
+        async fetchSettings() {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/settings`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                const data = await response.json();
+                if (data) {
+                    this.settings = { ...this.settings, ...data };
+                }
+            } catch (error) {
+                console.error('Failed to fetch settings:', error);
+            }
+        },
+        async saveSettings() {
+            this.saving = true;
+            this.saved = false;
+            this.error = null;
+
+            try {
+                const response = await fetch(`${pitData.apiUrl}/settings`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': pitData.nonce,
+                    },
+                    body: JSON.stringify(this.settings),
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.message || 'Failed to save');
+                }
+
+                this.saved = true;
+                setTimeout(() => { this.saved = false; }, 3000);
+            } catch (error) {
+                this.error = error.message;
+            } finally {
+                this.saving = false;
+            }
+        },
+    },
+    mounted() {
+        // Load initial settings from pitData if available
+        if (pitData.settings) {
+            this.settings = { ...this.settings, ...pitData.settings };
+        }
+        this.fetchSettings();
+    },
+};
+
 // Initialize Vue apps for each admin page
 document.addEventListener('DOMContentLoaded', function() {
     const pinia = createPinia();
@@ -453,20 +793,16 @@ document.addEventListener('DOMContentLoaded', function() {
         app.mount('#pit-app-podcasts');
     }
 
-    // Analytics (placeholder)
+    // Analytics
     if (document.getElementById('pit-app-analytics')) {
-        const app = createApp({
-            template: '<div><h2>Analytics Dashboard Coming Soon</h2></div>',
-        });
+        const app = createApp(Analytics);
         app.use(pinia);
         app.mount('#pit-app-analytics');
     }
 
-    // Settings (placeholder)
+    // Settings
     if (document.getElementById('pit-app-settings')) {
-        const app = createApp({
-            template: '<div><h2>Settings Page Coming Soon</h2></div>',
-        });
+        const app = createApp(Settings);
         app.use(pinia);
         app.mount('#pit-app-settings');
     }
