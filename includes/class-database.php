@@ -488,6 +488,18 @@ class PIT_Database {
             itunes_id varchar(50) DEFAULT NULL,
             source varchar(50) DEFAULT NULL,
 
+            -- Location fields
+            city varchar(100) DEFAULT NULL,
+            state_region varchar(100) DEFAULT NULL,
+            country varchar(100) DEFAULT NULL,
+            country_code varchar(10) DEFAULT NULL,
+            timezone varchar(50) DEFAULT NULL,
+            location_display varchar(255) DEFAULT NULL,
+
+            -- Artwork
+            artwork_url text DEFAULT NULL,
+            is_active tinyint(1) DEFAULT 1,
+
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -571,14 +583,24 @@ class PIT_Database {
             twitter_url text DEFAULT NULL,
             website_url text DEFAULT NULL,
 
+            -- Location fields
+            city varchar(100) DEFAULT NULL,
+            state_region varchar(100) DEFAULT NULL,
+            country varchar(100) DEFAULT NULL,
+            country_code varchar(10) DEFAULT NULL,
+            timezone varchar(50) DEFAULT NULL,
+            location_display varchar(255) DEFAULT NULL,
+
             clay_enriched tinyint(1) DEFAULT 0,
             clay_enriched_at datetime DEFAULT NULL,
             enrichment_source varchar(50) DEFAULT NULL,
             data_quality_score int(11) DEFAULT 0,
+            source varchar(50) DEFAULT NULL,
 
             preferred_contact_method varchar(50) DEFAULT NULL,
             best_contact_time varchar(100) DEFAULT NULL,
             response_rate_percentage int(11) DEFAULT NULL,
+            notes text DEFAULT NULL,
 
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -587,6 +609,8 @@ class PIT_Database {
             KEY full_name (full_name),
             KEY email (email),
             KEY role (role),
+            KEY city (city),
+            KEY country (country),
             KEY clay_enriched (clay_enriched)
         ) $charset_collate;";
 

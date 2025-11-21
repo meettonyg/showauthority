@@ -68,6 +68,13 @@ class PIT_Shortcodes {
         add_shortcode('guestify_podcast_relevance_score', [$this, 'podcast_relevance_score']);
         add_shortcode('guestify_podcast_is_tracked', [$this, 'podcast_is_tracked']);
 
+        // Podcast Location
+        add_shortcode('guestify_podcast_location', [$this, 'podcast_location']);
+        add_shortcode('guestify_podcast_city', [$this, 'podcast_city']);
+        add_shortcode('guestify_podcast_state', [$this, 'podcast_state']);
+        add_shortcode('guestify_podcast_country', [$this, 'podcast_country']);
+        add_shortcode('guestify_podcast_timezone', [$this, 'podcast_timezone']);
+
         // ==================== CONTACT SHORTCODES ====================
         add_shortcode('guestify_contact_name', [$this, 'contact_name']);
         add_shortcode('guestify_contact_first_name', [$this, 'contact_first_name']);
@@ -80,6 +87,13 @@ class PIT_Shortcodes {
         add_shortcode('guestify_contact_linkedin', [$this, 'contact_linkedin']);
         add_shortcode('guestify_contact_twitter', [$this, 'contact_twitter']);
         add_shortcode('guestify_contact_website', [$this, 'contact_website']);
+
+        // Contact Location
+        add_shortcode('guestify_contact_location', [$this, 'contact_location']);
+        add_shortcode('guestify_contact_city', [$this, 'contact_city']);
+        add_shortcode('guestify_contact_state', [$this, 'contact_state']);
+        add_shortcode('guestify_contact_country', [$this, 'contact_country']);
+        add_shortcode('guestify_contact_timezone', [$this, 'contact_timezone']);
 
         // ==================== OUTREACH SHORTCODES ====================
         add_shortcode('guestify_outreach_status', [$this, 'outreach_status']);
@@ -382,6 +396,71 @@ class PIT_Shortcodes {
         return $is_tracked ? $atts['true'] : $atts['false'];
     }
 
+    // ==================== PODCAST LOCATION SHORTCODES ====================
+
+    /**
+     * [guestify_podcast_location entry_id="123"]
+     * [guestify_podcast_location podcast_id="5"]
+     * Returns formatted location (city, state, country) or location_display field
+     */
+    public function podcast_location($atts) {
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => '', 'format' => 'full'], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
+
+        // Use location_display if set, otherwise build from parts
+        if (!empty($podcast->location_display)) {
+            return $this->format_output($podcast->location_display, $atts);
+        }
+
+        $parts = [];
+        if (!empty($podcast->city)) $parts[] = $podcast->city;
+        if (!empty($podcast->state_region)) $parts[] = $podcast->state_region;
+        if (!empty($podcast->country)) $parts[] = $podcast->country;
+
+        $location = implode(', ', $parts);
+        return $this->format_output($location ?: null, $atts);
+    }
+
+    /**
+     * [guestify_podcast_city entry_id="123"]
+     * [guestify_podcast_city podcast_id="5"]
+     */
+    public function podcast_city($atts) {
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
+        return $this->format_output($podcast->city ?? null, $atts);
+    }
+
+    /**
+     * [guestify_podcast_state entry_id="123"]
+     * [guestify_podcast_state podcast_id="5"]
+     */
+    public function podcast_state($atts) {
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
+        return $this->format_output($podcast->state_region ?? null, $atts);
+    }
+
+    /**
+     * [guestify_podcast_country entry_id="123"]
+     * [guestify_podcast_country podcast_id="5"]
+     */
+    public function podcast_country($atts) {
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
+        return $this->format_output($podcast->country ?? null, $atts);
+    }
+
+    /**
+     * [guestify_podcast_timezone entry_id="123"]
+     * [guestify_podcast_timezone podcast_id="5"]
+     */
+    public function podcast_timezone($atts) {
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
+        return $this->format_output($podcast->timezone ?? null, $atts);
+    }
+
     // ==================== CONTACT SHORTCODES ====================
 
     /**
@@ -505,6 +584,71 @@ class PIT_Shortcodes {
         $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => '', 'link' => 'false', 'target' => '_blank'], $atts);
         $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
         return $this->format_output($contact->website_url ?? null, $atts);
+    }
+
+    // ==================== CONTACT LOCATION SHORTCODES ====================
+
+    /**
+     * [guestify_contact_location entry_id="123"]
+     * [guestify_contact_location contact_id="5"]
+     * Returns formatted location (city, state, country) or location_display field
+     */
+    public function contact_location($atts) {
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => '', 'format' => 'full'], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
+
+        // Use location_display if set, otherwise build from parts
+        if (!empty($contact->location_display)) {
+            return $this->format_output($contact->location_display, $atts);
+        }
+
+        $parts = [];
+        if (!empty($contact->city)) $parts[] = $contact->city;
+        if (!empty($contact->state_region)) $parts[] = $contact->state_region;
+        if (!empty($contact->country)) $parts[] = $contact->country;
+
+        $location = implode(', ', $parts);
+        return $this->format_output($location ?: null, $atts);
+    }
+
+    /**
+     * [guestify_contact_city entry_id="123"]
+     * [guestify_contact_city contact_id="5"]
+     */
+    public function contact_city($atts) {
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
+        return $this->format_output($contact->city ?? null, $atts);
+    }
+
+    /**
+     * [guestify_contact_state entry_id="123"]
+     * [guestify_contact_state contact_id="5"]
+     */
+    public function contact_state($atts) {
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
+        return $this->format_output($contact->state_region ?? null, $atts);
+    }
+
+    /**
+     * [guestify_contact_country entry_id="123"]
+     * [guestify_contact_country contact_id="5"]
+     */
+    public function contact_country($atts) {
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
+        return $this->format_output($contact->country ?? null, $atts);
+    }
+
+    /**
+     * [guestify_contact_timezone entry_id="123"]
+     * [guestify_contact_timezone contact_id="5"]
+     */
+    public function contact_timezone($atts) {
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
+        return $this->format_output($contact->timezone ?? null, $atts);
     }
 
     // ==================== OUTREACH SHORTCODES ====================
@@ -1179,6 +1323,39 @@ class PIT_Shortcodes {
                         echo esc_html(implode(' at ', $work_info));
                         ?>
                     </span>
+                </div>
+                <?php endif; ?>
+
+                <?php
+                // Build location string from parts or use location_display
+                $location = '';
+                if (!empty($contact->location_display)) {
+                    $location = $contact->location_display;
+                } else {
+                    $location_parts = [];
+                    if (!empty($contact->city)) $location_parts[] = $contact->city;
+                    if (!empty($contact->state_region)) $location_parts[] = $contact->state_region;
+                    if (!empty($contact->country)) $location_parts[] = $contact->country;
+                    $location = implode(', ', $location_parts);
+                }
+                ?>
+                <?php if (!empty($location)): ?>
+                <div class="contact-detail-item">
+                    <svg class="contact-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <span class="contact-detail-text"><?php echo esc_html($location); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($contact->timezone)): ?>
+                <div class="contact-detail-item">
+                    <svg class="contact-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span class="contact-detail-text"><?php echo esc_html($contact->timezone); ?></span>
                 </div>
                 <?php endif; ?>
 
