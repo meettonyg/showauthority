@@ -4,6 +4,17 @@
 
 This guide helps you test the Formidable Bridge integration to verify that podcast deduplication works correctly across different data sources (Podcast Index, Taddy, RSS, manual entry).
 
+## CRITICAL: Deduplication Strategy
+
+**RSS Feed URL is the PRIMARY unique identifier** because it's the same across ALL podcast directories (Podcast Index, Taddy, Apple, Spotify, etc.)
+
+**Podcast Index ID and Taddy UUID are DIFFERENT identifiers** from different systems for the SAME podcast - they cannot be used to match each other!
+
+**Deduplication Priority**:
+1. RSS Feed URL (PRIMARY - universal across all directories)
+2. iTunes ID (also universal - Apple Podcasts ID)
+3. Directory-specific IDs (for API callbacks only, not cross-matching)
+
 ## Prerequisites
 
 1. **Configure Tracker Form ID** (required):
@@ -120,31 +131,34 @@ WHERE podcast_id = (
 -- Expected: 2 rows with SAME podcast_id
 ```
 
-### Test 3: Add SAME Podcast via Taddy UUID (Cross-Source Deduplication)
+### Test 3: Add SAME Podcast via Taddy (Cross-Source Deduplication)
 
-**Goal**: Verify different sources don't create duplicates if RSS matches.
+**Goal**: Verify different directory sources don't create duplicates because RSS URL is the PRIMARY identifier.
 
-1. **Create Third Formidable Entry**:
+**Why This Works**: Even though Podcast Index ID (920666) and Taddy UUID (a1b2c3d4...) are COMPLETELY DIFFERENT identifiers, the RSS Feed URL is the SAME across both directories. This is why RSS URL is the PRIMARY key for deduplication.
+
+1. **Create Third Formidable Entry** (as if found via Taddy):
    - Podcast Name: "Podcast Mark"
-   - RSS Feed: "https://podcastmark.com/feed" (SAME RSS)
-   - PodID: *(leave empty)*
-   - Taddy UUID: `a1b2c3d4-e5f6-7890-abcd-ef1234567890` (new field)
+   - RSS Feed: "https://podcastmark.com/feed" (SAME RSS - this is the key!)
+   - PodID: *(leave empty - came from Taddy, not Podcast Index)*
+   - Taddy UUID: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
    - Host Name: "Mark de Grasse"
 
 2. **Expected Result**:
-   - **NO new podcast created**
-   - Existing podcast found by `rss_feed_url` match
-   - Podcast record UPDATED with `taddy_podcast_uuid`
+   - **NO new podcast created** (RSS URL matches existing record!)
+   - Existing podcast found by `rss_feed_url` match (PRIMARY check)
+   - Podcast record UPDATED to add `taddy_podcast_uuid`
    - Now podcast has BOTH Podcast Index ID AND Taddy UUID
    - New bridge entry created for this entry
 
 3. **Verification**:
 ```sql
--- Should still be only 1 podcast, but now with Taddy UUID added
-SELECT id, podcast_index_id, taddy_podcast_uuid, source
+-- Should still be only 1 podcast, with BOTH external IDs now
+SELECT id, rss_feed_url, podcast_index_id, taddy_podcast_uuid, source
 FROM wp_guestify_podcasts
 WHERE rss_feed_url = 'https://podcastmark.com/feed';
 -- Expected: 1 row with BOTH podcast_index_id AND taddy_podcast_uuid filled
+-- RSS URL was the SAME - that's how we knew it was the same podcast!
 
 -- Should return 3 bridge records now
 SELECT COUNT(*) as entry_count

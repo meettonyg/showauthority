@@ -12,11 +12,28 @@
 5. `guestify_interview_tracker_podcasts` - Bridge between Formidable entries and podcasts
 
 **Key Features**:
-- External ID support (Podcast Index, Taddy, iTunes)
-- Unique constraints prevent duplicates
+- **RSS Feed URL as PRIMARY unique identifier** (same across all directories)
+- External ID support (iTunes, Podcast Index, Taddy) for API callbacks
+- UNIQUE KEY constraint on rss_feed_url for database-level enforcement
 - Data quality scoring (0-100)
 - Source tracking (podcast_index, taddy, formidable, manual)
 - Progressive enrichment support
+
+### CRITICAL: Deduplication Strategy
+
+**RSS Feed URL is the PRIMARY unique identifier** because it's the same across
+ALL podcast directories (Podcast Index, Taddy, Apple, Spotify, etc.)
+
+**Podcast Index ID and Taddy UUID are DIFFERENT identifiers** from different
+systems for the SAME podcast - they cannot be used to match each other!
+
+**Deduplication Priority**:
+1. RSS Feed URL (PRIMARY - universal across all directories)
+2. iTunes ID (also universal - Apple Podcasts ID)
+3. Podcast Index ID (directory-specific, for API callbacks)
+4. Podcast Index GUID (directory-specific)
+5. Taddy UUID (directory-specific)
+6. Slug (last resort)
 
 ### Phase 4: Formidable Forms Integration ✅ COMPLETE
 
