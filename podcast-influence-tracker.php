@@ -90,6 +90,7 @@ class Podcast_Influence_Tracker {
         // Admin
         require_once PIT_PLUGIN_DIR . 'includes/admin/class-admin-page.php';
         require_once PIT_PLUGIN_DIR . 'includes/admin/class-settings.php';
+        require_once PIT_PLUGIN_DIR . 'includes/admin/class-admin-bulk-tools.php';
 
         // Cost Management
         require_once PIT_PLUGIN_DIR . 'includes/class-cost-tracker.php';
@@ -154,6 +155,7 @@ class Podcast_Influence_Tracker {
         // Initialize components
         PIT_REST_Controller::init();
         PIT_Admin_Page::init();
+        PIT_Admin_Bulk_Tools::get_instance();
         PIT_Background_Refresh::init();
     }
 
