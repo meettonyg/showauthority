@@ -109,12 +109,16 @@ class PIT_Formidable_Podcast_Bridge {
 
         $manager = PIT_Podcast_Intelligence_Manager::get_instance();
 
-        // First, try to find existing podcast by external IDs
+        // DEDUPLICATION: RSS URL is the PRIMARY unique identifier
+        // because it's the same across ALL directories (Podcast Index, Taddy, Apple, etc.)
+        // Podcast Index ID and Taddy UUID are DIFFERENT IDs from different systems
+        // for the SAME podcast - they cannot be used to match each other.
         $existing_podcast = PIT_Database::get_podcast_by_external_id([
-            'podcast_index_id' => $podcast_index_id,
-            'podcast_index_guid' => $podcast_index_guid,
-            'taddy_podcast_uuid' => $taddy_uuid,
-            'rss_feed_url' => $rss_feed,
+            'rss_feed_url' => $rss_feed,        // PRIMARY - same across all directories
+            'itunes_id' => $itunes_id,          // SECONDARY - also universal
+            'podcast_index_id' => $podcast_index_id,      // Directory-specific
+            'podcast_index_guid' => $podcast_index_guid,  // Directory-specific
+            'taddy_podcast_uuid' => $taddy_uuid,          // Directory-specific
         ]);
 
         if ($existing_podcast) {
@@ -126,23 +130,28 @@ class PIT_Formidable_Podcast_Bridge {
             $needs_update = false;
 
             // Update external IDs if they're missing in the database
-            if ($podcast_index_id && !$existing_podcast->podcast_index_id) {
+            // This enables progressive enrichment from multiple sources
+            if ($itunes_id && empty($existing_podcast->itunes_id)) {
+                $update_data['itunes_id'] = $itunes_id;
+                $needs_update = true;
+            }
+            if ($podcast_index_id && empty($existing_podcast->podcast_index_id)) {
                 $update_data['podcast_index_id'] = $podcast_index_id;
                 $needs_update = true;
             }
-            if ($podcast_index_guid && !$existing_podcast->podcast_index_guid) {
+            if ($podcast_index_guid && empty($existing_podcast->podcast_index_guid)) {
                 $update_data['podcast_index_guid'] = $podcast_index_guid;
                 $needs_update = true;
             }
-            if ($taddy_uuid && !$existing_podcast->taddy_podcast_uuid) {
+            if ($taddy_uuid && empty($existing_podcast->taddy_podcast_uuid)) {
                 $update_data['taddy_podcast_uuid'] = $taddy_uuid;
                 $needs_update = true;
             }
-            if ($description && !$existing_podcast->description) {
+            if ($description && empty($existing_podcast->description)) {
                 $update_data['description'] = $description;
                 $needs_update = true;
             }
-            if ($website && !$existing_podcast->website_url) {
+            if ($website && empty($existing_podcast->website_url)) {
                 $update_data['website_url'] = $website;
                 $needs_update = true;
             }
@@ -154,9 +163,10 @@ class PIT_Formidable_Podcast_Bridge {
             // Create new podcast with all available data
             $podcast_data = [
                 'title' => $podcast_name,
-                'rss_feed_url' => $rss_feed ?: null,
+                'rss_feed_url' => $rss_feed ?: null,  // PRIMARY unique identifier
                 'website_url' => $website ?: null,
                 'description' => $description ?: null,
+                'itunes_id' => $itunes_id ?: null,    // Universal ID (Apple Podcasts)
                 'podcast_index_id' => $podcast_index_id ?: null,
                 'podcast_index_guid' => $podcast_index_guid ?: null,
                 'taddy_podcast_uuid' => $taddy_uuid ?: null,
@@ -164,7 +174,7 @@ class PIT_Formidable_Podcast_Bridge {
                 'data_quality_score' => $this->calculate_quality_score([
                     'has_rss' => !empty($rss_feed),
                     'has_description' => !empty($description),
-                    'has_external_id' => !empty($podcast_index_id) || !empty($taddy_uuid),
+                    'has_external_id' => !empty($podcast_index_id) || !empty($taddy_uuid) || !empty($itunes_id),
                     'has_website' => !empty($website),
                 ]),
             ];

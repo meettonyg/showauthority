@@ -485,14 +485,17 @@ class PIT_Database {
             podcast_index_id bigint(20) DEFAULT NULL,
             podcast_index_guid varchar(255) DEFAULT NULL,
             taddy_podcast_uuid varchar(255) DEFAULT NULL,
+            itunes_id varchar(50) DEFAULT NULL,
             source varchar(50) DEFAULT NULL,
 
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
             PRIMARY KEY (id),
+            UNIQUE KEY rss_feed_url (rss_feed_url(500)),
             KEY title (title(191)),
             KEY slug (slug),
+            KEY itunes_id (itunes_id),
             KEY is_tracked (is_tracked),
             KEY rss_feed_url (rss_feed_url(191)),
             KEY podcast_index_id (podcast_index_id),
@@ -719,31 +722,43 @@ class PIT_Database {
     /**
      * Get podcast by any external ID
      *
+     * IMPORTANT: RSS Feed URL is the PRIMARY unique identifier because it's
+     * the same across all podcast directories (Podcast Index, Taddy, Apple, etc.)
+     *
+     * Podcast Index ID and Taddy UUID are DIFFERENT identifiers for the same podcast,
+     * so they cannot be used to match podcasts across directories.
+     *
      * @param array $identifiers Array of identifiers to check
      * @return object|null
      */
     public static function get_podcast_by_external_id($identifiers) {
-        // Check Podcast Index ID first
+        // RSS URL is the PRIMARY unique identifier - check FIRST
+        // This is the canonical ID that's the same across ALL directories
+        if (!empty($identifiers['rss_feed_url'])) {
+            $podcast = self::get_podcast_by_rss($identifiers['rss_feed_url']);
+            if ($podcast) return $podcast;
+        }
+
+        // iTunes ID is also universal (Apple Podcasts ID used by many directories)
+        if (!empty($identifiers['itunes_id'])) {
+            $podcast = self::get_podcast_by_itunes_id($identifiers['itunes_id']);
+            if ($podcast) return $podcast;
+        }
+
+        // Directory-specific IDs as secondary lookups
+        // (useful if RSS URL changed but we have the directory ID)
         if (!empty($identifiers['podcast_index_id'])) {
             $podcast = self::get_podcast_by_podcast_index_id($identifiers['podcast_index_id']);
             if ($podcast) return $podcast;
         }
 
-        // Check Podcast Index GUID
         if (!empty($identifiers['podcast_index_guid'])) {
             $podcast = self::get_podcast_by_podcast_index_guid($identifiers['podcast_index_guid']);
             if ($podcast) return $podcast;
         }
 
-        // Check Taddy UUID
         if (!empty($identifiers['taddy_podcast_uuid'])) {
             $podcast = self::get_podcast_by_taddy_uuid($identifiers['taddy_podcast_uuid']);
-            if ($podcast) return $podcast;
-        }
-
-        // Check RSS URL
-        if (!empty($identifiers['rss_feed_url'])) {
-            $podcast = self::get_podcast_by_rss($identifiers['rss_feed_url']);
             if ($podcast) return $podcast;
         }
 
@@ -751,7 +766,27 @@ class PIT_Database {
     }
 
     /**
+     * Get podcast by iTunes ID
+     */
+    public static function get_podcast_by_itunes_id($itunes_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_podcasts';
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE itunes_id = %s",
+            $itunes_id
+        ));
+    }
+
+    /**
      * Insert or update podcast in intelligence database
+     *
+     * DEDUPLICATION STRATEGY:
+     * RSS Feed URL is the PRIMARY unique identifier because it's the same
+     * across ALL podcast directories (Podcast Index, Taddy, Apple, etc.)
+     *
+     * Podcast Index ID and Taddy UUID are DIFFERENT systems with DIFFERENT IDs
+     * for the same podcast, so we check RSS URL FIRST.
      */
     public static function upsert_guestify_podcast($data) {
         global $wpdb;
@@ -762,34 +797,10 @@ class PIT_Database {
             $data['slug'] = sanitize_title($data['title']);
         }
 
-        // Check if exists by external IDs first (most reliable)
         $existing_id = null;
 
-        // Check Podcast Index ID
-        if (!$existing_id && !empty($data['podcast_index_id'])) {
-            $existing_id = $wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM $table WHERE podcast_index_id = %d",
-                $data['podcast_index_id']
-            ));
-        }
-
-        // Check Podcast Index GUID
-        if (!$existing_id && !empty($data['podcast_index_guid'])) {
-            $existing_id = $wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM $table WHERE podcast_index_guid = %s",
-                $data['podcast_index_guid']
-            ));
-        }
-
-        // Check Taddy UUID
-        if (!$existing_id && !empty($data['taddy_podcast_uuid'])) {
-            $existing_id = $wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM $table WHERE taddy_podcast_uuid = %s",
-                $data['taddy_podcast_uuid']
-            ));
-        }
-
-        // Fallback to RSS URL
+        // PRIORITY 1: RSS URL - PRIMARY unique identifier
+        // Same across ALL directories (Podcast Index, Taddy, Apple, Spotify, etc.)
         if (!$existing_id && !empty($data['rss_feed_url'])) {
             $existing_id = $wpdb->get_var($wpdb->prepare(
                 "SELECT id FROM $table WHERE rss_feed_url = %s",
@@ -797,7 +808,38 @@ class PIT_Database {
             ));
         }
 
-        // Last resort: check slug
+        // PRIORITY 2: iTunes ID - Also universal (Apple Podcasts ID)
+        if (!$existing_id && !empty($data['itunes_id'])) {
+            $existing_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM $table WHERE itunes_id = %s",
+                $data['itunes_id']
+            ));
+        }
+
+        // PRIORITY 3+: Directory-specific IDs (secondary lookups)
+        // Useful if RSS URL changed but we have a directory ID
+        if (!$existing_id && !empty($data['podcast_index_id'])) {
+            $existing_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM $table WHERE podcast_index_id = %d",
+                $data['podcast_index_id']
+            ));
+        }
+
+        if (!$existing_id && !empty($data['podcast_index_guid'])) {
+            $existing_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM $table WHERE podcast_index_guid = %s",
+                $data['podcast_index_guid']
+            ));
+        }
+
+        if (!$existing_id && !empty($data['taddy_podcast_uuid'])) {
+            $existing_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM $table WHERE taddy_podcast_uuid = %s",
+                $data['taddy_podcast_uuid']
+            ));
+        }
+
+        // Last resort: check slug (least reliable)
         if (!$existing_id && !empty($data['slug'])) {
             $existing_id = $wpdb->get_var($wpdb->prepare(
                 "SELECT id FROM $table WHERE slug = %s",
