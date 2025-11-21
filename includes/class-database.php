@@ -1026,6 +1026,27 @@ class PIT_Database {
         }
     }
 
+    /**
+     * Link a contact to a podcast (convenience wrapper)
+     *
+     * @param int $podcast_id
+     * @param int $contact_id
+     * @param string $role
+     * @param bool $is_primary
+     * @param string $notes
+     * @return int|false Relationship ID or false
+     */
+    public static function link_podcast_contact($podcast_id, $contact_id, $role = 'host', $is_primary = false, $notes = null) {
+        return self::create_podcast_contact_relationship([
+            'podcast_id' => $podcast_id,
+            'contact_id' => $contact_id,
+            'role' => $role,
+            'is_primary' => $is_primary ? 1 : 0,
+            'notes' => $notes,
+            'active' => 1,
+        ]);
+    }
+
     // ==================== INTERVIEW TRACKER BRIDGE ====================
 
     /**
