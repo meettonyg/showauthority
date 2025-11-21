@@ -83,6 +83,12 @@ class PIT_Shortcodes {
         add_shortcode('guestify_podcast_card', [$this, 'podcast_card']);
         add_shortcode('guestify_contact_card', [$this, 'contact_card']);
 
+        // ==================== ALL CONTACTS SHORTCODES ====================
+        add_shortcode('guestify_all_contacts', [$this, 'all_contacts']);
+        add_shortcode('guestify_contacts_list', [$this, 'contacts_list']);
+        add_shortcode('guestify_contacts_table', [$this, 'contacts_table']);
+        add_shortcode('guestify_contacts_count', [$this, 'contacts_count']);
+
         // ==================== GENERIC FIELD SHORTCODE ====================
         add_shortcode('guestify_field', [$this, 'generic_field']);
     }
@@ -596,5 +602,318 @@ class PIT_Shortcodes {
         $value = $data->$field ?? null;
 
         return $this->format_output($value, $atts);
+    }
+
+    // ==================== ALL CONTACTS SHORTCODES ====================
+
+    /**
+     * Get all contacts for a podcast entry
+     */
+    private function get_all_contacts($entry_id, $role = null) {
+        $podcast = $this->get_podcast($entry_id);
+        if (!$podcast) return [];
+
+        return PIT_Database::get_podcast_contacts($podcast->id, $role);
+    }
+
+    /**
+     * [guestify_all_contacts entry_id="123" role="host" format="cards"]
+     * Displays all contacts for the podcast associated with an entry
+     *
+     * @param string entry_id - Formidable entry ID
+     * @param string role - Filter by role (host/producer/guest/owner) or leave empty for all
+     * @param string format - Output format: cards, list, table, json
+     * @param string fields - Comma-separated fields to show (default: name,email,role)
+     * @param string class - CSS class for wrapper
+     * @param string empty - Message when no contacts found
+     */
+    public function all_contacts($atts) {
+        $atts = shortcode_atts([
+            'entry_id' => '',
+            'role' => '',           // Filter by role: host, producer, guest, owner
+            'format' => 'cards',    // cards, list, table, json
+            'fields' => 'name,email,role',  // Which fields to display
+            'class' => 'guestify-contacts',
+            'empty' => 'No contacts found',
+            'link_email' => 'true',
+            'link_social' => 'true',
+        ], $atts);
+
+        $contacts = $this->get_all_contacts($atts['entry_id'], $atts['role'] ?: null);
+
+        if (empty($contacts)) {
+            return '<div class="' . esc_attr($atts['class']) . ' empty">' . esc_html($atts['empty']) . '</div>';
+        }
+
+        $fields = array_map('trim', explode(',', $atts['fields']));
+
+        switch ($atts['format']) {
+            case 'json':
+                return json_encode(array_map(function($c) use ($fields) {
+                    $data = [];
+                    foreach ($fields as $field) {
+                        $data[$field] = $this->get_contact_field($c, $field);
+                    }
+                    return $data;
+                }, $contacts));
+
+            case 'table':
+                return $this->render_contacts_table($contacts, $fields, $atts);
+
+            case 'list':
+                return $this->render_contacts_list($contacts, $fields, $atts);
+
+            case 'cards':
+            default:
+                return $this->render_contacts_cards($contacts, $atts);
+        }
+    }
+
+    /**
+     * [guestify_contacts_list entry_id="123"]
+     * Simple bulleted list of contacts
+     */
+    public function contacts_list($atts) {
+        $atts = shortcode_atts([
+            'entry_id' => '',
+            'role' => '',
+            'fields' => 'name,role,email',
+            'class' => 'guestify-contacts-list',
+            'empty' => 'No contacts found',
+            'separator' => ' - ',
+            'link_email' => 'true',
+        ], $atts);
+
+        $contacts = $this->get_all_contacts($atts['entry_id'], $atts['role'] ?: null);
+
+        if (empty($contacts)) {
+            return '<div class="' . esc_attr($atts['class']) . ' empty">' . esc_html($atts['empty']) . '</div>';
+        }
+
+        $fields = array_map('trim', explode(',', $atts['fields']));
+
+        return $this->render_contacts_list($contacts, $fields, $atts);
+    }
+
+    /**
+     * [guestify_contacts_table entry_id="123"]
+     * HTML table of contacts
+     */
+    public function contacts_table($atts) {
+        $atts = shortcode_atts([
+            'entry_id' => '',
+            'role' => '',
+            'fields' => 'name,role,email,linkedin',
+            'class' => 'guestify-contacts-table',
+            'empty' => 'No contacts found',
+            'link_email' => 'true',
+            'link_social' => 'true',
+        ], $atts);
+
+        $contacts = $this->get_all_contacts($atts['entry_id'], $atts['role'] ?: null);
+
+        if (empty($contacts)) {
+            return '<div class="' . esc_attr($atts['class']) . ' empty">' . esc_html($atts['empty']) . '</div>';
+        }
+
+        $fields = array_map('trim', explode(',', $atts['fields']));
+
+        return $this->render_contacts_table($contacts, $fields, $atts);
+    }
+
+    /**
+     * [guestify_contacts_count entry_id="123" role="host"]
+     * Returns count of contacts
+     */
+    public function contacts_count($atts) {
+        $atts = shortcode_atts([
+            'entry_id' => '',
+            'role' => '',
+            'before' => '',
+            'after' => '',
+        ], $atts);
+
+        $contacts = $this->get_all_contacts($atts['entry_id'], $atts['role'] ?: null);
+        $count = count($contacts);
+
+        return $atts['before'] . $count . $atts['after'];
+    }
+
+    /**
+     * Helper: Get a specific field from a contact object
+     */
+    private function get_contact_field($contact, $field) {
+        $map = [
+            'name' => 'full_name',
+            'first_name' => 'first_name',
+            'last_name' => 'last_name',
+            'email' => 'email',
+            'phone' => 'phone',
+            'role' => 'role',
+            'company' => 'company',
+            'title' => 'title',
+            'linkedin' => 'linkedin_url',
+            'twitter' => 'twitter_url',
+            'website' => 'website_url',
+            'is_primary' => 'is_primary',
+        ];
+
+        $prop = $map[$field] ?? $field;
+        return $contact->$prop ?? '';
+    }
+
+    /**
+     * Render contacts as cards
+     */
+    private function render_contacts_cards($contacts, $atts) {
+        ob_start();
+        ?>
+        <div class="<?php echo esc_attr($atts['class']); ?>">
+            <?php foreach ($contacts as $contact): ?>
+                <div class="guestify-contact-item<?php echo $contact->is_primary ? ' is-primary' : ''; ?>">
+                    <div class="contact-header">
+                        <span class="contact-name"><?php echo esc_html($contact->full_name); ?></span>
+                        <?php if (!empty($contact->role)): ?>
+                            <span class="contact-role">(<?php echo esc_html(ucfirst($contact->role)); ?>)</span>
+                        <?php endif; ?>
+                        <?php if ($contact->is_primary): ?>
+                            <span class="primary-badge">Primary</span>
+                        <?php endif; ?>
+                    </div>
+                    <?php if (!empty($contact->email)): ?>
+                        <div class="contact-email">
+                            <?php if ($atts['link_email'] === 'true'): ?>
+                                <a href="mailto:<?php echo esc_attr($contact->email); ?>"><?php echo esc_html($contact->email); ?></a>
+                            <?php else: ?>
+                                <?php echo esc_html($contact->email); ?>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($contact->phone)): ?>
+                        <div class="contact-phone"><?php echo esc_html($contact->phone); ?></div>
+                    <?php endif; ?>
+                    <?php if (!empty($contact->company) || !empty($contact->title)): ?>
+                        <div class="contact-work">
+                            <?php if (!empty($contact->title)): ?>
+                                <span class="contact-title"><?php echo esc_html($contact->title); ?></span>
+                            <?php endif; ?>
+                            <?php if (!empty($contact->company)): ?>
+                                <span class="contact-company"><?php echo esc_html($contact->company); ?></span>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    <?php if ($atts['link_social'] === 'true'): ?>
+                        <div class="contact-social">
+                            <?php if (!empty($contact->linkedin_url)): ?>
+                                <a href="<?php echo esc_url($contact->linkedin_url); ?>" target="_blank" class="social-link linkedin">LinkedIn</a>
+                            <?php endif; ?>
+                            <?php if (!empty($contact->twitter_url)): ?>
+                                <a href="<?php echo esc_url($contact->twitter_url); ?>" target="_blank" class="social-link twitter">Twitter</a>
+                            <?php endif; ?>
+                            <?php if (!empty($contact->website_url)): ?>
+                                <a href="<?php echo esc_url($contact->website_url); ?>" target="_blank" class="social-link website">Website</a>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+
+    /**
+     * Render contacts as a simple list
+     */
+    private function render_contacts_list($contacts, $fields, $atts) {
+        ob_start();
+        ?>
+        <ul class="<?php echo esc_attr($atts['class']); ?>">
+            <?php foreach ($contacts as $contact): ?>
+                <li class="contact-item<?php echo $contact->is_primary ? ' is-primary' : ''; ?>">
+                    <?php
+                    $parts = [];
+                    foreach ($fields as $field) {
+                        $value = $this->get_contact_field($contact, $field);
+                        if (!empty($value)) {
+                            // Make email a link if enabled
+                            if ($field === 'email' && $atts['link_email'] === 'true') {
+                                $value = '<a href="mailto:' . esc_attr($value) . '">' . esc_html($value) . '</a>';
+                            } elseif (in_array($field, ['linkedin', 'twitter', 'website']) && isset($atts['link_social']) && $atts['link_social'] === 'true') {
+                                $value = '<a href="' . esc_url($value) . '" target="_blank">' . ucfirst($field) . '</a>';
+                            } else {
+                                $value = esc_html($value);
+                            }
+                            $parts[] = $value;
+                        }
+                    }
+                    echo implode($atts['separator'] ?? ' - ', $parts);
+                    if ($contact->is_primary) {
+                        echo ' <span class="primary-badge">(Primary)</span>';
+                    }
+                    ?>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+        <?php
+        return ob_get_clean();
+    }
+
+    /**
+     * Render contacts as a table
+     */
+    private function render_contacts_table($contacts, $fields, $atts) {
+        // Field labels
+        $labels = [
+            'name' => 'Name',
+            'first_name' => 'First Name',
+            'last_name' => 'Last Name',
+            'email' => 'Email',
+            'phone' => 'Phone',
+            'role' => 'Role',
+            'company' => 'Company',
+            'title' => 'Title',
+            'linkedin' => 'LinkedIn',
+            'twitter' => 'Twitter',
+            'website' => 'Website',
+        ];
+
+        ob_start();
+        ?>
+        <table class="<?php echo esc_attr($atts['class']); ?>">
+            <thead>
+                <tr>
+                    <?php foreach ($fields as $field): ?>
+                        <th><?php echo esc_html($labels[$field] ?? ucfirst($field)); ?></th>
+                    <?php endforeach; ?>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($contacts as $contact): ?>
+                    <tr class="<?php echo $contact->is_primary ? 'is-primary' : ''; ?>">
+                        <?php foreach ($fields as $field): ?>
+                            <td>
+                                <?php
+                                $value = $this->get_contact_field($contact, $field);
+                                if (!empty($value)) {
+                                    if ($field === 'email' && $atts['link_email'] === 'true') {
+                                        echo '<a href="mailto:' . esc_attr($value) . '">' . esc_html($value) . '</a>';
+                                    } elseif (in_array($field, ['linkedin', 'twitter', 'website']) && $atts['link_social'] === 'true') {
+                                        echo '<a href="' . esc_url($value) . '" target="_blank">' . ucfirst($field) . '</a>';
+                                    } elseif ($field === 'name' && $contact->is_primary) {
+                                        echo esc_html($value) . ' <span class="primary-badge">(Primary)</span>';
+                                    } else {
+                                        echo esc_html($value);
+                                    }
+                                }
+                                ?>
+                            </td>
+                        <?php endforeach; ?>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php
+        return ob_get_clean();
     }
 }
