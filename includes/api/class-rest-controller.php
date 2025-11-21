@@ -126,6 +126,84 @@ class PIT_REST_Controller {
             'callback' => [__CLASS__, 'save_settings'],
             'permission_callback' => [__CLASS__, 'check_permission'],
         ]);
+
+        // ========== PODCAST INTELLIGENCE ENDPOINTS ==========
+
+        // Contacts endpoints
+        register_rest_route(self::NAMESPACE, '/contacts', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_contacts'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        register_rest_route(self::NAMESPACE, '/contacts', [
+            'methods' => 'POST',
+            'callback' => [__CLASS__, 'create_contact'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        register_rest_route(self::NAMESPACE, '/contacts/(?P<id>\d+)', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_contact'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        register_rest_route(self::NAMESPACE, '/contacts/(?P<id>\d+)', [
+            'methods' => 'PUT',
+            'callback' => [__CLASS__, 'update_contact'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        register_rest_route(self::NAMESPACE, '/contacts/(?P<id>\d+)', [
+            'methods' => 'DELETE',
+            'callback' => [__CLASS__, 'delete_contact'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        // Podcast-Contact relationships
+        register_rest_route(self::NAMESPACE, '/podcasts/(?P<id>\d+)/contacts', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_podcast_contacts'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        register_rest_route(self::NAMESPACE, '/podcasts/(?P<id>\d+)/contacts', [
+            'methods' => 'POST',
+            'callback' => [__CLASS__, 'link_podcast_contact'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        // Entry-Podcast bridge
+        register_rest_route(self::NAMESPACE, '/entries/(?P<id>\d+)/podcast', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_entry_podcast_data'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        register_rest_route(self::NAMESPACE, '/entries/(?P<id>\d+)/contact-email', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_entry_contact_email'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        // Intelligence podcasts (guestify_podcasts table)
+        register_rest_route(self::NAMESPACE, '/intelligence/podcasts', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_intelligence_podcasts'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        register_rest_route(self::NAMESPACE, '/intelligence/podcasts', [
+            'methods' => 'POST',
+            'callback' => [__CLASS__, 'create_intelligence_podcast'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        register_rest_route(self::NAMESPACE, '/intelligence/podcasts/(?P<id>\d+)', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_intelligence_podcast'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
     }
 
     /**
@@ -409,5 +487,240 @@ class PIT_REST_Controller {
         }
 
         return rest_ensure_response(['success' => true]);
+    }
+
+    // ========== PODCAST INTELLIGENCE CALLBACKS ==========
+
+    /**
+     * Get contacts list
+     */
+    public static function get_contacts($request) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_podcast_contacts';
+
+        $params = $request->get_query_params();
+        $search = $params['search'] ?? '';
+
+        $sql = "SELECT * FROM $table";
+
+        if ($search) {
+            $sql .= $wpdb->prepare(" WHERE full_name LIKE %s OR email LIKE %s",
+                '%' . $wpdb->esc_like($search) . '%',
+                '%' . $wpdb->esc_like($search) . '%'
+            );
+        }
+
+        $sql .= " ORDER BY created_at DESC LIMIT 100";
+
+        $contacts = $wpdb->get_results($sql);
+
+        return rest_ensure_response($contacts);
+    }
+
+    /**
+     * Create contact
+     */
+    public static function create_contact($request) {
+        $params = $request->get_json_params();
+
+        $manager = PIT_Podcast_Intelligence_Manager::get_instance();
+        $contact_id = $manager->create_or_find_contact($params);
+
+        if (!$contact_id) {
+            return new WP_Error('create_failed', 'Failed to create contact', ['status' => 500]);
+        }
+
+        $contact = PIT_Database::get_contact($contact_id);
+
+        return rest_ensure_response($contact);
+    }
+
+    /**
+     * Get single contact
+     */
+    public static function get_contact($request) {
+        $contact_id = (int) $request['id'];
+
+        $contact = PIT_Database::get_contact($contact_id);
+
+        if (!$contact) {
+            return new WP_Error('not_found', 'Contact not found', ['status' => 404]);
+        }
+
+        return rest_ensure_response($contact);
+    }
+
+    /**
+     * Update contact
+     */
+    public static function update_contact($request) {
+        $contact_id = (int) $request['id'];
+        $params = $request->get_json_params();
+
+        $params['id'] = $contact_id;
+        $result = PIT_Database::upsert_contact($params);
+
+        if (!$result) {
+            return new WP_Error('update_failed', 'Failed to update contact', ['status' => 500]);
+        }
+
+        $contact = PIT_Database::get_contact($contact_id);
+
+        return rest_ensure_response($contact);
+    }
+
+    /**
+     * Delete contact
+     */
+    public static function delete_contact($request) {
+        global $wpdb;
+        $contact_id = (int) $request['id'];
+
+        $table = $wpdb->prefix . 'guestify_podcast_contacts';
+        $result = $wpdb->delete($table, ['id' => $contact_id], ['%d']);
+
+        if ($result === false) {
+            return new WP_Error('delete_failed', 'Failed to delete contact', ['status' => 500]);
+        }
+
+        return rest_ensure_response(['success' => true]);
+    }
+
+    /**
+     * Get contacts for a podcast
+     */
+    public static function get_podcast_contacts($request) {
+        $podcast_id = (int) $request['id'];
+
+        $contacts = PIT_Database::get_podcast_contacts($podcast_id);
+
+        return rest_ensure_response($contacts);
+    }
+
+    /**
+     * Link podcast to contact
+     */
+    public static function link_podcast_contact($request) {
+        $podcast_id = (int) $request['id'];
+        $params = $request->get_json_params();
+
+        $contact_id = $params['contact_id'] ?? 0;
+        $role = $params['role'] ?? 'host';
+        $is_primary = $params['is_primary'] ?? false;
+
+        if (!$contact_id) {
+            return new WP_Error('missing_contact', 'Contact ID is required', ['status' => 400]);
+        }
+
+        $manager = PIT_Podcast_Intelligence_Manager::get_instance();
+        $result = $manager->link_podcast_contact($podcast_id, $contact_id, $role, $is_primary);
+
+        if (!$result) {
+            return new WP_Error('link_failed', 'Failed to link podcast and contact', ['status' => 500]);
+        }
+
+        return rest_ensure_response(['success' => true]);
+    }
+
+    /**
+     * Get podcast data for entry
+     */
+    public static function get_entry_podcast_data($request) {
+        $entry_id = (int) $request['id'];
+
+        $manager = PIT_Podcast_Intelligence_Manager::get_instance();
+        $data = $manager->get_entry_podcast_data($entry_id);
+
+        if (!$data) {
+            return new WP_Error('not_found', 'No podcast data found for this entry', ['status' => 404]);
+        }
+
+        return rest_ensure_response($data);
+    }
+
+    /**
+     * Get contact email for entry
+     */
+    public static function get_entry_contact_email($request) {
+        $entry_id = (int) $request['id'];
+
+        $integration = PIT_Email_Integration::get_instance();
+        $contact = $integration->get_contact_from_all_sources($entry_id);
+
+        return rest_ensure_response($contact);
+    }
+
+    /**
+     * Get intelligence podcasts
+     */
+    public static function get_intelligence_podcasts($request) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_podcasts';
+
+        $params = $request->get_query_params();
+        $search = $params['search'] ?? '';
+        $per_page = $params['per_page'] ?? 20;
+        $page = $params['page'] ?? 1;
+
+        $offset = ($page - 1) * $per_page;
+
+        $sql = "SELECT * FROM $table";
+
+        if ($search) {
+            $sql .= $wpdb->prepare(" WHERE title LIKE %s OR description LIKE %s",
+                '%' . $wpdb->esc_like($search) . '%',
+                '%' . $wpdb->esc_like($search) . '%'
+            );
+        }
+
+        $sql .= " ORDER BY created_at DESC LIMIT %d OFFSET %d";
+        $sql = $wpdb->prepare($sql, $per_page, $offset);
+
+        $podcasts = $wpdb->get_results($sql);
+
+        // Enrich with contacts and social accounts
+        foreach ($podcasts as &$podcast) {
+            $podcast->contacts = PIT_Database::get_podcast_contacts($podcast->id);
+            $podcast->social_accounts = PIT_Database::get_podcast_social_accounts($podcast->id);
+        }
+
+        return rest_ensure_response($podcasts);
+    }
+
+    /**
+     * Create intelligence podcast
+     */
+    public static function create_intelligence_podcast($request) {
+        $params = $request->get_json_params();
+
+        $manager = PIT_Podcast_Intelligence_Manager::get_instance();
+        $podcast_id = $manager->create_or_find_podcast($params);
+
+        if (!$podcast_id) {
+            return new WP_Error('create_failed', 'Failed to create podcast', ['status' => 500]);
+        }
+
+        $podcast = PIT_Database::get_guestify_podcast($podcast_id);
+
+        return rest_ensure_response($podcast);
+    }
+
+    /**
+     * Get intelligence podcast
+     */
+    public static function get_intelligence_podcast($request) {
+        $podcast_id = (int) $request['id'];
+
+        $podcast = PIT_Database::get_guestify_podcast($podcast_id);
+
+        if (!$podcast) {
+            return new WP_Error('not_found', 'Podcast not found', ['status' => 404]);
+        }
+
+        // Enrich with contacts and social accounts
+        $podcast->contacts = PIT_Database::get_podcast_contacts($podcast_id);
+        $podcast->social_accounts = PIT_Database::get_podcast_social_accounts($podcast_id);
+
+        return rest_ensure_response($podcast);
     }
 }

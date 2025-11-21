@@ -60,6 +60,11 @@ class Podcast_Influence_Tracker {
         // Database
         require_once PIT_PLUGIN_DIR . 'includes/class-database.php';
 
+        // Podcast Intelligence System (NEW)
+        require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-podcast-intelligence-manager.php';
+        require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-formidable-podcast-bridge.php';
+        require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-email-integration.php';
+
         // Layer 1: Discovery Engine
         require_once PIT_PLUGIN_DIR . 'includes/layer-1/class-rss-parser.php';
         require_once PIT_PLUGIN_DIR . 'includes/layer-1/class-homepage-scraper.php';
@@ -134,6 +139,11 @@ class Podcast_Influence_Tracker {
     public function init() {
         // Load text domain
         load_plugin_textdomain('podcast-influence-tracker', false, dirname(PIT_PLUGIN_BASENAME) . '/languages');
+
+        // Initialize Podcast Intelligence System
+        PIT_Podcast_Intelligence_Manager::get_instance();
+        PIT_Formidable_Podcast_Bridge::get_instance();
+        PIT_Email_Integration::get_instance();
 
         // Initialize components
         PIT_REST_Controller::init();
