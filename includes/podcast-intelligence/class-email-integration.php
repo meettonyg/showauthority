@@ -1,15 +1,20 @@
 <?php
 /**
- * Enhanced Email Integration
+ * Contact Data Integration
  *
- * Integrates with the Podcast Intelligence Database to provide contact information
- * for email sending. Implements the priority order:
+ * Retrieves and displays contact information from the Podcast Intelligence Database.
+ * Provides contact data for external email plugins.
+ *
+ * Priority order for contact lookup:
  * 1. Formidable field (direct entry)
  * 2. Podcast contacts table (via podcast_id)
  * 3. Primary contact from relationship table
  * 4. RSS feed data
  * 5. Clay enrichment
  * 6. Manual entry fallback
+ *
+ * NOTE: This plugin does NOT send emails. Contact data is provided via shortcode
+ * and REST API for use with external email plugins.
  *
  * @package Podcast_Influence_Tracker
  * @subpackage Podcast_Intelligence
@@ -40,12 +45,15 @@ class PIT_Email_Integration {
      * Constructor
      */
     private function __construct() {
-        // Register shortcode for email interface
-        add_shortcode('guestify_email', [$this, 'render_email_interface']);
+        // Register shortcode for contact data display
+        add_shortcode('guestify_contact', [$this, 'render_contact_interface']);
+
+        // Legacy shortcode support
+        add_shortcode('guestify_email', [$this, 'render_contact_interface']);
 
         // AJAX handlers
         add_action('wp_ajax_pit_get_contact_info', [$this, 'ajax_get_contact_info']);
-        add_action('wp_ajax_pit_send_email', [$this, 'ajax_send_email']);
+        add_action('wp_ajax_pit_save_manual_contact', [$this, 'ajax_save_manual_contact']);
     }
 
     /**
@@ -167,14 +175,15 @@ class PIT_Email_Integration {
     }
 
     /**
-     * Render email interface shortcode
+     * Render contact data interface shortcode
      *
-     * Usage: [guestify_email entry_id="123"]
+     * Usage: [guestify_contact entry_id="123"]
+     * Legacy: [guestify_email entry_id="123"]
      *
      * @param array $atts
      * @return string
      */
-    public function render_email_interface($atts) {
+    public function render_contact_interface($atts) {
         $atts = shortcode_atts([
             'entry_id' => 0,
         ], $atts);
@@ -189,46 +198,28 @@ class PIT_Email_Integration {
 
         ob_start();
         ?>
-        <div id="pit-email-interface-<?php echo esc_attr($entry_id); ?>" class="pit-email-interface">
+        <div id="pit-contact-interface-<?php echo esc_attr($entry_id); ?>" class="pit-contact-interface">
             <div class="pit-contact-info">
                 <h3>Contact Information</h3>
 
                 <?php if ($contact['email']): ?>
                     <div class="pit-contact-found">
-                        <p><strong>Email:</strong> <?php echo esc_html($contact['email']); ?></p>
+                        <p><strong>Email:</strong>
+                            <span class="pit-contact-email"><?php echo esc_html($contact['email']); ?></span>
+                            <button class="button button-small pit-copy-email" data-email="<?php echo esc_attr($contact['email']); ?>" title="Copy email">
+                                Copy
+                            </button>
+                        </p>
                         <p><strong>Name:</strong> <?php echo esc_html($contact['name']); ?></p>
                         <?php if ($contact['podcast_name']): ?>
                             <p><strong>Podcast:</strong> <?php echo esc_html($contact['podcast_name']); ?></p>
                         <?php endif; ?>
                         <p class="pit-source">
-                            <small>Source: <?php echo esc_html($contact['source']); ?>
-                            (<?php echo esc_html($contact['confidence']); ?>% confidence)</small>
+                            <small>
+                                <strong>Source:</strong> <?php echo esc_html($contact['source']); ?>
+                                (<?php echo esc_html($contact['confidence']); ?>% confidence)
+                            </small>
                         </p>
-                    </div>
-
-                    <div class="pit-email-form">
-                        <h4>Send Email</h4>
-                        <form class="pit-send-email-form" data-entry-id="<?php echo esc_attr($entry_id); ?>">
-                            <p>
-                                <label>To:</label><br>
-                                <input type="email" name="to" value="<?php echo esc_attr($contact['email']); ?>" readonly>
-                            </p>
-                            <p>
-                                <label>Subject:</label><br>
-                                <input type="text" name="subject" value="Interview Request for <?php echo esc_attr($contact['podcast_name'] ?: 'Your Podcast'); ?>" required>
-                            </p>
-                            <p>
-                                <label>Message:</label><br>
-                                <textarea name="message" rows="10" required>Hi <?php echo esc_html($contact['name']); ?>,
-
-I'd love to be a guest on <?php echo esc_html($contact['podcast_name'] ?: 'your podcast'); ?>. I have some great insights to share with your audience.
-
-Looking forward to hearing from you!</textarea>
-                            </p>
-                            <p>
-                                <button type="submit" class="button button-primary">Send Email</button>
-                            </p>
-                        </form>
                     </div>
                 <?php else: ?>
                     <div class="pit-contact-not-found">
@@ -237,15 +228,12 @@ Looking forward to hearing from you!</textarea>
                         <?php if ($contact['suggest_enrichment']): ?>
                             <div class="pit-enrichment-suggestion">
                                 <p>We found the host name: <strong><?php echo esc_html($contact['name']); ?></strong></p>
-                                <p>Would you like to enrich this contact with Clay to find their email?</p>
-                                <button class="button" data-action="enrich-contact" data-entry-id="<?php echo esc_attr($entry_id); ?>">
-                                    Enrich with Clay
-                                </button>
+                                <p>You can enrich this contact with Clay to find their email.</p>
                             </div>
                         <?php endif; ?>
 
                         <div class="pit-manual-entry">
-                            <h4>Manual Entry</h4>
+                            <h4>Add Contact Manually</h4>
                             <form class="pit-manual-contact-form" data-entry-id="<?php echo esc_attr($entry_id); ?>">
                                 <p>
                                     <label>Host Name:</label><br>
@@ -287,7 +275,7 @@ Looking forward to hearing from you!</textarea>
         </div>
 
         <style>
-            .pit-email-interface {
+            .pit-contact-interface {
                 max-width: 600px;
                 margin: 20px 0;
                 padding: 20px;
@@ -307,56 +295,93 @@ Looking forward to hearing from you!</textarea>
                 margin-bottom: 20px;
                 border-left: 4px solid #ffc107;
             }
-            .pit-email-form input,
-            .pit-email-form textarea {
+            .pit-contact-email {
+                font-family: monospace;
+                background: #fff;
+                padding: 2px 6px;
+                border-radius: 3px;
+            }
+            .pit-copy-email {
+                margin-left: 10px;
+                font-size: 11px;
+            }
+            .pit-manual-entry input {
                 width: 100%;
-                max-width: 100%;
+                max-width: 400px;
             }
             .pit-source {
                 color: #666;
                 font-style: italic;
+                margin-top: 10px;
             }
             .pit-additional-info {
                 margin-top: 20px;
                 padding-top: 20px;
                 border-top: 1px solid #ddd;
             }
+            .pit-enrichment-suggestion {
+                margin: 15px 0;
+                padding: 10px;
+                background: #e3f2fd;
+                border-left: 3px solid #2196f3;
+            }
         </style>
 
         <script>
         jQuery(document).ready(function($) {
-            // Handle email send
-            $('.pit-send-email-form').on('submit', function(e) {
+            // Copy email to clipboard
+            $('.pit-copy-email').on('click', function(e) {
+                e.preventDefault();
+                var email = $(this).data('email');
+                var button = $(this);
+
+                // Create temporary input to copy
+                var temp = $('<input>');
+                $('body').append(temp);
+                temp.val(email).select();
+                document.execCommand('copy');
+                temp.remove();
+
+                // Visual feedback
+                button.text('Copied!').prop('disabled', true);
+                setTimeout(function() {
+                    button.text('Copy').prop('disabled', false);
+                }, 2000);
+            });
+
+            // Handle manual contact save
+            $('.pit-manual-contact-form').on('submit', function(e) {
                 e.preventDefault();
 
                 var form = $(this);
                 var entryId = form.data('entry-id');
                 var button = form.find('button[type="submit"]');
+                var originalText = button.text();
 
-                button.prop('disabled', true).text('Sending...');
+                button.prop('disabled', true).text('Saving...');
 
                 $.ajax({
                     url: ajaxurl,
                     method: 'POST',
                     data: {
-                        action: 'pit_send_email',
+                        action: 'pit_save_manual_contact',
                         entry_id: entryId,
-                        to: form.find('[name="to"]').val(),
-                        subject: form.find('[name="subject"]').val(),
-                        message: form.find('[name="message"]').val(),
-                        nonce: '<?php echo wp_create_nonce('pit_send_email'); ?>'
+                        host_name: form.find('[name="host_name"]').val(),
+                        host_email: form.find('[name="host_email"]').val(),
+                        nonce: '<?php echo wp_create_nonce('pit_save_contact'); ?>'
                     },
                     success: function(response) {
                         if (response.success) {
-                            alert('Email sent successfully!');
+                            alert('Contact saved successfully! Refreshing...');
+                            location.reload();
                         } else {
                             alert('Error: ' + (response.data || 'Unknown error'));
+                            button.prop('disabled', false).text(originalText);
                         }
-                        button.prop('disabled', false).text('Send Email');
                     },
                     error: function() {
-                        alert('Error sending email. Please try again.');
-                        button.prop('disabled', false).text('Send Email');
+                        alert('Error saving contact. Please try again.');
+                        button.prop('disabled', false).text(originalText);
                     }
                 });
             });
@@ -382,31 +407,49 @@ Looking forward to hearing from you!</textarea>
     }
 
     /**
-     * AJAX: Send email
+     * AJAX: Save manual contact
      */
-    public function ajax_send_email() {
-        check_ajax_referer('pit_send_email', 'nonce');
+    public function ajax_save_manual_contact() {
+        check_ajax_referer('pit_save_contact', 'nonce');
 
         $entry_id = intval($_POST['entry_id'] ?? 0);
-        $to = sanitize_email($_POST['to'] ?? '');
-        $subject = sanitize_text_field($_POST['subject'] ?? '');
-        $message = sanitize_textarea_field($_POST['message'] ?? '');
+        $host_name = sanitize_text_field($_POST['host_name'] ?? '');
+        $host_email = sanitize_email($_POST['host_email'] ?? '');
 
-        if (!$entry_id || !$to || !$subject || !$message) {
+        if (!$entry_id || !$host_name || !$host_email) {
             wp_send_json_error('Missing required fields');
         }
 
-        // Send email
-        $sent = wp_mail($to, $subject, $message);
-
-        if ($sent) {
-            // Update outreach status
-            $bridge = PIT_Formidable_Podcast_Bridge::get_instance();
-            $bridge->mark_first_contact($entry_id);
-
-            wp_send_json_success('Email sent successfully');
-        } else {
-            wp_send_json_error('Failed to send email');
+        // Get podcast for this entry
+        $podcast = PIT_Database::get_entry_podcast($entry_id);
+        if (!$podcast) {
+            wp_send_json_error('No podcast found for this entry');
         }
+
+        // Create or update contact
+        $manager = PIT_Podcast_Intelligence_Manager::get_instance();
+
+        $name_parts = explode(' ', trim($host_name), 2);
+        $contact_data = [
+            'full_name' => $host_name,
+            'first_name' => $name_parts[0] ?? '',
+            'last_name' => $name_parts[1] ?? '',
+            'email' => $host_email,
+            'role' => 'host',
+            'enrichment_source' => 'manual',
+            'data_quality_score' => 50,
+        ];
+
+        $contact_id = $manager->create_or_find_contact($contact_data);
+
+        // Link to podcast
+        $manager->link_podcast_contact($podcast->id, $contact_id, 'host', true);
+
+        // Update entry bridge
+        PIT_Database::link_entry_to_podcast($entry_id, $podcast->id, [
+            'primary_contact_id' => $contact_id,
+        ]);
+
+        wp_send_json_success('Contact saved successfully');
     }
 }
