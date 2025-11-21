@@ -482,6 +482,11 @@ class PIT_Database {
             data_quality_score int(11) DEFAULT 0,
             relevance_score int(11) DEFAULT 0,
 
+            podcast_index_id bigint(20) DEFAULT NULL,
+            podcast_index_guid varchar(255) DEFAULT NULL,
+            taddy_podcast_uuid varchar(255) DEFAULT NULL,
+            source varchar(50) DEFAULT NULL,
+
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -490,7 +495,14 @@ class PIT_Database {
             KEY slug (slug),
             KEY is_tracked (is_tracked),
             KEY rss_feed_url (rss_feed_url(191)),
-            UNIQUE KEY slug_unique (slug)
+            KEY podcast_index_id (podcast_index_id),
+            KEY podcast_index_guid (podcast_index_guid),
+            KEY taddy_podcast_uuid (taddy_podcast_uuid),
+            KEY source (source),
+            UNIQUE KEY slug_unique (slug),
+            UNIQUE KEY podcast_index_id_unique (podcast_index_id),
+            UNIQUE KEY podcast_index_guid_unique (podcast_index_guid),
+            UNIQUE KEY taddy_uuid_unique (taddy_podcast_uuid)
         ) $charset_collate;";
 
         dbDelta($sql_podcasts);
@@ -666,6 +678,79 @@ class PIT_Database {
     }
 
     /**
+     * Get podcast by Podcast Index ID
+     */
+    public static function get_podcast_by_podcast_index_id($podcast_index_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_podcasts';
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE podcast_index_id = %d",
+            $podcast_index_id
+        ));
+    }
+
+    /**
+     * Get podcast by Podcast Index GUID
+     */
+    public static function get_podcast_by_podcast_index_guid($guid) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_podcasts';
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE podcast_index_guid = %s",
+            $guid
+        ));
+    }
+
+    /**
+     * Get podcast by Taddy UUID
+     */
+    public static function get_podcast_by_taddy_uuid($uuid) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_podcasts';
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE taddy_podcast_uuid = %s",
+            $uuid
+        ));
+    }
+
+    /**
+     * Get podcast by any external ID
+     *
+     * @param array $identifiers Array of identifiers to check
+     * @return object|null
+     */
+    public static function get_podcast_by_external_id($identifiers) {
+        // Check Podcast Index ID first
+        if (!empty($identifiers['podcast_index_id'])) {
+            $podcast = self::get_podcast_by_podcast_index_id($identifiers['podcast_index_id']);
+            if ($podcast) return $podcast;
+        }
+
+        // Check Podcast Index GUID
+        if (!empty($identifiers['podcast_index_guid'])) {
+            $podcast = self::get_podcast_by_podcast_index_guid($identifiers['podcast_index_guid']);
+            if ($podcast) return $podcast;
+        }
+
+        // Check Taddy UUID
+        if (!empty($identifiers['taddy_podcast_uuid'])) {
+            $podcast = self::get_podcast_by_taddy_uuid($identifiers['taddy_podcast_uuid']);
+            if ($podcast) return $podcast;
+        }
+
+        // Check RSS URL
+        if (!empty($identifiers['rss_feed_url'])) {
+            $podcast = self::get_podcast_by_rss($identifiers['rss_feed_url']);
+            if ($podcast) return $podcast;
+        }
+
+        return null;
+    }
+
+    /**
      * Insert or update podcast in intelligence database
      */
     public static function upsert_guestify_podcast($data) {
@@ -677,15 +762,34 @@ class PIT_Database {
             $data['slug'] = sanitize_title($data['title']);
         }
 
-        // Check if exists by slug or RSS URL
+        // Check if exists by external IDs first (most reliable)
         $existing_id = null;
-        if (!empty($data['slug'])) {
+
+        // Check Podcast Index ID
+        if (!$existing_id && !empty($data['podcast_index_id'])) {
             $existing_id = $wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM $table WHERE slug = %s",
-                $data['slug']
+                "SELECT id FROM $table WHERE podcast_index_id = %d",
+                $data['podcast_index_id']
             ));
         }
 
+        // Check Podcast Index GUID
+        if (!$existing_id && !empty($data['podcast_index_guid'])) {
+            $existing_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM $table WHERE podcast_index_guid = %s",
+                $data['podcast_index_guid']
+            ));
+        }
+
+        // Check Taddy UUID
+        if (!$existing_id && !empty($data['taddy_podcast_uuid'])) {
+            $existing_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM $table WHERE taddy_podcast_uuid = %s",
+                $data['taddy_podcast_uuid']
+            ));
+        }
+
+        // Fallback to RSS URL
         if (!$existing_id && !empty($data['rss_feed_url'])) {
             $existing_id = $wpdb->get_var($wpdb->prepare(
                 "SELECT id FROM $table WHERE rss_feed_url = %s",
@@ -693,11 +797,21 @@ class PIT_Database {
             ));
         }
 
+        // Last resort: check slug
+        if (!$existing_id && !empty($data['slug'])) {
+            $existing_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM $table WHERE slug = %s",
+                $data['slug']
+            ));
+        }
+
         if ($existing_id) {
+            // Update existing podcast
             unset($data['created_at']); // Don't update created_at
             $wpdb->update($table, $data, ['id' => $existing_id]);
             return $existing_id;
         } else {
+            // Insert new podcast
             $wpdb->insert($table, $data);
             return $wpdb->insert_id;
         }
