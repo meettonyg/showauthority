@@ -83,6 +83,7 @@ class Podcast_Influence_Tracker {
         // API Integrations
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-youtube-api.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-apify-client.php';
+        require_once PIT_PLUGIN_DIR . 'includes/integrations/class-itunes-resolver.php';
 
         // REST API
         require_once PIT_PLUGIN_DIR . 'includes/api/class-rest-controller.php';

@@ -155,7 +155,14 @@ class PIT_RSS_Bridge {
             'is_active' => 1,
         ];
 
-        // Upsert podcast (will find existing by RSS URL or create new)
+        // IMPORTANT: Resolve iTunes ID for stable deduplication
+        // iTunes ID persists across feed migrations (e.g., Anchor → Transistor)
+        $itunes_id = $this->resolve_itunes_id($channel_data, $podcast_data);
+        if ($itunes_id) {
+            $podcast_data['itunes_id'] = $itunes_id;
+        }
+
+        // Upsert podcast (will find existing by iTunes ID first, then RSS URL)
         $podcast_id = PIT_Database::upsert_guestify_podcast($podcast_data);
 
         if (!$podcast_id) {
@@ -481,5 +488,59 @@ class PIT_RSS_Bridge {
         }
 
         return $results;
+    }
+
+    /**
+     * Resolve iTunes ID from channel data and podcast data
+     *
+     * Uses PIT_iTunes_Resolver to find the iTunes ID for stable deduplication.
+     * iTunes ID remains constant even when podcasts migrate hosting providers
+     * (e.g., Anchor → Transistor), while RSS URLs change.
+     *
+     * @param array $channel_data RSS channel data from GPF_Core
+     * @param array $podcast_data Prepared podcast data for database
+     * @return string|null iTunes ID or null if not found
+     */
+    private function resolve_itunes_id($channel_data, $podcast_data) {
+        // Check if iTunes Resolver is available
+        if (!class_exists('PIT_iTunes_Resolver')) {
+            return null;
+        }
+
+        // Build resolver input from channel data
+        $resolver_data = [
+            'title' => $podcast_data['title'] ?? '',
+            'author' => $channel_data['itunes_author'] ?? '',
+            'publisher' => $channel_data['itunes_owner_name'] ?? '',
+            'rss_feed_url' => $podcast_data['rss_feed_url'] ?? '',
+        ];
+
+        // Check if channel data includes iTunes-related links
+        if (!empty($channel_data['itunes_new_feed_url'])) {
+            // Some feeds include iTunes new feed URL which may have Apple ID
+            $resolver_data['apple_podcasts_url'] = $channel_data['itunes_new_feed_url'];
+        }
+
+        // Check website for Apple Podcasts links
+        if (!empty($podcast_data['website_url'])) {
+            $website = $podcast_data['website_url'];
+            if (strpos($website, 'podcasts.apple.com') !== false) {
+                $resolver_data['apple_podcasts_url'] = $website;
+            }
+        }
+
+        // Resolve iTunes ID
+        $itunes_id = PIT_iTunes_Resolver::resolve($resolver_data);
+
+        if ($itunes_id) {
+            // Log successful resolution for debugging
+            error_log(sprintf(
+                'PIT RSS Bridge: Resolved iTunes ID %s for "%s"',
+                $itunes_id,
+                $podcast_data['title'] ?? 'Unknown'
+            ));
+        }
+
+        return $itunes_id;
     }
 }

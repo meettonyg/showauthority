@@ -500,10 +500,14 @@ class PIT_Database {
             artwork_url text DEFAULT NULL,
             is_active tinyint(1) DEFAULT 1,
 
+            -- Feed migration tracking (for deduplication auditing)
+            feed_migration_history text DEFAULT NULL,
+
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
             PRIMARY KEY (id),
+            UNIQUE KEY itunes_id_unique (itunes_id),
             UNIQUE KEY rss_feed_url (rss_feed_url(500)),
             KEY title (title(191)),
             KEY slug (slug),
@@ -805,12 +809,22 @@ class PIT_Database {
     /**
      * Insert or update podcast in intelligence database
      *
-     * DEDUPLICATION STRATEGY:
-     * RSS Feed URL is the PRIMARY unique identifier because it's the same
-     * across ALL podcast directories (Podcast Index, Taddy, Apple, etc.)
+     * DEDUPLICATION STRATEGY (Updated based on feed migration analysis):
      *
-     * Podcast Index ID and Taddy UUID are DIFFERENT systems with DIFFERENT IDs
-     * for the same podcast, so we check RSS URL FIRST.
+     * PRIORITY 1: iTunes ID (apple_collection_id) - MOST STABLE
+     *   - Remains constant even when podcasters change hosting providers
+     *   - Feed migrations (e.g., Anchor → Transistor) change RSS URL but not iTunes ID
+     *
+     * PRIORITY 2: Provider-specific IDs (podcast_index_id, taddy_uuid)
+     *   - Directory systems that track feed redirects
+     *   - Each provider has their own ID for the same podcast
+     *
+     * PRIORITY 3: RSS Feed URL - FALLBACK
+     *   - Still useful for shows not yet on Apple Podcasts
+     *   - Can change when podcaster migrates hosting
+     *
+     * FEED URL UPDATE: When iTunes ID matches but RSS URL differs, we UPDATE
+     * the stored RSS URL to reflect the new hosting location.
      */
     public static function upsert_guestify_podcast($data) {
         global $wpdb;
@@ -822,31 +836,33 @@ class PIT_Database {
         }
 
         $existing_id = null;
+        $matched_by = null;
+        $existing_rss_url = null;
 
-        // PRIORITY 1: RSS URL - PRIMARY unique identifier
-        // Same across ALL directories (Podcast Index, Taddy, Apple, Spotify, etc.)
-        if (!$existing_id && !empty($data['rss_feed_url'])) {
-            $existing_id = $wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM $table WHERE rss_feed_url = %s",
-                $data['rss_feed_url']
-            ));
-        }
-
-        // PRIORITY 2: iTunes ID - Also universal (Apple Podcasts ID)
+        // PRIORITY 1: iTunes ID - MOST STABLE identifier
+        // Remains constant across feed migrations (Anchor → Transistor, etc.)
         if (!$existing_id && !empty($data['itunes_id'])) {
-            $existing_id = $wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM $table WHERE itunes_id = %s",
+            $existing = $wpdb->get_row($wpdb->prepare(
+                "SELECT id, rss_feed_url FROM $table WHERE itunes_id = %s",
                 $data['itunes_id']
             ));
+            if ($existing) {
+                $existing_id = $existing->id;
+                $existing_rss_url = $existing->rss_feed_url;
+                $matched_by = 'itunes_id';
+            }
         }
 
-        // PRIORITY 3+: Directory-specific IDs (secondary lookups)
-        // Useful if RSS URL changed but we have a directory ID
+        // PRIORITY 2: Provider-specific IDs
+        // These directories typically follow feed redirects
         if (!$existing_id && !empty($data['podcast_index_id'])) {
             $existing_id = $wpdb->get_var($wpdb->prepare(
                 "SELECT id FROM $table WHERE podcast_index_id = %d",
                 $data['podcast_index_id']
             ));
+            if ($existing_id) {
+                $matched_by = 'podcast_index_id';
+            }
         }
 
         if (!$existing_id && !empty($data['podcast_index_guid'])) {
@@ -854,6 +870,9 @@ class PIT_Database {
                 "SELECT id FROM $table WHERE podcast_index_guid = %s",
                 $data['podcast_index_guid']
             ));
+            if ($existing_id) {
+                $matched_by = 'podcast_index_guid';
+            }
         }
 
         if (!$existing_id && !empty($data['taddy_podcast_uuid'])) {
@@ -861,6 +880,20 @@ class PIT_Database {
                 "SELECT id FROM $table WHERE taddy_podcast_uuid = %s",
                 $data['taddy_podcast_uuid']
             ));
+            if ($existing_id) {
+                $matched_by = 'taddy_uuid';
+            }
+        }
+
+        // PRIORITY 3: RSS URL - FALLBACK for shows not on Apple Podcasts
+        if (!$existing_id && !empty($data['rss_feed_url'])) {
+            $existing_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM $table WHERE rss_feed_url = %s",
+                $data['rss_feed_url']
+            ));
+            if ($existing_id) {
+                $matched_by = 'rss_feed_url';
+            }
         }
 
         // Last resort: check slug (least reliable)
@@ -869,9 +902,46 @@ class PIT_Database {
                 "SELECT id FROM $table WHERE slug = %s",
                 $data['slug']
             ));
+            if ($existing_id) {
+                $matched_by = 'slug';
+            }
         }
 
         if ($existing_id) {
+            // Handle feed migration detection
+            // If matched by iTunes ID and RSS URL differs, log and update
+            if ($matched_by === 'itunes_id' &&
+                !empty($data['rss_feed_url']) &&
+                !empty($existing_rss_url) &&
+                $data['rss_feed_url'] !== $existing_rss_url) {
+
+                // Log the feed migration for debugging/auditing
+                error_log(sprintf(
+                    'PIT: Feed migration detected for iTunes ID %s - Old: %s, New: %s',
+                    $data['itunes_id'],
+                    $existing_rss_url,
+                    $data['rss_feed_url']
+                ));
+
+                // Store the old URL for reference (optional metadata)
+                if (!isset($data['feed_migration_history'])) {
+                    $existing_history = $wpdb->get_var($wpdb->prepare(
+                        "SELECT feed_migration_history FROM $table WHERE id = %d",
+                        $existing_id
+                    ));
+                    $history = $existing_history ? json_decode($existing_history, true) : [];
+                    if (!is_array($history)) {
+                        $history = [];
+                    }
+                    $history[] = [
+                        'old_url' => $existing_rss_url,
+                        'new_url' => $data['rss_feed_url'],
+                        'migrated_at' => current_time('mysql'),
+                    ];
+                    $data['feed_migration_history'] = json_encode($history);
+                }
+            }
+
             // Update existing podcast
             unset($data['created_at']); // Don't update created_at
             $wpdb->update($table, $data, ['id' => $existing_id]);
