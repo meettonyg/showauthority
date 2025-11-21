@@ -677,6 +677,279 @@ class PIT_Database {
     }
 
     /**
+     * Create Guest Intelligence Database tables
+     *
+     * Phase 1 of the Unified Intelligence Platform:
+     * 1. guestify_content_analysis - AI-powered content analysis
+     * 2. guestify_guests - Episode guests (different from podcast contacts)
+     * 3. guestify_guest_appearances - Links guests to podcast episodes
+     * 4. guestify_topics - Master topic taxonomy
+     * 5. guestify_guest_topics - Pivot table for guest expertise
+     * 6. guestify_guest_network - Network connections between guests
+     */
+    public static function create_guest_intelligence_tables() {
+        global $wpdb;
+        $charset_collate = $wpdb->get_charset_collate();
+
+        // Table 1: CONTENT_ANALYSIS (AI-powered podcast content analysis)
+        $table_content = $wpdb->prefix . 'guestify_content_analysis';
+        $sql_content = "CREATE TABLE $table_content (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            podcast_id bigint(20) UNSIGNED NOT NULL,
+
+            -- Content Intelligence (JSON)
+            title_patterns text DEFAULT NULL,
+            topic_clusters text DEFAULT NULL,
+            keywords text DEFAULT NULL,
+            recent_episodes text DEFAULT NULL,
+
+            -- Publishing patterns
+            publishing_frequency varchar(50) DEFAULT NULL,
+            publishing_day varchar(20) DEFAULT NULL,
+            average_duration int(11) DEFAULT NULL,
+            format_type varchar(50) DEFAULT NULL,
+
+            -- Analysis Metadata
+            episodes_analyzed int(11) DEFAULT 0,
+            episodes_total int(11) DEFAULT 0,
+            backlog_warning tinyint(1) DEFAULT 0,
+
+            ai_analyzed tinyint(1) DEFAULT 0,
+            ai_analyzed_at datetime DEFAULT NULL,
+            ai_model varchar(50) DEFAULT NULL,
+            ai_cost decimal(10,4) DEFAULT 0,
+
+            -- Cache
+            cache_expires_at datetime DEFAULT NULL,
+
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (id),
+            UNIQUE KEY podcast_id_unique (podcast_id),
+            KEY ai_analyzed (ai_analyzed),
+            KEY cache_expires_at (cache_expires_at)
+        ) $charset_collate;";
+
+        dbDelta($sql_content);
+
+        // Table 2: GUESTS (Episode guests - distinct from podcast contacts/owners)
+        $table_guests = $wpdb->prefix . 'guestify_guests';
+        $sql_guests = "CREATE TABLE $table_guests (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            -- Identity
+            full_name varchar(255) NOT NULL,
+            first_name varchar(100) DEFAULT NULL,
+            last_name varchar(100) DEFAULT NULL,
+
+            -- CRITICAL: Unique Identifiers for Deduplication
+            linkedin_url text DEFAULT NULL,
+            linkedin_url_hash char(32) DEFAULT NULL,
+            email varchar(255) DEFAULT NULL,
+            email_hash char(32) DEFAULT NULL,
+
+            -- Professional Info
+            current_company varchar(255) DEFAULT NULL,
+            current_role varchar(255) DEFAULT NULL,
+            company_stage varchar(50) DEFAULT NULL,
+            company_revenue varchar(50) DEFAULT NULL,
+            industry varchar(100) DEFAULT NULL,
+
+            -- Background & Expertise (JSON)
+            expertise_areas text DEFAULT NULL,
+            past_companies text DEFAULT NULL,
+            education text DEFAULT NULL,
+            notable_achievements text DEFAULT NULL,
+
+            -- Contact Information (enrichment data)
+            personal_email varchar(255) DEFAULT NULL,
+            phone varchar(50) DEFAULT NULL,
+            twitter_handle varchar(100) DEFAULT NULL,
+            website_url text DEFAULT NULL,
+
+            -- Social Proof
+            linkedin_connections int(11) DEFAULT NULL,
+            twitter_followers int(11) DEFAULT NULL,
+            verified_accounts text DEFAULT NULL,
+
+            -- Location
+            city varchar(100) DEFAULT NULL,
+            state_region varchar(100) DEFAULT NULL,
+            country varchar(100) DEFAULT NULL,
+            country_code varchar(10) DEFAULT NULL,
+            timezone varchar(50) DEFAULT NULL,
+            location_display varchar(255) DEFAULT NULL,
+
+            -- Enrichment Status
+            enrichment_provider varchar(50) DEFAULT NULL,
+            enrichment_level varchar(50) DEFAULT NULL,
+            enriched_at datetime DEFAULT NULL,
+            enrichment_cost decimal(10,4) DEFAULT 0,
+            data_quality_score int(11) DEFAULT 0,
+
+            -- Manual Verification
+            manually_verified tinyint(1) DEFAULT 0,
+            verified_by_user_id bigint(20) UNSIGNED DEFAULT NULL,
+            verified_at datetime DEFAULT NULL,
+            verification_notes text DEFAULT NULL,
+
+            -- Deduplication Status
+            is_merged tinyint(1) DEFAULT 0,
+            merged_into_guest_id bigint(20) UNSIGNED DEFAULT NULL,
+            merge_history text DEFAULT NULL,
+
+            -- Source tracking
+            source varchar(50) DEFAULT NULL,
+            source_podcast_id bigint(20) UNSIGNED DEFAULT NULL,
+
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (id),
+            KEY full_name (full_name),
+            KEY email_hash (email_hash),
+            KEY linkedin_url_hash (linkedin_url_hash),
+            KEY current_company (current_company),
+            KEY enrichment_provider (enrichment_provider),
+            KEY manually_verified (manually_verified),
+            KEY is_merged (is_merged),
+            KEY source (source)
+        ) $charset_collate;";
+
+        dbDelta($sql_guests);
+
+        // Table 3: GUEST_APPEARANCES (Links guests to podcast episodes)
+        $table_appearances = $wpdb->prefix . 'guestify_guest_appearances';
+        $sql_appearances = "CREATE TABLE $table_appearances (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            guest_id bigint(20) UNSIGNED NOT NULL,
+            podcast_id bigint(20) UNSIGNED NOT NULL,
+
+            -- Episode Details
+            episode_number int(11) DEFAULT NULL,
+            episode_title varchar(500) DEFAULT NULL,
+            episode_date date DEFAULT NULL,
+            episode_url text DEFAULT NULL,
+            episode_duration int(11) DEFAULT NULL,
+            episode_guid varchar(255) DEFAULT NULL,
+
+            -- Content Analysis (JSON)
+            topics_discussed text DEFAULT NULL,
+            key_quotes text DEFAULT NULL,
+            conversation_style varchar(50) DEFAULT NULL,
+
+            -- Verification (AI can hallucinate)
+            ai_confidence_score int(11) DEFAULT 0,
+            manually_verified tinyint(1) DEFAULT 0,
+            is_host tinyint(1) DEFAULT 0,
+            verification_notes text DEFAULT NULL,
+
+            -- Source
+            extraction_method varchar(50) DEFAULT NULL,
+            extraction_cost decimal(10,4) DEFAULT 0,
+
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (id),
+            KEY guest_id (guest_id),
+            KEY podcast_id (podcast_id),
+            KEY episode_date (episode_date),
+            KEY manually_verified (manually_verified),
+            KEY is_host (is_host),
+            KEY episode_guid (episode_guid),
+            UNIQUE KEY unique_guest_episode (guest_id, podcast_id, episode_guid)
+        ) $charset_collate;";
+
+        dbDelta($sql_appearances);
+
+        // Table 4: TOPICS (Master topic taxonomy)
+        $table_topics = $wpdb->prefix . 'guestify_topics';
+        $sql_topics = "CREATE TABLE $table_topics (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            name varchar(100) NOT NULL,
+            slug varchar(100) NOT NULL,
+            category varchar(50) DEFAULT NULL,
+            description text DEFAULT NULL,
+            parent_id bigint(20) UNSIGNED DEFAULT NULL,
+
+            usage_count int(11) DEFAULT 0,
+
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (id),
+            UNIQUE KEY slug (slug),
+            KEY category (category),
+            KEY parent_id (parent_id),
+            KEY usage_count (usage_count)
+        ) $charset_collate;";
+
+        dbDelta($sql_topics);
+
+        // Table 5: GUEST_TOPICS (Pivot table for guest expertise)
+        $table_guest_topics = $wpdb->prefix . 'guestify_guest_topics';
+        $sql_guest_topics = "CREATE TABLE $table_guest_topics (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            guest_id bigint(20) UNSIGNED NOT NULL,
+            topic_id bigint(20) UNSIGNED NOT NULL,
+
+            -- Metadata
+            confidence_score int(11) DEFAULT 100,
+            mention_count int(11) DEFAULT 1,
+            source varchar(50) DEFAULT NULL,
+
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (id),
+            KEY guest_id (guest_id),
+            KEY topic_id (topic_id),
+            UNIQUE KEY guest_topic (guest_id, topic_id)
+        ) $charset_collate;";
+
+        dbDelta($sql_guest_topics);
+
+        // Table 6: GUEST_NETWORK (Network connections - 1st and 2nd degree only)
+        $table_network = $wpdb->prefix . 'guestify_guest_network';
+        $sql_network = "CREATE TABLE $table_network (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            guest_id bigint(20) UNSIGNED NOT NULL,
+            connected_guest_id bigint(20) UNSIGNED NOT NULL,
+
+            connection_type varchar(50) DEFAULT NULL,
+            connection_degree int(11) NOT NULL DEFAULT 1,
+            connection_strength int(11) DEFAULT 0,
+
+            -- Network Data (JSON)
+            common_podcasts text DEFAULT NULL,
+            connection_path text DEFAULT NULL,
+
+            -- Performance Optimization
+            last_calculated datetime DEFAULT NULL,
+            cache_expires_at datetime DEFAULT NULL,
+
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (id),
+            KEY guest_id (guest_id),
+            KEY connected_guest_id (connected_guest_id),
+            KEY connection_degree (connection_degree),
+            KEY connection_strength (connection_strength),
+            KEY cache_expires_at (cache_expires_at),
+            UNIQUE KEY guest_connection (guest_id, connected_guest_id)
+        ) $charset_collate;";
+
+        dbDelta($sql_network);
+    }
+
+    /**
      * CRUD Operations for Podcast Intelligence Tables
      */
 
@@ -1206,5 +1479,552 @@ class PIT_Database {
             LIMIT 1",
             $formidable_entry_id
         ));
+    }
+
+    // ==================== GUEST INTELLIGENCE CRUD ====================
+
+    /**
+     * Get guest by ID
+     */
+    public static function get_guest($guest_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guests';
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE id = %d AND is_merged = 0",
+            $guest_id
+        ));
+    }
+
+    /**
+     * Get guest by LinkedIn URL hash
+     */
+    public static function get_guest_by_linkedin($linkedin_url) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guests';
+        $hash = md5($linkedin_url);
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE linkedin_url_hash = %s AND is_merged = 0",
+            $hash
+        ));
+    }
+
+    /**
+     * Get guest by email hash
+     */
+    public static function get_guest_by_email($email) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guests';
+        $hash = md5(strtolower(trim($email)));
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE email_hash = %s AND is_merged = 0",
+            $hash
+        ));
+    }
+
+    /**
+     * Upsert guest with deduplication
+     *
+     * DEDUPLICATION PRIORITY:
+     * 1. LinkedIn URL (highest confidence)
+     * 2. Email address (high confidence)
+     * 3. Create new record (do NOT merge by name alone)
+     */
+    public static function upsert_guest($data) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guests';
+
+        // Generate hashes for deduplication
+        if (!empty($data['linkedin_url'])) {
+            $data['linkedin_url_hash'] = md5($data['linkedin_url']);
+        }
+        if (!empty($data['email'])) {
+            $data['email_hash'] = md5(strtolower(trim($data['email'])));
+        }
+
+        $existing_id = null;
+
+        // Priority 1: LinkedIn URL match
+        if (!$existing_id && !empty($data['linkedin_url_hash'])) {
+            $existing_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM $table WHERE linkedin_url_hash = %s AND is_merged = 0",
+                $data['linkedin_url_hash']
+            ));
+        }
+
+        // Priority 2: Email match
+        if (!$existing_id && !empty($data['email_hash'])) {
+            $existing_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM $table WHERE email_hash = %s AND is_merged = 0",
+                $data['email_hash']
+            ));
+        }
+
+        // DO NOT match by name alone - too risky for deduplication
+
+        if ($existing_id) {
+            unset($data['created_at']);
+            $wpdb->update($table, $data, ['id' => $existing_id]);
+            return $existing_id;
+        } else {
+            $wpdb->insert($table, $data);
+            return $wpdb->insert_id;
+        }
+    }
+
+    /**
+     * Create guest (no deduplication check)
+     */
+    public static function create_guest($data) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guests';
+
+        // Generate hashes
+        if (!empty($data['linkedin_url'])) {
+            $data['linkedin_url_hash'] = md5($data['linkedin_url']);
+        }
+        if (!empty($data['email'])) {
+            $data['email_hash'] = md5(strtolower(trim($data['email'])));
+        }
+
+        $wpdb->insert($table, $data);
+        return $wpdb->insert_id;
+    }
+
+    /**
+     * Update guest
+     */
+    public static function update_guest($guest_id, $data) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guests';
+
+        // Regenerate hashes if URLs changed
+        if (isset($data['linkedin_url'])) {
+            $data['linkedin_url_hash'] = !empty($data['linkedin_url']) ? md5($data['linkedin_url']) : null;
+        }
+        if (isset($data['email'])) {
+            $data['email_hash'] = !empty($data['email']) ? md5(strtolower(trim($data['email']))) : null;
+        }
+
+        unset($data['created_at']);
+        return $wpdb->update($table, $data, ['id' => $guest_id]);
+    }
+
+    /**
+     * Delete guest (soft delete via merge flag)
+     */
+    public static function delete_guest($guest_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guests';
+
+        return $wpdb->delete($table, ['id' => $guest_id]);
+    }
+
+    /**
+     * List guests with filtering
+     */
+    public static function list_guests($args = []) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guests';
+
+        $defaults = [
+            'page' => 1,
+            'per_page' => 20,
+            'orderby' => 'created_at',
+            'order' => 'DESC',
+            'search' => '',
+            'company' => '',
+            'industry' => '',
+            'verified_only' => false,
+            'enriched_only' => false,
+            'exclude_merged' => true,
+        ];
+
+        $args = wp_parse_args($args, $defaults);
+
+        $where = [];
+        $prepare_args = [];
+
+        if ($args['exclude_merged']) {
+            $where[] = 'is_merged = 0';
+        }
+
+        if (!empty($args['search'])) {
+            $where[] = '(full_name LIKE %s OR current_company LIKE %s OR email LIKE %s)';
+            $search = '%' . $wpdb->esc_like($args['search']) . '%';
+            $prepare_args[] = $search;
+            $prepare_args[] = $search;
+            $prepare_args[] = $search;
+        }
+
+        if (!empty($args['company'])) {
+            $where[] = 'current_company LIKE %s';
+            $prepare_args[] = '%' . $wpdb->esc_like($args['company']) . '%';
+        }
+
+        if (!empty($args['industry'])) {
+            $where[] = 'industry = %s';
+            $prepare_args[] = $args['industry'];
+        }
+
+        if ($args['verified_only']) {
+            $where[] = 'manually_verified = 1';
+        }
+
+        if ($args['enriched_only']) {
+            $where[] = 'enrichment_provider IS NOT NULL';
+        }
+
+        $where_clause = !empty($where) ? implode(' AND ', $where) : '1=1';
+
+        $offset = ($args['page'] - 1) * $args['per_page'];
+        $orderby = sanitize_sql_orderby($args['orderby'] . ' ' . $args['order']) ?: 'created_at DESC';
+
+        $sql = "SELECT * FROM $table WHERE $where_clause ORDER BY $orderby LIMIT %d OFFSET %d";
+        $prepare_args[] = $args['per_page'];
+        $prepare_args[] = $offset;
+
+        $results = $wpdb->get_results($wpdb->prepare($sql, $prepare_args));
+
+        // Count query
+        $count_sql = "SELECT COUNT(*) FROM $table WHERE $where_clause";
+        if (count($prepare_args) > 2) {
+            $count_args = array_slice($prepare_args, 0, -2);
+            $total = $wpdb->get_var($wpdb->prepare($count_sql, $count_args));
+        } else {
+            $total = $wpdb->get_var($count_sql);
+        }
+
+        return [
+            'guests' => $results,
+            'total' => (int) $total,
+            'pages' => ceil($total / $args['per_page']),
+        ];
+    }
+
+    // ==================== GUEST APPEARANCES ====================
+
+    /**
+     * Get appearance by ID
+     */
+    public static function get_appearance($appearance_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guest_appearances';
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE id = %d",
+            $appearance_id
+        ));
+    }
+
+    /**
+     * Get appearances for a guest
+     */
+    public static function get_guest_appearances($guest_id) {
+        global $wpdb;
+        $appearances = $wpdb->prefix . 'guestify_guest_appearances';
+        $podcasts = $wpdb->prefix . 'guestify_podcasts';
+
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT a.*, p.title as podcast_title, p.artwork_url as podcast_artwork
+            FROM $appearances a
+            LEFT JOIN $podcasts p ON a.podcast_id = p.id
+            WHERE a.guest_id = %d
+            ORDER BY a.episode_date DESC",
+            $guest_id
+        ));
+    }
+
+    /**
+     * Get appearances for a podcast
+     */
+    public static function get_podcast_guest_appearances($podcast_id) {
+        global $wpdb;
+        $appearances = $wpdb->prefix . 'guestify_guest_appearances';
+        $guests = $wpdb->prefix . 'guestify_guests';
+
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT a.*, g.full_name, g.current_company, g.current_role, g.linkedin_url
+            FROM $appearances a
+            LEFT JOIN $guests g ON a.guest_id = g.id
+            WHERE a.podcast_id = %d AND g.is_merged = 0
+            ORDER BY a.episode_date DESC",
+            $podcast_id
+        ));
+    }
+
+    /**
+     * Create guest appearance
+     */
+    public static function create_appearance($data) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guest_appearances';
+
+        $wpdb->insert($table, $data);
+        return $wpdb->insert_id;
+    }
+
+    /**
+     * Update guest appearance
+     */
+    public static function update_appearance($appearance_id, $data) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guest_appearances';
+
+        unset($data['created_at']);
+        return $wpdb->update($table, $data, ['id' => $appearance_id]);
+    }
+
+    /**
+     * Delete guest appearance
+     */
+    public static function delete_appearance($appearance_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guest_appearances';
+
+        return $wpdb->delete($table, ['id' => $appearance_id]);
+    }
+
+    // ==================== TOPICS ====================
+
+    /**
+     * Get topic by ID
+     */
+    public static function get_topic($topic_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_topics';
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE id = %d",
+            $topic_id
+        ));
+    }
+
+    /**
+     * Get topic by slug
+     */
+    public static function get_topic_by_slug($slug) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_topics';
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE slug = %s",
+            $slug
+        ));
+    }
+
+    /**
+     * Get or create topic
+     */
+    public static function get_or_create_topic($name, $category = null) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_topics';
+
+        $slug = sanitize_title($name);
+
+        $existing = self::get_topic_by_slug($slug);
+        if ($existing) {
+            return $existing->id;
+        }
+
+        $wpdb->insert($table, [
+            'name' => $name,
+            'slug' => $slug,
+            'category' => $category,
+        ]);
+
+        return $wpdb->insert_id;
+    }
+
+    /**
+     * List all topics
+     */
+    public static function list_topics($args = []) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_topics';
+
+        $defaults = [
+            'category' => '',
+            'orderby' => 'usage_count',
+            'order' => 'DESC',
+        ];
+
+        $args = wp_parse_args($args, $defaults);
+
+        $where = '1=1';
+        $prepare_args = [];
+
+        if (!empty($args['category'])) {
+            $where .= ' AND category = %s';
+            $prepare_args[] = $args['category'];
+        }
+
+        $orderby = sanitize_sql_orderby($args['orderby'] . ' ' . $args['order']) ?: 'usage_count DESC';
+
+        $sql = "SELECT * FROM $table WHERE $where ORDER BY $orderby";
+
+        if (!empty($prepare_args)) {
+            return $wpdb->get_results($wpdb->prepare($sql, $prepare_args));
+        }
+
+        return $wpdb->get_results($sql);
+    }
+
+    /**
+     * Assign topic to guest
+     */
+    public static function assign_topic_to_guest($guest_id, $topic_id, $confidence = 100, $source = 'manual') {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guest_topics';
+        $topics_table = $wpdb->prefix . 'guestify_topics';
+
+        // Check if exists
+        $existing = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM $table WHERE guest_id = %d AND topic_id = %d",
+            $guest_id, $topic_id
+        ));
+
+        if ($existing) {
+            $wpdb->update($table, [
+                'confidence_score' => $confidence,
+                'mention_count' => $wpdb->get_var($wpdb->prepare(
+                    "SELECT mention_count + 1 FROM $table WHERE id = %d",
+                    $existing
+                )),
+            ], ['id' => $existing]);
+            return $existing;
+        }
+
+        $wpdb->insert($table, [
+            'guest_id' => $guest_id,
+            'topic_id' => $topic_id,
+            'confidence_score' => $confidence,
+            'source' => $source,
+        ]);
+
+        // Update usage count
+        $wpdb->query($wpdb->prepare(
+            "UPDATE $topics_table SET usage_count = usage_count + 1 WHERE id = %d",
+            $topic_id
+        ));
+
+        return $wpdb->insert_id;
+    }
+
+    /**
+     * Get topics for a guest
+     */
+    public static function get_guest_topics($guest_id) {
+        global $wpdb;
+        $pivot = $wpdb->prefix . 'guestify_guest_topics';
+        $topics = $wpdb->prefix . 'guestify_topics';
+
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT t.*, gt.confidence_score, gt.mention_count
+            FROM $topics t
+            INNER JOIN $pivot gt ON t.id = gt.topic_id
+            WHERE gt.guest_id = %d
+            ORDER BY gt.confidence_score DESC",
+            $guest_id
+        ));
+    }
+
+    // ==================== CONTENT ANALYSIS ====================
+
+    /**
+     * Get content analysis for podcast
+     */
+    public static function get_content_analysis($podcast_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_content_analysis';
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE podcast_id = %d",
+            $podcast_id
+        ));
+    }
+
+    /**
+     * Upsert content analysis
+     */
+    public static function upsert_content_analysis($podcast_id, $data) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_content_analysis';
+
+        $data['podcast_id'] = $podcast_id;
+
+        // Check if exists
+        $existing = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM $table WHERE podcast_id = %d",
+            $podcast_id
+        ));
+
+        if ($existing) {
+            unset($data['created_at']);
+            $wpdb->update($table, $data, ['id' => $existing]);
+            return $existing;
+        }
+
+        $wpdb->insert($table, $data);
+        return $wpdb->insert_id;
+    }
+
+    // ==================== GUEST NETWORK ====================
+
+    /**
+     * Get network connections for a guest
+     */
+    public static function get_guest_network($guest_id, $max_degree = 2) {
+        global $wpdb;
+        $network = $wpdb->prefix . 'guestify_guest_network';
+        $guests = $wpdb->prefix . 'guestify_guests';
+
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT n.*, g.full_name, g.current_company, g.current_role
+            FROM $network n
+            INNER JOIN $guests g ON n.connected_guest_id = g.id
+            WHERE n.guest_id = %d AND n.connection_degree <= %d AND g.is_merged = 0
+            ORDER BY n.connection_strength DESC",
+            $guest_id,
+            $max_degree
+        ));
+    }
+
+    /**
+     * Create or update network connection
+     */
+    public static function upsert_network_connection($guest_id, $connected_guest_id, $data) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guest_network';
+
+        $data['guest_id'] = $guest_id;
+        $data['connected_guest_id'] = $connected_guest_id;
+
+        // Check if exists
+        $existing = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM $table WHERE guest_id = %d AND connected_guest_id = %d",
+            $guest_id, $connected_guest_id
+        ));
+
+        if ($existing) {
+            unset($data['created_at']);
+            $wpdb->update($table, $data, ['id' => $existing]);
+            return $existing;
+        }
+
+        $wpdb->insert($table, $data);
+        return $wpdb->insert_id;
+    }
+
+    /**
+     * Clear network cache for guest
+     */
+    public static function clear_guest_network_cache($guest_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guest_network';
+
+        return $wpdb->delete($table, ['guest_id' => $guest_id]);
     }
 }

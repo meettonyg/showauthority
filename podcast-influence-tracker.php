@@ -118,6 +118,12 @@ class Podcast_Influence_Tracker {
         // Create database tables
         PIT_Database::create_tables();
 
+        // Create Podcast Intelligence tables
+        PIT_Database::create_podcast_intelligence_tables();
+
+        // Create Guest Intelligence tables (Phase 1 of Unified Platform)
+        PIT_Database::create_guest_intelligence_tables();
+
         // Schedule cron job for Layer 3
         if (!wp_next_scheduled('pit_background_refresh')) {
             wp_schedule_event(time(), 'weekly', 'pit_background_refresh');
