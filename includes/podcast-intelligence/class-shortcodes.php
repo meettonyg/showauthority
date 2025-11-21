@@ -96,6 +96,9 @@ class PIT_Shortcodes {
         add_shortcode('guestify_contacts_table', [$this, 'contacts_table']);
         add_shortcode('guestify_contacts_count', [$this, 'contacts_count']);
 
+        // ==================== INTERVIEW TRACKER SHORTCODES ====================
+        add_shortcode('guestify_interview_contacts', [$this, 'interview_contacts']);
+
         // ==================== GENERIC FIELD SHORTCODE ====================
         add_shortcode('guestify_field', [$this, 'generic_field']);
     }
@@ -987,5 +990,247 @@ class PIT_Shortcodes {
         </table>
         <?php
         return ob_get_clean();
+    }
+
+    // ==================== INTERVIEW TRACKER SHORTCODES ====================
+
+    /**
+     * [guestify_interview_contacts entry_id="[id]"]
+     * [guestify_interview_contacts podcast_id="5"]
+     *
+     * Displays contacts in the Interview Tracker view format with cards matching the existing CSS.
+     * Designed to replace the hardcoded Contact tab HTML in Formidable Views.
+     *
+     * @param string entry_id - Formidable entry ID (use [id] in Formidable Views)
+     * @param string podcast_id - Direct podcast ID (for standalone use)
+     * @param string show_header - Whether to show the section header (default: true)
+     * @param string show_add_button - Whether to show Add Contact button (default: true)
+     * @param string show_notes - Whether to show the contact notes section (default: true)
+     * @param string role - Filter by role (host/producer/guest/owner) or leave empty for all
+     */
+    public function interview_contacts($atts) {
+        $atts = shortcode_atts([
+            'podcast_id' => '',
+            'entry_id' => '',
+            'show_header' => 'true',
+            'show_add_button' => 'true',
+            'show_notes' => 'true',
+            'role' => '',
+        ], $atts);
+
+        $contacts = $this->get_all_contacts($atts['entry_id'], $atts['podcast_id'], $atts['role'] ?: null);
+
+        ob_start();
+        ?>
+        <?php if ($atts['show_header'] === 'true'): ?>
+        <div class="section-header">
+            <h2 class="section-heading">Contact Information</h2>
+            <?php if ($atts['show_add_button'] === 'true'): ?>
+            <button class="button outline-button small guestify-add-contact-btn" data-entry-id="<?php echo esc_attr($atts['entry_id']); ?>" data-podcast-id="<?php echo esc_attr($atts['podcast_id']); ?>">
+                <svg class="button-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Add Contact
+            </button>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
+        <!-- Contact Cards Grid -->
+        <div class="contacts-grid">
+            <?php if (empty($contacts)): ?>
+                <div class="no-contacts-message">
+                    <p>No contacts have been added yet.</p>
+                    <?php if ($atts['show_add_button'] === 'true'): ?>
+                    <p>Click "Add Contact" to add podcast contacts.</p>
+                    <?php endif; ?>
+                </div>
+            <?php else: ?>
+                <?php foreach ($contacts as $contact): ?>
+                    <?php echo $this->render_interview_contact_card($contact); ?>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+
+        <?php if ($atts['show_notes'] === 'true' && !empty($contacts)): ?>
+        <div class="divider"></div>
+
+        <div class="notes-section">
+            <div class="notes-header">
+                <h2 class="section-heading">Contact Notes</h2>
+                <button class="button outline-button guestify-edit-notes-btn">
+                    <svg class="button-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                    Edit Notes
+                </button>
+            </div>
+
+            <div class="notes-content">
+                <?php
+                // Collect notes from all contacts
+                $notes = [];
+                foreach ($contacts as $contact) {
+                    if (!empty($contact->notes)) {
+                        $notes[] = '<strong>' . esc_html($contact->full_name) . ':</strong> ' . esc_html($contact->notes);
+                    }
+                }
+                if (!empty($notes)) {
+                    echo '<p class="notes-text">' . implode('<br><br>', $notes) . '</p>';
+                } else {
+                    echo '<p class="notes-text empty">No contact notes yet.</p>';
+                }
+                ?>
+            </div>
+        </div>
+        <?php endif; ?>
+        <?php
+        return ob_get_clean();
+    }
+
+    /**
+     * Render a single contact card in Interview Tracker format
+     */
+    private function render_interview_contact_card($contact) {
+        // Generate initials from name
+        $initials = $this->get_initials($contact->full_name);
+
+        // Determine if this is a team/group contact
+        $is_team = (stripos($contact->full_name, 'team') !== false ||
+                   stripos($contact->full_name, 'group') !== false ||
+                   stripos($contact->full_name, 'department') !== false);
+
+        ob_start();
+        ?>
+        <div class="contact-card" data-contact-id="<?php echo esc_attr($contact->id); ?>">
+            <div class="contact-card-header">
+                <div class="contact-avatar<?php echo $is_team ? ' team' : ''; ?>"><?php echo esc_html($initials); ?></div>
+                <div>
+                    <h3 class="contact-name"><?php echo esc_html($contact->full_name); ?></h3>
+                    <?php if (!empty($contact->role)): ?>
+                        <span class="contact-role"><?php echo esc_html(ucfirst($contact->role)); ?></span>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="contact-details">
+                <?php if (!empty($contact->email)): ?>
+                <div class="contact-detail-item">
+                    <svg class="contact-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                        <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                    <a href="mailto:<?php echo esc_attr($contact->email); ?>" class="contact-detail-text"><?php echo esc_html($contact->email); ?></a>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($contact->phone)): ?>
+                <div class="contact-detail-item">
+                    <svg class="contact-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                    </svg>
+                    <a href="tel:<?php echo esc_attr(preg_replace('/[^0-9+]/', '', $contact->phone)); ?>" class="contact-detail-text"><?php echo esc_html($contact->phone); ?></a>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($contact->website_url)): ?>
+                <div class="contact-detail-item">
+                    <svg class="contact-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                    </svg>
+                    <a href="<?php echo esc_url($contact->website_url); ?>" target="_blank" class="contact-detail-text"><?php echo esc_html(parse_url($contact->website_url, PHP_URL_HOST) ?: $contact->website_url); ?></a>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($contact->linkedin_url)): ?>
+                <div class="contact-detail-item">
+                    <svg class="contact-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path>
+                        <rect x="2" y="9" width="4" height="12"></rect>
+                        <circle cx="4" cy="4" r="2"></circle>
+                    </svg>
+                    <a href="<?php echo esc_url($contact->linkedin_url); ?>" target="_blank" class="contact-detail-text">LinkedIn</a>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($contact->twitter_url)): ?>
+                <div class="contact-detail-item">
+                    <svg class="contact-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path>
+                    </svg>
+                    <a href="<?php echo esc_url($contact->twitter_url); ?>" target="_blank" class="contact-detail-text">Twitter</a>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($contact->company) || !empty($contact->title)): ?>
+                <div class="contact-detail-item">
+                    <svg class="contact-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span class="contact-detail-text">
+                        <?php
+                        $work_info = [];
+                        if (!empty($contact->title)) $work_info[] = $contact->title;
+                        if (!empty($contact->company)) $work_info[] = $contact->company;
+                        echo esc_html(implode(' at ', $work_info));
+                        ?>
+                    </span>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($contact->notes)): ?>
+                <div class="contact-detail-item">
+                    <svg class="contact-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
+                    <span class="contact-detail-text"><?php echo esc_html($contact->notes); ?></span>
+                </div>
+                <?php endif; ?>
+
+                <div class="contact-actions">
+                    <?php if (!empty($contact->email)): ?>
+                    <button class="contact-action-button" onclick="window.location.href='mailto:<?php echo esc_attr($contact->email); ?>'">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                            <polyline points="22,6 12,13 2,6"></polyline>
+                        </svg>
+                        Email
+                    </button>
+                    <?php endif; ?>
+                    <button class="contact-action-button guestify-edit-contact-btn" data-contact-id="<?php echo esc_attr($contact->id); ?>">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                        Edit
+                    </button>
+                </div>
+            </div>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+
+    /**
+     * Generate initials from a name
+     */
+    private function get_initials($name) {
+        if (empty($name)) return '??';
+
+        $words = preg_split('/\s+/', trim($name));
+        $initials = '';
+
+        // Get first letter of first two words
+        foreach (array_slice($words, 0, 2) as $word) {
+            if (!empty($word)) {
+                $initials .= strtoupper(mb_substr($word, 0, 1));
+            }
+        }
+
+        return $initials ?: '??';
     }
 }
