@@ -1,0 +1,40 @@
+# WordPress
+.htaccess
+wp-config.php
+wp-content/uploads/
+wp-content/blogs.dir/
+wp-content/upgrade/
+wp-content/backup-db/
+wp-content/advanced-cache.php
+wp-content/wp-cache-config.php
+wp-content/cache/
+wp-content/cache/supercache/
+
+# Development
+node_modules/
+npm-debug.log
+.sass-cache/
+*.log
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# Compiled files
+*.min.js
+*.min.css
+dist/
+build/
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+.cache/
