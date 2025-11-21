@@ -66,6 +66,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-email-integration.php';
         require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-shortcodes.php';
         require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-frontend-forms.php';
+        require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-rss-bridge.php';
 
         // Layer 1: Discovery Engine
         require_once PIT_PLUGIN_DIR . 'includes/layer-1/class-rss-parser.php';
@@ -148,6 +149,7 @@ class Podcast_Influence_Tracker {
         PIT_Email_Integration::get_instance();
         PIT_Shortcodes::get_instance();
         PIT_Frontend_Forms::get_instance();
+        PIT_RSS_Bridge::get_instance();
 
         // Initialize components
         PIT_REST_Controller::init();
