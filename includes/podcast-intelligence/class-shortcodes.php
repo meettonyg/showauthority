@@ -2,12 +2,19 @@
 /**
  * Podcast Intelligence Shortcodes
  *
- * Provides shortcodes for displaying podcast and contact data in Formidable Views.
- * Each shortcode accepts an entry_id parameter to link to Formidable entries.
+ * Provides shortcodes for displaying podcast and contact data.
+ * Shortcodes can be used in two ways:
  *
- * Usage in Formidable Views:
- *   [guestify_podcast_title entry_id="[id]"]
- *   [guestify_contact_email entry_id="[id]"]
+ * 1. With Formidable Views (using entry_id):
+ *    [guestify_podcast_title entry_id="[id]"]
+ *    [guestify_contact_email entry_id="[id]"]
+ *
+ * 2. Standalone Admin Use (using direct IDs):
+ *    [guestify_podcast_title podcast_id="5"]
+ *    [guestify_contact_email contact_id="10"]
+ *    [guestify_all_contacts podcast_id="5"]
+ *
+ * Direct IDs (podcast_id, contact_id) take priority over entry_id.
  *
  * @package Podcast_Influence_Tracker
  * @subpackage Podcast_Intelligence
@@ -96,19 +103,33 @@ class PIT_Shortcodes {
     // ==================== HELPER METHODS ====================
 
     /**
-     * Get podcast data for entry
+     * Get podcast data - supports both entry_id and podcast_id
      */
-    private function get_podcast($entry_id) {
-        if (empty($entry_id)) return null;
-        return PIT_Database::get_entry_podcast($entry_id);
+    private function get_podcast($entry_id = null, $podcast_id = null) {
+        // Direct podcast_id takes priority
+        if (!empty($podcast_id)) {
+            return PIT_Database::get_guestify_podcast($podcast_id);
+        }
+        // Fall back to entry_id lookup
+        if (!empty($entry_id)) {
+            return PIT_Database::get_entry_podcast($entry_id);
+        }
+        return null;
     }
 
     /**
-     * Get contact data for entry
+     * Get contact data - supports both entry_id and contact_id
      */
-    private function get_contact($entry_id) {
-        if (empty($entry_id)) return null;
-        return PIT_Database::get_entry_contact($entry_id);
+    private function get_contact($entry_id = null, $contact_id = null) {
+        // Direct contact_id takes priority
+        if (!empty($contact_id)) {
+            return PIT_Database::get_contact($contact_id);
+        }
+        // Fall back to entry_id lookup
+        if (!empty($entry_id)) {
+            return PIT_Database::get_entry_contact($entry_id);
+        }
+        return null;
     }
 
     /**
@@ -175,19 +196,21 @@ class PIT_Shortcodes {
 
     /**
      * [guestify_podcast_title entry_id="123"]
+     * [guestify_podcast_title podcast_id="5"]
      */
     public function podcast_title($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => '', 'before' => '', 'after' => ''], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => '', 'before' => '', 'after' => ''], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->title ?? null, $atts);
     }
 
     /**
      * [guestify_podcast_description entry_id="123"]
+     * [guestify_podcast_description podcast_id="5"]
      */
     public function podcast_description($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => '', 'before' => '', 'after' => '', 'limit' => ''], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => '', 'before' => '', 'after' => '', 'limit' => ''], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         $value = $podcast->description ?? null;
 
         // Truncate if limit specified
@@ -203,64 +226,71 @@ class PIT_Shortcodes {
 
     /**
      * [guestify_podcast_rss entry_id="123" link="true"]
+     * [guestify_podcast_rss podcast_id="5" link="true"]
      */
     public function podcast_rss($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => '', 'before' => '', 'after' => '', 'link' => 'false', 'target' => '_blank'], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => '', 'before' => '', 'after' => '', 'link' => 'false', 'target' => '_blank'], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->rss_feed_url ?? null, $atts);
     }
 
     /**
      * [guestify_podcast_website entry_id="123" link="true"]
+     * [guestify_podcast_website podcast_id="5" link="true"]
      */
     public function podcast_website($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => '', 'before' => '', 'after' => '', 'link' => 'false', 'target' => '_blank'], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => '', 'before' => '', 'after' => '', 'link' => 'false', 'target' => '_blank'], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->website_url ?? null, $atts);
     }
 
     /**
      * [guestify_podcast_category entry_id="123"]
+     * [guestify_podcast_category podcast_id="5"]
      */
     public function podcast_category($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => ''], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->category ?? null, $atts);
     }
 
     /**
      * [guestify_podcast_language entry_id="123"]
+     * [guestify_podcast_language podcast_id="5"]
      */
     public function podcast_language($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => 'en'], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => 'en'], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->language ?? null, $atts);
     }
 
     /**
      * [guestify_podcast_episode_count entry_id="123"]
+     * [guestify_podcast_episode_count podcast_id="5"]
      */
     public function podcast_episode_count($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => '0', 'format' => 'number'], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => '0', 'format' => 'number'], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->episode_count ?? null, $atts);
     }
 
     /**
      * [guestify_podcast_frequency entry_id="123"]
+     * [guestify_podcast_frequency podcast_id="5"]
      */
     public function podcast_frequency($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => ''], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->frequency ?? null, $atts);
     }
 
     /**
      * [guestify_podcast_duration entry_id="123"]
+     * [guestify_podcast_duration podcast_id="5"]
      */
     public function podcast_duration($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => '', 'format' => 'number', 'after' => ' min'], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => '', 'format' => 'number', 'after' => ' min'], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->average_duration ?? null, $atts);
     }
 
@@ -268,46 +298,51 @@ class PIT_Shortcodes {
 
     /**
      * [guestify_podcast_index_id entry_id="123"]
+     * [guestify_podcast_index_id podcast_id="5"]
      */
     public function podcast_index_id($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => ''], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->podcast_index_id ?? null, $atts);
     }
 
     /**
      * [guestify_podcast_index_guid entry_id="123"]
+     * [guestify_podcast_index_guid podcast_id="5"]
      */
     public function podcast_index_guid($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => ''], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->podcast_index_guid ?? null, $atts);
     }
 
     /**
      * [guestify_podcast_itunes_id entry_id="123"]
+     * [guestify_podcast_itunes_id podcast_id="5"]
      */
     public function podcast_itunes_id($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => ''], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->itunes_id ?? null, $atts);
     }
 
     /**
      * [guestify_podcast_taddy_uuid entry_id="123"]
+     * [guestify_podcast_taddy_uuid podcast_id="5"]
      */
     public function podcast_taddy_uuid($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => ''], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->taddy_podcast_uuid ?? null, $atts);
     }
 
     /**
      * [guestify_podcast_source entry_id="123"]
+     * [guestify_podcast_source podcast_id="5"]
      */
     public function podcast_source($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => 'manual'], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => 'manual'], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->source ?? null, $atts);
     }
 
@@ -315,28 +350,31 @@ class PIT_Shortcodes {
 
     /**
      * [guestify_podcast_quality_score entry_id="123"]
+     * [guestify_podcast_quality_score podcast_id="5"]
      */
     public function podcast_quality_score($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => '0', 'format' => 'number', 'after' => '%'], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => '0', 'format' => 'number', 'after' => '%'], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->data_quality_score ?? null, $atts);
     }
 
     /**
      * [guestify_podcast_relevance_score entry_id="123"]
+     * [guestify_podcast_relevance_score podcast_id="5"]
      */
     public function podcast_relevance_score($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => '0', 'format' => 'number', 'after' => '%'], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'default' => '0', 'format' => 'number', 'after' => '%'], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         return $this->format_output($podcast->relevance_score ?? null, $atts);
     }
 
     /**
      * [guestify_podcast_is_tracked entry_id="123" true="Yes" false="No"]
+     * [guestify_podcast_is_tracked podcast_id="5" true="Yes" false="No"]
      */
     public function podcast_is_tracked($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'true' => 'Yes', 'false' => 'No'], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'true' => 'Yes', 'false' => 'No'], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
         $is_tracked = !empty($podcast->is_tracked);
         return $is_tracked ? $atts['true'] : $atts['false'];
     }
@@ -345,37 +383,41 @@ class PIT_Shortcodes {
 
     /**
      * [guestify_contact_name entry_id="123"]
+     * [guestify_contact_name contact_id="5"]
      */
     public function contact_name($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => ''], $atts);
-        $contact = $this->get_contact($atts['entry_id']);
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
         return $this->format_output($contact->full_name ?? null, $atts);
     }
 
     /**
      * [guestify_contact_first_name entry_id="123"]
+     * [guestify_contact_first_name contact_id="5"]
      */
     public function contact_first_name($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => ''], $atts);
-        $contact = $this->get_contact($atts['entry_id']);
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
         return $this->format_output($contact->first_name ?? null, $atts);
     }
 
     /**
      * [guestify_contact_last_name entry_id="123"]
+     * [guestify_contact_last_name contact_id="5"]
      */
     public function contact_last_name($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => ''], $atts);
-        $contact = $this->get_contact($atts['entry_id']);
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
         return $this->format_output($contact->last_name ?? null, $atts);
     }
 
     /**
      * [guestify_contact_email entry_id="123"]
+     * [guestify_contact_email contact_id="5"]
      */
     public function contact_email($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => '', 'link' => 'false'], $atts);
-        $contact = $this->get_contact($atts['entry_id']);
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => '', 'link' => 'false'], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
         $email = $contact->email ?? null;
 
         if (!empty($email) && $atts['link'] === 'true') {
@@ -387,10 +429,11 @@ class PIT_Shortcodes {
 
     /**
      * [guestify_contact_phone entry_id="123"]
+     * [guestify_contact_phone contact_id="5"]
      */
     public function contact_phone($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => '', 'link' => 'false'], $atts);
-        $contact = $this->get_contact($atts['entry_id']);
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => '', 'link' => 'false'], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
         $phone = $contact->phone ?? null;
 
         if (!empty($phone) && $atts['link'] === 'true') {
@@ -403,55 +446,61 @@ class PIT_Shortcodes {
 
     /**
      * [guestify_contact_role entry_id="123"]
+     * [guestify_contact_role contact_id="5"]
      */
     public function contact_role($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => ''], $atts);
-        $contact = $this->get_contact($atts['entry_id']);
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
         return $this->format_output($contact->role ?? null, $atts);
     }
 
     /**
      * [guestify_contact_company entry_id="123"]
+     * [guestify_contact_company contact_id="5"]
      */
     public function contact_company($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => ''], $atts);
-        $contact = $this->get_contact($atts['entry_id']);
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
         return $this->format_output($contact->company ?? null, $atts);
     }
 
     /**
      * [guestify_contact_title entry_id="123"]
+     * [guestify_contact_title contact_id="5"]
      */
     public function contact_title($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => ''], $atts);
-        $contact = $this->get_contact($atts['entry_id']);
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => ''], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
         return $this->format_output($contact->title ?? null, $atts);
     }
 
     /**
      * [guestify_contact_linkedin entry_id="123" link="true"]
+     * [guestify_contact_linkedin contact_id="5" link="true"]
      */
     public function contact_linkedin($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => '', 'link' => 'false', 'target' => '_blank'], $atts);
-        $contact = $this->get_contact($atts['entry_id']);
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => '', 'link' => 'false', 'target' => '_blank'], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
         return $this->format_output($contact->linkedin_url ?? null, $atts);
     }
 
     /**
      * [guestify_contact_twitter entry_id="123" link="true"]
+     * [guestify_contact_twitter contact_id="5" link="true"]
      */
     public function contact_twitter($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => '', 'link' => 'false', 'target' => '_blank'], $atts);
-        $contact = $this->get_contact($atts['entry_id']);
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => '', 'link' => 'false', 'target' => '_blank'], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
         return $this->format_output($contact->twitter_url ?? null, $atts);
     }
 
     /**
      * [guestify_contact_website entry_id="123" link="true"]
+     * [guestify_contact_website contact_id="5" link="true"]
      */
     public function contact_website($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'default' => '', 'link' => 'false', 'target' => '_blank'], $atts);
-        $contact = $this->get_contact($atts['entry_id']);
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'default' => '', 'link' => 'false', 'target' => '_blank'], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
         return $this->format_output($contact->website_url ?? null, $atts);
     }
 
@@ -488,11 +537,12 @@ class PIT_Shortcodes {
 
     /**
      * [guestify_podcast_card entry_id="123"]
+     * [guestify_podcast_card podcast_id="5"]
      * Displays a formatted podcast info card
      */
     public function podcast_card($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'class' => 'guestify-podcast-card'], $atts);
-        $podcast = $this->get_podcast($atts['entry_id']);
+        $atts = shortcode_atts(['podcast_id' => '', 'entry_id' => '', 'class' => 'guestify-podcast-card'], $atts);
+        $podcast = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
 
         if (!$podcast) {
             return '<div class="' . esc_attr($atts['class']) . ' empty">No podcast data found</div>';
@@ -526,11 +576,12 @@ class PIT_Shortcodes {
 
     /**
      * [guestify_contact_card entry_id="123"]
+     * [guestify_contact_card contact_id="5"]
      * Displays a formatted contact info card
      */
     public function contact_card($atts) {
-        $atts = shortcode_atts(['entry_id' => '', 'class' => 'guestify-contact-card'], $atts);
-        $contact = $this->get_contact($atts['entry_id']);
+        $atts = shortcode_atts(['contact_id' => '', 'entry_id' => '', 'class' => 'guestify-contact-card'], $atts);
+        $contact = $this->get_contact($atts['entry_id'], $atts['contact_id']);
 
         if (!$contact) {
             return '<div class="' . esc_attr($atts['class']) . ' empty">No contact data found</div>';
@@ -563,11 +614,15 @@ class PIT_Shortcodes {
 
     /**
      * [guestify_field entry_id="123" table="podcast" field="title"]
+     * [guestify_field podcast_id="5" table="podcast" field="title"]
+     * [guestify_field contact_id="5" table="contact" field="email"]
      * Generic shortcode for any field from any table
      */
     public function generic_field($atts) {
         $atts = shortcode_atts([
             'entry_id' => '',
+            'podcast_id' => '',    // Direct podcast ID for standalone use
+            'contact_id' => '',    // Direct contact ID for standalone use
             'table' => 'podcast',  // podcast, contact, bridge
             'field' => '',
             'default' => '',
@@ -584,10 +639,10 @@ class PIT_Shortcodes {
         $data = null;
         switch ($atts['table']) {
             case 'podcast':
-                $data = $this->get_podcast($atts['entry_id']);
+                $data = $this->get_podcast($atts['entry_id'], $atts['podcast_id']);
                 break;
             case 'contact':
-                $data = $this->get_contact($atts['entry_id']);
+                $data = $this->get_contact($atts['entry_id'], $atts['contact_id']);
                 break;
             case 'bridge':
                 $data = $this->get_bridge($atts['entry_id']);
@@ -607,20 +662,30 @@ class PIT_Shortcodes {
     // ==================== ALL CONTACTS SHORTCODES ====================
 
     /**
-     * Get all contacts for a podcast entry
+     * Get all contacts for a podcast - supports entry_id OR podcast_id
      */
-    private function get_all_contacts($entry_id, $role = null) {
-        $podcast = $this->get_podcast($entry_id);
-        if (!$podcast) return [];
-
-        return PIT_Database::get_podcast_contacts($podcast->id, $role);
+    private function get_all_contacts($entry_id = null, $podcast_id = null, $role = null) {
+        // Direct podcast_id takes priority
+        if (!empty($podcast_id)) {
+            return PIT_Database::get_podcast_contacts($podcast_id, $role);
+        }
+        // Fall back to entry_id lookup
+        if (!empty($entry_id)) {
+            $podcast = $this->get_podcast($entry_id);
+            if (!$podcast) return [];
+            return PIT_Database::get_podcast_contacts($podcast->id, $role);
+        }
+        return [];
     }
 
     /**
+     * [guestify_all_contacts podcast_id="5" role="host" format="cards"]
      * [guestify_all_contacts entry_id="123" role="host" format="cards"]
-     * Displays all contacts for the podcast associated with an entry
      *
-     * @param string entry_id - Formidable entry ID
+     * Displays all contacts for a podcast. Use EITHER podcast_id OR entry_id.
+     *
+     * @param string podcast_id - Direct podcast ID (preferred for admin use)
+     * @param string entry_id - Formidable entry ID (for Interview Tracker views)
      * @param string role - Filter by role (host/producer/guest/owner) or leave empty for all
      * @param string format - Output format: cards, list, table, json
      * @param string fields - Comma-separated fields to show (default: name,email,role)
@@ -629,7 +694,8 @@ class PIT_Shortcodes {
      */
     public function all_contacts($atts) {
         $atts = shortcode_atts([
-            'entry_id' => '',
+            'podcast_id' => '',     // Direct podcast ID (takes priority)
+            'entry_id' => '',       // Formidable entry ID (fallback)
             'role' => '',           // Filter by role: host, producer, guest, owner
             'format' => 'cards',    // cards, list, table, json
             'fields' => 'name,email,role',  // Which fields to display
@@ -639,7 +705,7 @@ class PIT_Shortcodes {
             'link_social' => 'true',
         ], $atts);
 
-        $contacts = $this->get_all_contacts($atts['entry_id'], $atts['role'] ?: null);
+        $contacts = $this->get_all_contacts($atts['entry_id'], $atts['podcast_id'], $atts['role'] ?: null);
 
         if (empty($contacts)) {
             return '<div class="' . esc_attr($atts['class']) . ' empty">' . esc_html($atts['empty']) . '</div>';
@@ -670,12 +736,14 @@ class PIT_Shortcodes {
     }
 
     /**
+     * [guestify_contacts_list podcast_id="5"]
      * [guestify_contacts_list entry_id="123"]
      * Simple bulleted list of contacts
      */
     public function contacts_list($atts) {
         $atts = shortcode_atts([
-            'entry_id' => '',
+            'podcast_id' => '',     // Direct podcast ID (takes priority)
+            'entry_id' => '',       // Formidable entry ID (fallback)
             'role' => '',
             'fields' => 'name,role,email',
             'class' => 'guestify-contacts-list',
@@ -684,7 +752,7 @@ class PIT_Shortcodes {
             'link_email' => 'true',
         ], $atts);
 
-        $contacts = $this->get_all_contacts($atts['entry_id'], $atts['role'] ?: null);
+        $contacts = $this->get_all_contacts($atts['entry_id'], $atts['podcast_id'], $atts['role'] ?: null);
 
         if (empty($contacts)) {
             return '<div class="' . esc_attr($atts['class']) . ' empty">' . esc_html($atts['empty']) . '</div>';
@@ -696,12 +764,14 @@ class PIT_Shortcodes {
     }
 
     /**
+     * [guestify_contacts_table podcast_id="5"]
      * [guestify_contacts_table entry_id="123"]
      * HTML table of contacts
      */
     public function contacts_table($atts) {
         $atts = shortcode_atts([
-            'entry_id' => '',
+            'podcast_id' => '',     // Direct podcast ID (takes priority)
+            'entry_id' => '',       // Formidable entry ID (fallback)
             'role' => '',
             'fields' => 'name,role,email,linkedin',
             'class' => 'guestify-contacts-table',
@@ -710,7 +780,7 @@ class PIT_Shortcodes {
             'link_social' => 'true',
         ], $atts);
 
-        $contacts = $this->get_all_contacts($atts['entry_id'], $atts['role'] ?: null);
+        $contacts = $this->get_all_contacts($atts['entry_id'], $atts['podcast_id'], $atts['role'] ?: null);
 
         if (empty($contacts)) {
             return '<div class="' . esc_attr($atts['class']) . ' empty">' . esc_html($atts['empty']) . '</div>';
@@ -722,18 +792,20 @@ class PIT_Shortcodes {
     }
 
     /**
+     * [guestify_contacts_count podcast_id="5" role="host"]
      * [guestify_contacts_count entry_id="123" role="host"]
      * Returns count of contacts
      */
     public function contacts_count($atts) {
         $atts = shortcode_atts([
-            'entry_id' => '',
+            'podcast_id' => '',     // Direct podcast ID (takes priority)
+            'entry_id' => '',       // Formidable entry ID (fallback)
             'role' => '',
             'before' => '',
             'after' => '',
         ], $atts);
 
-        $contacts = $this->get_all_contacts($atts['entry_id'], $atts['role'] ?: null);
+        $contacts = $this->get_all_contacts($atts['entry_id'], $atts['podcast_id'], $atts['role'] ?: null);
         $count = count($contacts);
 
         return $atts['before'] . $count . $atts['after'];
