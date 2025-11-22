@@ -73,6 +73,26 @@ class PIT_Admin_Page {
             [__CLASS__, 'render_guest_tools_page']
         );
 
+        // Network Intelligence
+        add_submenu_page(
+            'podcast-influence',
+            __('Network', 'podcast-influence-tracker'),
+            __('Network', 'podcast-influence-tracker'),
+            'manage_options',
+            'podcast-influence-network',
+            [__CLASS__, 'render_network_page']
+        );
+
+        // Export Center
+        add_submenu_page(
+            'podcast-influence',
+            __('Export', 'podcast-influence-tracker'),
+            __('Export', 'podcast-influence-tracker'),
+            'manage_options',
+            'podcast-influence-export',
+            [__CLASS__, 'render_export_page']
+        );
+
         // Analytics
         add_submenu_page(
             'podcast-influence',
@@ -182,6 +202,32 @@ class PIT_Admin_Page {
                     <p><?php _e('Loading...', 'podcast-influence-tracker'); ?></p>
                 </div>
             <?php endif; ?>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render network intelligence page
+     */
+    public static function render_network_page() {
+        ?>
+        <div class="wrap">
+            <div id="pit-app-network">
+                <p><?php _e('Loading...', 'podcast-influence-tracker'); ?></p>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render export page
+     */
+    public static function render_export_page() {
+        ?>
+        <div class="wrap">
+            <div id="pit-app-export">
+                <p><?php _e('Loading...', 'podcast-influence-tracker'); ?></p>
+            </div>
         </div>
         <?php
     }

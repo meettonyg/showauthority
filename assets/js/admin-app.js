@@ -1874,6 +1874,363 @@ const VerificationQueue = {
     },
 };
 
+// Network Store
+const useNetworkStore = defineStore('network', {
+    state: () => ({
+        network: null,
+        loading: false,
+        exportLoading: false,
+    }),
+
+    actions: {
+        async fetchGuestNetwork(guestId) {
+            this.loading = true;
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests/${guestId}/network`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                this.network = await response.json();
+                return this.network;
+            } catch (error) {
+                console.error('Failed to fetch network:', error);
+                return { first_degree: [], second_degree: [] };
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async exportGuests(format = 'csv', filters = {}) {
+            this.exportLoading = true;
+            try {
+                const params = new URLSearchParams({ format, ...filters });
+                const response = await fetch(`${pitData.apiUrl}/export/guests?${params}`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                return await response.blob();
+            } finally {
+                this.exportLoading = false;
+            }
+        },
+
+        async exportPodcasts(format = 'csv') {
+            this.exportLoading = true;
+            try {
+                const response = await fetch(`${pitData.apiUrl}/export/podcasts?format=${format}`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                return await response.blob();
+            } finally {
+                this.exportLoading = false;
+            }
+        },
+    },
+});
+
+// Network Intelligence Component
+const NetworkIntelligence = {
+    template: `
+        <div class="pit-network">
+            <div class="network-header">
+                <h2>Network Intelligence</h2>
+                <p>Explore guest connections across podcasts. 1st degree = appeared on same podcast. 2nd degree = connected through mutual guest.</p>
+            </div>
+
+            <div class="network-search">
+                <input type="text" v-model="searchTerm" @input="debouncedSearch"
+                    placeholder="Search guests to view their network..." class="search-input">
+            </div>
+
+            <div v-if="loading" class="pit-loading">Searching...</div>
+
+            <div v-else-if="searchResults.length > 0 && !selectedGuest" class="search-results">
+                <div v-for="guest in searchResults" :key="guest.id" class="search-result-item"
+                    @click="selectGuest(guest)">
+                    <div class="guest-avatar">{{ getInitials(guest.full_name) }}</div>
+                    <div class="guest-info">
+                        <strong>{{ guest.full_name }}</strong>
+                        <span>{{ guest.current_role }} at {{ guest.current_company }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="selectedGuest" class="network-view">
+                <div class="selected-guest-header">
+                    <div class="guest-avatar-large">{{ getInitials(selectedGuest.full_name) }}</div>
+                    <div class="guest-info">
+                        <h3>{{ selectedGuest.full_name }}</h3>
+                        <p>{{ selectedGuest.current_role }} at {{ selectedGuest.current_company }}</p>
+                    </div>
+                    <button @click="clearSelection" class="button">Clear Selection</button>
+                </div>
+
+                <div v-if="networkLoading" class="pit-loading">Calculating network...</div>
+
+                <div v-else class="network-stats">
+                    <div class="network-stat">
+                        <div class="stat-value">{{ firstDegree.length }}</div>
+                        <div class="stat-label">1st Degree Connections</div>
+                    </div>
+                    <div class="network-stat">
+                        <div class="stat-value">{{ secondDegree.length }}</div>
+                        <div class="stat-label">2nd Degree Connections</div>
+                    </div>
+                    <div class="network-stat">
+                        <div class="stat-value">{{ sharedPodcasts.length }}</div>
+                        <div class="stat-label">Shared Podcasts</div>
+                    </div>
+                </div>
+
+                <div v-if="firstDegree.length > 0" class="network-section">
+                    <h4>1st Degree Connections</h4>
+                    <p class="section-desc">Guests who appeared on the same podcast</p>
+                    <div class="connections-grid">
+                        <div v-for="conn in firstDegree" :key="conn.id" class="connection-card">
+                            <div class="guest-avatar">{{ getInitials(conn.full_name) }}</div>
+                            <div class="connection-info">
+                                <strong>{{ conn.full_name }}</strong>
+                                <span>{{ conn.current_company }}</span>
+                                <span class="shared-podcast" v-if="conn.shared_podcast">via {{ conn.shared_podcast }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="secondDegree.length > 0" class="network-section">
+                    <h4>2nd Degree Connections</h4>
+                    <p class="section-desc">Connected through a mutual guest</p>
+                    <div class="connections-grid">
+                        <div v-for="conn in secondDegree.slice(0, 20)" :key="conn.id" class="connection-card">
+                            <div class="guest-avatar">{{ getInitials(conn.full_name) }}</div>
+                            <div class="connection-info">
+                                <strong>{{ conn.full_name }}</strong>
+                                <span>{{ conn.current_company }}</span>
+                                <span class="mutual" v-if="conn.mutual_guest">via {{ conn.mutual_guest }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p v-if="secondDegree.length > 20" class="more-connections">
+                        + {{ secondDegree.length - 20 }} more connections
+                    </p>
+                </div>
+            </div>
+        </div>
+    `,
+    data() {
+        return {
+            searchTerm: '',
+            searchResults: [],
+            selectedGuest: null,
+            network: null,
+            loading: false,
+            networkLoading: false,
+            searchTimeout: null,
+        };
+    },
+    computed: {
+        firstDegree() {
+            return this.network?.first_degree || [];
+        },
+        secondDegree() {
+            return this.network?.second_degree || [];
+        },
+        sharedPodcasts() {
+            return this.network?.shared_podcasts || [];
+        },
+    },
+    methods: {
+        getInitials(name) {
+            if (!name) return '?';
+            return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        },
+        debouncedSearch() {
+            clearTimeout(this.searchTimeout);
+            this.searchTimeout = setTimeout(() => this.search(), 300);
+        },
+        async search() {
+            if (this.searchTerm.length < 2) {
+                this.searchResults = [];
+                return;
+            }
+            this.loading = true;
+            try {
+                const response = await fetch(
+                    `${pitData.apiUrl}/guests?search=${encodeURIComponent(this.searchTerm)}&per_page=10`,
+                    { headers: { 'X-WP-Nonce': pitData.nonce } }
+                );
+                const data = await response.json();
+                this.searchResults = data.guests || [];
+            } catch (error) {
+                console.error('Search failed:', error);
+            } finally {
+                this.loading = false;
+            }
+        },
+        async selectGuest(guest) {
+            this.selectedGuest = guest;
+            this.searchResults = [];
+            this.searchTerm = '';
+            this.networkLoading = true;
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests/${guest.id}/network`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                this.network = await response.json();
+            } catch (error) {
+                console.error('Failed to load network:', error);
+            } finally {
+                this.networkLoading = false;
+            }
+        },
+        clearSelection() {
+            this.selectedGuest = null;
+            this.network = null;
+        },
+    },
+};
+
+// Export Center Component
+const ExportCenter = {
+    template: `
+        <div class="pit-export">
+            <div class="export-header">
+                <h2>Export Data</h2>
+                <p>Export your podcast and guest data in various formats.</p>
+            </div>
+
+            <div class="export-sections">
+                <div class="export-section">
+                    <h3>Guest Directory Export</h3>
+                    <p>Export all guest information including profiles, appearances, and network data.</p>
+
+                    <div class="export-filters">
+                        <div class="filter-group">
+                            <label>Verification Status</label>
+                            <select v-model="guestFilters.verified">
+                                <option value="">All Guests</option>
+                                <option value="1">Verified Only</option>
+                                <option value="0">Unverified Only</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Company Stage</label>
+                            <select v-model="guestFilters.company_stage">
+                                <option value="">All Stages</option>
+                                <option value="seed">Seed</option>
+                                <option value="series-a">Series A</option>
+                                <option value="series-b">Series B</option>
+                                <option value="series-c+">Series C+</option>
+                                <option value="scaleup">Scaleup</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="export-buttons">
+                        <button @click="exportGuests('csv')" class="button" :disabled="exporting">
+                            {{ exporting === 'guests-csv' ? 'Exporting...' : 'Export CSV' }}
+                        </button>
+                        <button @click="exportGuests('json')" class="button" :disabled="exporting">
+                            {{ exporting === 'guests-json' ? 'Exporting...' : 'Export JSON' }}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="export-section">
+                    <h3>Podcast Directory Export</h3>
+                    <p>Export all podcast information including social links and metrics history.</p>
+                    <div class="export-buttons">
+                        <button @click="exportPodcasts('csv')" class="button" :disabled="exporting">
+                            {{ exporting === 'podcasts-csv' ? 'Exporting...' : 'Export CSV' }}
+                        </button>
+                        <button @click="exportPodcasts('json')" class="button" :disabled="exporting">
+                            {{ exporting === 'podcasts-json' ? 'Exporting...' : 'Export JSON' }}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="export-section">
+                    <h3>Network Connections Export</h3>
+                    <p>Export guest network relationships (1st and 2nd degree connections).</p>
+                    <div class="export-buttons">
+                        <button @click="exportNetwork('csv')" class="button" :disabled="exporting">
+                            {{ exporting === 'network-csv' ? 'Exporting...' : 'Export CSV' }}
+                        </button>
+                        <button @click="exportNetwork('json')" class="button" :disabled="exporting">
+                            {{ exporting === 'network-json' ? 'Exporting...' : 'Export JSON' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="lastExport" class="export-success">
+                Successfully exported {{ lastExport.type }} ({{ lastExport.count }} records)
+            </div>
+        </div>
+    `,
+    data() {
+        return {
+            guestFilters: { verified: '', company_stage: '' },
+            exporting: null,
+            lastExport: null,
+        };
+    },
+    methods: {
+        async exportGuests(format) {
+            this.exporting = `guests-${format}`;
+            try {
+                const params = new URLSearchParams({ format, ...this.guestFilters });
+                const response = await fetch(`${pitData.apiUrl}/export/guests?${params}`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                const blob = await response.blob();
+                this.downloadFile(blob, `guests.${format}`);
+                this.lastExport = { type: 'Guests', count: '?' };
+            } catch (error) {
+                alert('Export failed: ' + error.message);
+            } finally {
+                this.exporting = null;
+            }
+        },
+        async exportPodcasts(format) {
+            this.exporting = `podcasts-${format}`;
+            try {
+                const response = await fetch(`${pitData.apiUrl}/export/podcasts?format=${format}`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                const blob = await response.blob();
+                this.downloadFile(blob, `podcasts.${format}`);
+                this.lastExport = { type: 'Podcasts', count: '?' };
+            } catch (error) {
+                alert('Export failed: ' + error.message);
+            } finally {
+                this.exporting = null;
+            }
+        },
+        async exportNetwork(format) {
+            this.exporting = `network-${format}`;
+            try {
+                const response = await fetch(`${pitData.apiUrl}/export/network?format=${format}`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                const blob = await response.blob();
+                this.downloadFile(blob, `network.${format}`);
+                this.lastExport = { type: 'Network', count: '?' };
+            } catch (error) {
+                alert('Export failed: ' + error.message);
+            } finally {
+                this.exporting = null;
+            }
+        },
+        downloadFile(blob, filename) {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        },
+    },
+};
+
 // Content Analysis Store
 const useContentStore = defineStore('content', {
     state: () => ({
@@ -2832,6 +3189,20 @@ document.addEventListener('DOMContentLoaded', function() {
         const app = createApp(VerificationQueue);
         app.use(pinia);
         app.mount('#pit-app-verification');
+    }
+
+    // Network Intelligence
+    if (document.getElementById('pit-app-network')) {
+        const app = createApp(NetworkIntelligence);
+        app.use(pinia);
+        app.mount('#pit-app-network');
+    }
+
+    // Export Center
+    if (document.getElementById('pit-app-export')) {
+        const app = createApp(ExportCenter);
+        app.use(pinia);
+        app.mount('#pit-app-export');
     }
 
     // Analytics

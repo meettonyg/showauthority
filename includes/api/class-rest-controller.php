@@ -381,6 +381,25 @@ class PIT_REST_Controller {
             'callback' => [__CLASS__, 'get_metrics_history'],
             'permission_callback' => [__CLASS__, 'check_logged_in'],
         ]);
+
+        // Export Endpoints
+        register_rest_route(self::NAMESPACE, '/export/guests', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'export_guests'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        register_rest_route(self::NAMESPACE, '/export/podcasts', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'export_podcasts'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        register_rest_route(self::NAMESPACE, '/export/network', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'export_network'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
     }
 
     /**
@@ -1529,6 +1548,143 @@ class PIT_REST_Controller {
         // In a full implementation, this would store dismissed pairs in a separate table
         // For now, just return success
         return rest_ensure_response(['success' => true]);
+    }
+
+    /**
+     * Export guests data
+     */
+    public static function export_guests($request) {
+        global $wpdb;
+        $format = $request->get_param('format') ?? 'csv';
+        $verified = $request->get_param('verified');
+        $company_stage = $request->get_param('company_stage');
+
+        $table = $wpdb->prefix . 'guestify_guests';
+        $where = '1=1';
+        $params = [];
+
+        if ($verified !== null && $verified !== '') {
+            $where .= ' AND manually_verified = %d';
+            $params[] = (int) $verified;
+        }
+
+        if (!empty($company_stage)) {
+            $where .= ' AND company_stage = %s';
+            $params[] = $company_stage;
+        }
+
+        $query = "SELECT * FROM {$table} WHERE {$where} ORDER BY full_name ASC";
+        $guests = empty($params) ? $wpdb->get_results($query) : $wpdb->get_results($wpdb->prepare($query, $params));
+
+        if ($format === 'json') {
+            return rest_ensure_response($guests);
+        }
+
+        // CSV export
+        $csv = "ID,Full Name,Email,LinkedIn URL,Current Company,Current Role,Company Stage,Industry,Verified,Created At\n";
+        foreach ($guests as $guest) {
+            $csv .= sprintf(
+                '%d,"%s","%s","%s","%s","%s","%s","%s",%s,"%s"' . "\n",
+                $guest->id,
+                str_replace('"', '""', $guest->full_name ?? ''),
+                str_replace('"', '""', $guest->email ?? ''),
+                str_replace('"', '""', $guest->linkedin_url ?? ''),
+                str_replace('"', '""', $guest->current_company ?? ''),
+                str_replace('"', '""', $guest->current_role ?? ''),
+                str_replace('"', '""', $guest->company_stage ?? ''),
+                str_replace('"', '""', $guest->industry ?? ''),
+                $guest->manually_verified ? 'Yes' : 'No',
+                $guest->created_at ?? ''
+            );
+        }
+
+        header('Content-Type: text/csv');
+        header('Content-Disposition: attachment; filename="guests.csv"');
+        echo $csv;
+        exit;
+    }
+
+    /**
+     * Export podcasts data
+     */
+    public static function export_podcasts($request) {
+        global $wpdb;
+        $format = $request->get_param('format') ?? 'csv';
+
+        $table = $wpdb->prefix . 'guestify_podcasts';
+        $podcasts = $wpdb->get_results("SELECT * FROM {$table} ORDER BY podcast_name ASC");
+
+        if ($format === 'json') {
+            return rest_ensure_response($podcasts);
+        }
+
+        // CSV export
+        $csv = "ID,Podcast Name,Author,RSS URL,Homepage URL,iTunes ID,Tracking Status,Created At\n";
+        foreach ($podcasts as $podcast) {
+            $csv .= sprintf(
+                '%d,"%s","%s","%s","%s","%s","%s","%s"' . "\n",
+                $podcast->id,
+                str_replace('"', '""', $podcast->podcast_name ?? ''),
+                str_replace('"', '""', $podcast->author ?? ''),
+                str_replace('"', '""', $podcast->rss_url ?? ''),
+                str_replace('"', '""', $podcast->homepage_url ?? ''),
+                $podcast->itunes_id ?? '',
+                $podcast->tracking_status ?? '',
+                $podcast->created_at ?? ''
+            );
+        }
+
+        header('Content-Type: text/csv');
+        header('Content-Disposition: attachment; filename="podcasts.csv"');
+        echo $csv;
+        exit;
+    }
+
+    /**
+     * Export network connections data
+     */
+    public static function export_network($request) {
+        global $wpdb;
+        $format = $request->get_param('format') ?? 'csv';
+
+        $guests_table = $wpdb->prefix . 'guestify_guests';
+        $appearances_table = $wpdb->prefix . 'guestify_guest_appearances';
+
+        // Get all 1st degree connections (guests who appeared on same podcast)
+        $connections = $wpdb->get_results("
+            SELECT DISTINCT
+                g1.id as guest1_id, g1.full_name as guest1_name,
+                g2.id as guest2_id, g2.full_name as guest2_name,
+                p.podcast_name
+            FROM {$appearances_table} a1
+            INNER JOIN {$appearances_table} a2 ON a1.podcast_id = a2.podcast_id AND a1.guest_id < a2.guest_id
+            INNER JOIN {$guests_table} g1 ON a1.guest_id = g1.id
+            INNER JOIN {$guests_table} g2 ON a2.guest_id = g2.id
+            INNER JOIN {$wpdb->prefix}guestify_podcasts p ON a1.podcast_id = p.id
+            ORDER BY g1.full_name, g2.full_name
+        ");
+
+        if ($format === 'json') {
+            return rest_ensure_response($connections);
+        }
+
+        // CSV export
+        $csv = "Guest 1 ID,Guest 1 Name,Guest 2 ID,Guest 2 Name,Shared Podcast\n";
+        foreach ($connections as $conn) {
+            $csv .= sprintf(
+                '%d,"%s",%d,"%s","%s"' . "\n",
+                $conn->guest1_id,
+                str_replace('"', '""', $conn->guest1_name ?? ''),
+                $conn->guest2_id,
+                str_replace('"', '""', $conn->guest2_name ?? ''),
+                str_replace('"', '""', $conn->podcast_name ?? '')
+            );
+        }
+
+        header('Content-Type: text/csv');
+        header('Content-Disposition: attachment; filename="network.csv"');
+        echo $csv;
+        exit;
     }
 
     /**
