@@ -147,10 +147,17 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
 
         $result = PIT_Podcast_Repository::list($args);
 
-        // Enrich with social links and metrics
-        foreach ($result['podcasts'] as &$podcast) {
-            $podcast->social_links = PIT_Social_Link_Repository::get_for_podcast($podcast->id);
-            $podcast->metrics = PIT_Metrics_Repository::get_latest_for_podcast($podcast->id);
+        // Batch fetch social links and metrics to avoid N+1 queries
+        if (!empty($result['podcasts'])) {
+            $podcast_ids = array_map(function($p) { return $p->id; }, $result['podcasts']);
+
+            $social_links = PIT_Social_Link_Repository::get_for_podcasts($podcast_ids);
+            $metrics = PIT_Metrics_Repository::get_latest_for_podcasts($podcast_ids);
+
+            foreach ($result['podcasts'] as &$podcast) {
+                $podcast->social_links = $social_links[$podcast->id] ?? [];
+                $podcast->metrics = $metrics[$podcast->id] ?? [];
+            }
         }
 
         return rest_ensure_response($result);

@@ -156,10 +156,17 @@ class PIT_REST_Guests extends PIT_REST_Base {
 
         $result = PIT_Guest_Repository::list($args);
 
-        // Enrich with appearances count and topics
-        foreach ($result['guests'] as &$guest) {
-            $guest->appearances_count = count(PIT_Appearance_Repository::get_for_guest($guest->id));
-            $guest->topics = PIT_Topic_Repository::get_for_guest($guest->id);
+        // Batch fetch appearances count and topics to avoid N+1 queries
+        if (!empty($result['guests'])) {
+            $guest_ids = array_map(function($g) { return $g->id; }, $result['guests']);
+
+            $appearance_counts = PIT_Appearance_Repository::get_counts_for_guests($guest_ids);
+            $topics = PIT_Topic_Repository::get_for_guests($guest_ids);
+
+            foreach ($result['guests'] as &$guest) {
+                $guest->appearances_count = $appearance_counts[$guest->id] ?? 0;
+                $guest->topics = $topics[$guest->id] ?? [];
+            }
         }
 
         return rest_ensure_response($result);

@@ -110,7 +110,7 @@ class Database_Schema {
             PRIMARY KEY (id),
             UNIQUE KEY slug_unique (slug),
             UNIQUE KEY itunes_id_unique (itunes_id),
-            UNIQUE KEY rss_feed_url_unique (rss_feed_url(500)),
+            UNIQUE KEY rss_feed_url_unique (rss_feed_url(191)),
             KEY title_idx (title(191)),
             KEY is_tracked_idx (is_tracked),
             KEY tracking_status_idx (tracking_status),
@@ -616,33 +616,7 @@ class Database_Schema {
      * Run database migrations
      */
     public static function migrate() {
-        $current_version = get_option('pit_db_version', '0.0.0');
-
-        // Migrate from old guestify_* tables if they exist
-        if (version_compare($current_version, '2.0.0', '<')) {
-            self::migrate_from_legacy_tables();
-        }
-
         self::create_tables();
-    }
-
-    /**
-     * Migrate data from legacy guestify_* tables
-     */
-    private static function migrate_from_legacy_tables() {
-        global $wpdb;
-
-        // Check if legacy tables exist
-        $legacy_podcasts = $wpdb->prefix . 'guestify_podcasts';
-        $legacy_exists = $wpdb->get_var("SHOW TABLES LIKE '$legacy_podcasts'");
-
-        if (!$legacy_exists) {
-            return;
-        }
-
-        // Migration will be handled by a separate migration script
-        // For now, just log that migration is needed
-        error_log('PIT: Legacy guestify_* tables detected. Data migration may be needed.');
     }
 
     /**
