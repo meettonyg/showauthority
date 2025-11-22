@@ -60,6 +60,14 @@ class Podcast_Influence_Tracker {
         // Database
         require_once PIT_PLUGIN_DIR . 'includes/class-database.php';
 
+        // Podcast Intelligence System (NEW)
+        require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-podcast-intelligence-manager.php';
+        require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-formidable-podcast-bridge.php';
+        require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-email-integration.php';
+        require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-shortcodes.php';
+        require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-frontend-forms.php';
+        require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-rss-bridge.php';
+
         // Layer 1: Discovery Engine
         require_once PIT_PLUGIN_DIR . 'includes/layer-1/class-rss-parser.php';
         require_once PIT_PLUGIN_DIR . 'includes/layer-1/class-homepage-scraper.php';
@@ -75,6 +83,7 @@ class Podcast_Influence_Tracker {
         // API Integrations
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-youtube-api.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-apify-client.php';
+        require_once PIT_PLUGIN_DIR . 'includes/integrations/class-itunes-resolver.php';
 
         // REST API
         require_once PIT_PLUGIN_DIR . 'includes/api/class-rest-controller.php';
@@ -82,6 +91,7 @@ class Podcast_Influence_Tracker {
         // Admin
         require_once PIT_PLUGIN_DIR . 'includes/admin/class-admin-page.php';
         require_once PIT_PLUGIN_DIR . 'includes/admin/class-settings.php';
+        require_once PIT_PLUGIN_DIR . 'includes/admin/class-admin-bulk-tools.php';
 
         // Cost Management
         require_once PIT_PLUGIN_DIR . 'includes/class-cost-tracker.php';
@@ -107,6 +117,12 @@ class Podcast_Influence_Tracker {
     public function activate() {
         // Create database tables
         PIT_Database::create_tables();
+
+        // Create Podcast Intelligence tables
+        PIT_Database::create_podcast_intelligence_tables();
+
+        // Create Guest Intelligence tables (Phase 1 of Unified Platform)
+        PIT_Database::create_guest_intelligence_tables();
 
         // Schedule cron job for Layer 3
         if (!wp_next_scheduled('pit_background_refresh')) {
@@ -135,9 +151,18 @@ class Podcast_Influence_Tracker {
         // Load text domain
         load_plugin_textdomain('podcast-influence-tracker', false, dirname(PIT_PLUGIN_BASENAME) . '/languages');
 
+        // Initialize Podcast Intelligence System
+        PIT_Podcast_Intelligence_Manager::get_instance();
+        PIT_Formidable_Podcast_Bridge::get_instance();
+        PIT_Email_Integration::get_instance();
+        PIT_Shortcodes::get_instance();
+        PIT_Frontend_Forms::get_instance();
+        PIT_RSS_Bridge::get_instance();
+
         // Initialize components
         PIT_REST_Controller::init();
         PIT_Admin_Page::init();
+        PIT_Admin_Bulk_Tools::get_instance();
         PIT_Background_Refresh::init();
     }
 
