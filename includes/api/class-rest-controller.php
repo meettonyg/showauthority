@@ -343,6 +343,25 @@ class PIT_REST_Controller {
             'permission_callback' => [__CLASS__, 'check_logged_in'],
         ]);
 
+        // Guest Deduplication
+        register_rest_route(self::NAMESPACE, '/guests/duplicates', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_guest_duplicates'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        register_rest_route(self::NAMESPACE, '/guests/merge', [
+            'methods' => 'POST',
+            'callback' => [__CLASS__, 'merge_guests'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        register_rest_route(self::NAMESPACE, '/guests/duplicates/dismiss', [
+            'methods' => 'POST',
+            'callback' => [__CLASS__, 'dismiss_duplicate'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
         // Social Links (Manual Entry)
         register_rest_route(self::NAMESPACE, '/intelligence/podcasts/(?P<id>\d+)/social-links', [
             'methods' => 'POST',
@@ -1378,6 +1397,137 @@ class PIT_REST_Controller {
             return new WP_Error('verify_failed', 'Failed to verify guest', ['status' => 500]);
         }
 
+        return rest_ensure_response(['success' => true]);
+    }
+
+    /**
+     * Get potential duplicate guests
+     * Matches by LinkedIn URL hash or Email hash only (never by name alone)
+     */
+    public static function get_guest_duplicates($request) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_guests';
+
+        // Find duplicates by LinkedIn URL hash
+        $linkedin_duplicates = $wpdb->get_results("
+            SELECT g1.id as id1, g2.id as id2,
+                   g1.full_name as name1, g1.current_role as role1, g1.current_company as company1,
+                   g2.full_name as name2, g2.current_role as role2, g2.current_company as company2
+            FROM {$table} g1
+            INNER JOIN {$table} g2 ON g1.linkedin_url_hash = g2.linkedin_url_hash
+            WHERE g1.id < g2.id
+              AND g1.linkedin_url_hash IS NOT NULL
+              AND g1.linkedin_url_hash != ''
+        ");
+
+        // Find duplicates by Email hash
+        $email_duplicates = $wpdb->get_results("
+            SELECT g1.id as id1, g2.id as id2,
+                   g1.full_name as name1, g1.current_role as role1, g1.current_company as company1,
+                   g2.full_name as name2, g2.current_role as role2, g2.current_company as company2
+            FROM {$table} g1
+            INNER JOIN {$table} g2 ON g1.email_hash = g2.email_hash
+            WHERE g1.id < g2.id
+              AND g1.email_hash IS NOT NULL
+              AND g1.email_hash != ''
+              AND NOT EXISTS (
+                  SELECT 1 FROM {$table} t1
+                  INNER JOIN {$table} t2 ON t1.linkedin_url_hash = t2.linkedin_url_hash
+                  WHERE t1.id = g1.id AND t2.id = g2.id
+              )
+        ");
+
+        $duplicates = [];
+
+        foreach ($linkedin_duplicates as $dup) {
+            $duplicates[] = [
+                'id' => $dup->id1 . '-' . $dup->id2,
+                'match_type' => 'linkedin',
+                'guest1' => [
+                    'id' => (int) $dup->id1,
+                    'full_name' => $dup->name1,
+                    'current_role' => $dup->role1,
+                    'current_company' => $dup->company1,
+                ],
+                'guest2' => [
+                    'id' => (int) $dup->id2,
+                    'full_name' => $dup->name2,
+                    'current_role' => $dup->role2,
+                    'current_company' => $dup->company2,
+                ],
+            ];
+        }
+
+        foreach ($email_duplicates as $dup) {
+            $duplicates[] = [
+                'id' => $dup->id1 . '-' . $dup->id2,
+                'match_type' => 'email',
+                'guest1' => [
+                    'id' => (int) $dup->id1,
+                    'full_name' => $dup->name1,
+                    'current_role' => $dup->role1,
+                    'current_company' => $dup->company1,
+                ],
+                'guest2' => [
+                    'id' => (int) $dup->id2,
+                    'full_name' => $dup->name2,
+                    'current_role' => $dup->role2,
+                    'current_company' => $dup->company2,
+                ],
+            ];
+        }
+
+        return rest_ensure_response($duplicates);
+    }
+
+    /**
+     * Merge two guest records
+     */
+    public static function merge_guests($request) {
+        $params = $request->get_json_params();
+        $source_id = (int) ($params['source_id'] ?? 0);
+        $target_id = (int) ($params['target_id'] ?? 0);
+
+        if (!$source_id || !$target_id || $source_id === $target_id) {
+            return new WP_Error('invalid_params', 'Invalid source or target ID', ['status' => 400]);
+        }
+
+        global $wpdb;
+        $guests_table = $wpdb->prefix . 'guestify_guests';
+        $appearances_table = $wpdb->prefix . 'guestify_guest_appearances';
+        $topics_table = $wpdb->prefix . 'guestify_guest_topics';
+        $network_table = $wpdb->prefix . 'guestify_guest_network';
+
+        // Move all appearances from source to target
+        $wpdb->update($appearances_table, ['guest_id' => $target_id], ['guest_id' => $source_id]);
+
+        // Move topics from source to target (ignore duplicates)
+        $wpdb->query($wpdb->prepare("
+            UPDATE IGNORE {$topics_table} SET guest_id = %d WHERE guest_id = %d
+        ", $target_id, $source_id));
+
+        // Delete any remaining source topics (duplicates that couldn't be moved)
+        $wpdb->delete($topics_table, ['guest_id' => $source_id]);
+
+        // Update network connections
+        $wpdb->update($network_table, ['guest_id' => $target_id], ['guest_id' => $source_id]);
+        $wpdb->update($network_table, ['connected_guest_id' => $target_id], ['connected_guest_id' => $source_id]);
+
+        // Delete the source guest
+        $wpdb->delete($guests_table, ['id' => $source_id]);
+
+        return rest_ensure_response([
+            'success' => true,
+            'merged_into' => $target_id,
+        ]);
+    }
+
+    /**
+     * Dismiss a duplicate pair (mark as not duplicate)
+     */
+    public static function dismiss_duplicate($request) {
+        // In a full implementation, this would store dismissed pairs in a separate table
+        // For now, just return success
         return rest_ensure_response(['success' => true]);
     }
 

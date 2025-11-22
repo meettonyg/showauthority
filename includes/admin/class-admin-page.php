@@ -63,6 +63,16 @@ class PIT_Admin_Page {
             [__CLASS__, 'render_guests_page']
         );
 
+        // Guest Tools (Deduplication & Verification)
+        add_submenu_page(
+            'podcast-influence',
+            __('Guest Tools', 'podcast-influence-tracker'),
+            __('Guest Tools', 'podcast-influence-tracker'),
+            'manage_options',
+            'podcast-influence-guest-tools',
+            [__CLASS__, 'render_guest_tools_page']
+        );
+
         // Analytics
         add_submenu_page(
             'podcast-influence',
@@ -139,6 +149,39 @@ class PIT_Admin_Page {
             <div id="pit-app-guests">
                 <p><?php _e('Loading...', 'podcast-influence-tracker'); ?></p>
             </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render guest tools page (Deduplication & Verification)
+     */
+    public static function render_guest_tools_page() {
+        $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'deduplication';
+        ?>
+        <div class="wrap">
+            <h1><?php _e('Guest Tools', 'podcast-influence-tracker'); ?></h1>
+
+            <nav class="nav-tab-wrapper">
+                <a href="?page=podcast-influence-guest-tools&tab=deduplication"
+                   class="nav-tab <?php echo $active_tab === 'deduplication' ? 'nav-tab-active' : ''; ?>">
+                    <?php _e('Deduplication', 'podcast-influence-tracker'); ?>
+                </a>
+                <a href="?page=podcast-influence-guest-tools&tab=verification"
+                   class="nav-tab <?php echo $active_tab === 'verification' ? 'nav-tab-active' : ''; ?>">
+                    <?php _e('Verification', 'podcast-influence-tracker'); ?>
+                </a>
+            </nav>
+
+            <?php if ($active_tab === 'deduplication') : ?>
+                <div id="pit-app-deduplication" style="margin-top: 20px;">
+                    <p><?php _e('Loading...', 'podcast-influence-tracker'); ?></p>
+                </div>
+            <?php else : ?>
+                <div id="pit-app-verification" style="margin-top: 20px;">
+                    <p><?php _e('Loading...', 'podcast-influence-tracker'); ?></p>
+                </div>
+            <?php endif; ?>
         </div>
         <?php
     }

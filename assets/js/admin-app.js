@@ -1616,6 +1616,264 @@ const GuestDetailModal = {
     },
 };
 
+// Deduplication Store
+const useDeduplicationStore = defineStore('deduplication', {
+    state: () => ({
+        duplicates: [],
+        loading: false,
+    }),
+
+    actions: {
+        async fetchDuplicates() {
+            this.loading = true;
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests/duplicates`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                this.duplicates = await response.json();
+            } catch (error) {
+                console.error('Failed to fetch duplicates:', error);
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async mergeGuests(sourceId, targetId) {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests/merge`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': pitData.nonce,
+                    },
+                    body: JSON.stringify({ source_id: sourceId, target_id: targetId }),
+                });
+
+                if (!response.ok) throw new Error('Failed to merge guests');
+                await this.fetchDuplicates();
+                return await response.json();
+            } catch (error) {
+                throw error;
+            }
+        },
+
+        async dismissDuplicate(id1, id2) {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests/duplicates/dismiss`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': pitData.nonce,
+                    },
+                    body: JSON.stringify({ guest_id_1: id1, guest_id_2: id2 }),
+                });
+                if (!response.ok) throw new Error('Failed to dismiss duplicate');
+                await this.fetchDuplicates();
+            } catch (error) {
+                throw error;
+            }
+        },
+    },
+});
+
+// Deduplication Dashboard Component
+const DeduplicationDashboard = {
+    template: `
+        <div class="pit-deduplication">
+            <div class="dedup-header">
+                <h2>Guest Deduplication</h2>
+                <p class="dedup-description">
+                    Review potential duplicates. Duplicates are detected by LinkedIn URL or Email only.
+                </p>
+                <button @click="refreshDuplicates" class="button" :disabled="loading">
+                    {{ loading ? 'Scanning...' : 'Scan for Duplicates' }}
+                </button>
+            </div>
+
+            <div v-if="loading" class="pit-loading">Scanning for duplicates...</div>
+
+            <div v-else-if="duplicates.length === 0" class="dedup-empty">
+                <div class="empty-icon">&#10003;</div>
+                <h3>No Duplicates Found</h3>
+                <p>Your guest directory is clean.</p>
+            </div>
+
+            <div v-else class="dedup-list">
+                <div class="dedup-count">
+                    Found <strong>{{ duplicates.length }}</strong> potential duplicate{{ duplicates.length === 1 ? '' : 's' }}
+                </div>
+
+                <div v-for="dup in duplicates" :key="dup.id" class="dedup-card">
+                    <div class="dedup-match-type">
+                        <span class="match-badge" :class="'match-' + dup.match_type">{{ formatMatchType(dup.match_type) }}</span>
+                    </div>
+
+                    <div class="dedup-guests">
+                        <div class="dedup-guest">
+                            <div class="guest-avatar">{{ getInitials(dup.guest1.full_name) }}</div>
+                            <div class="guest-details">
+                                <h4>{{ dup.guest1.full_name }}</h4>
+                                <p>{{ dup.guest1.current_role }} at {{ dup.guest1.current_company }}</p>
+                            </div>
+                            <button @click="selectPrimary(dup, 1)" class="button button-small"
+                                :class="{ 'button-primary': selectedPrimary[dup.id] === 1 }">Keep This</button>
+                        </div>
+
+                        <div class="dedup-vs">VS</div>
+
+                        <div class="dedup-guest">
+                            <div class="guest-avatar">{{ getInitials(dup.guest2.full_name) }}</div>
+                            <div class="guest-details">
+                                <h4>{{ dup.guest2.full_name }}</h4>
+                                <p>{{ dup.guest2.current_role }} at {{ dup.guest2.current_company }}</p>
+                            </div>
+                            <button @click="selectPrimary(dup, 2)" class="button button-small"
+                                :class="{ 'button-primary': selectedPrimary[dup.id] === 2 }">Keep This</button>
+                        </div>
+                    </div>
+
+                    <div class="dedup-actions">
+                        <button @click="mergeSelected(dup)" class="button button-primary"
+                            :disabled="!selectedPrimary[dup.id] || merging[dup.id]">
+                            {{ merging[dup.id] ? 'Merging...' : 'Merge Records' }}
+                        </button>
+                        <button @click="dismissDuplicate(dup)" class="button">Not a Duplicate</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `,
+    data() {
+        return { selectedPrimary: {}, merging: {} };
+    },
+    computed: {
+        duplicates() { return this.store.duplicates; },
+        loading() { return this.store.loading; },
+    },
+    setup() {
+        const store = useDeduplicationStore();
+        return { store };
+    },
+    mounted() { this.refreshDuplicates(); },
+    methods: {
+        refreshDuplicates() { this.store.fetchDuplicates(); },
+        getInitials(name) {
+            if (!name) return '?';
+            return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        },
+        formatMatchType(type) {
+            return { linkedin: 'LinkedIn Match', email: 'Email Match' }[type] || type;
+        },
+        selectPrimary(dup, num) { this.selectedPrimary[dup.id] = num; },
+        async mergeSelected(dup) {
+            const primary = this.selectedPrimary[dup.id];
+            if (!primary) return;
+            const sourceId = primary === 1 ? dup.guest2.id : dup.guest1.id;
+            const targetId = primary === 1 ? dup.guest1.id : dup.guest2.id;
+            this.merging[dup.id] = true;
+            try {
+                await this.store.mergeGuests(sourceId, targetId);
+                delete this.selectedPrimary[dup.id];
+            } catch (error) {
+                alert('Merge failed: ' + error.message);
+            } finally {
+                this.merging[dup.id] = false;
+            }
+        },
+        async dismissDuplicate(dup) {
+            if (confirm('Mark these as NOT duplicates?')) {
+                try {
+                    await this.store.dismissDuplicate(dup.guest1.id, dup.guest2.id);
+                } catch (error) {
+                    alert('Failed: ' + error.message);
+                }
+            }
+        },
+    },
+};
+
+// Verification Queue Component
+const VerificationQueue = {
+    template: `
+        <div class="pit-verification">
+            <div class="verification-header">
+                <h2>Verification Queue</h2>
+                <div class="verification-filters">
+                    <button @click="filter = 'unverified'" :class="{ active: filter === 'unverified' }" class="filter-btn">
+                        Unverified ({{ unverifiedCount }})
+                    </button>
+                    <button @click="filter = 'verified'" :class="{ active: filter === 'verified' }" class="filter-btn">
+                        Verified ({{ verifiedCount }})
+                    </button>
+                    <button @click="filter = 'all'" :class="{ active: filter === 'all' }" class="filter-btn">All</button>
+                </div>
+            </div>
+
+            <div v-if="loading" class="pit-loading">Loading guests...</div>
+
+            <div v-else-if="filteredGuests.length === 0" class="verification-empty">
+                <p v-if="filter === 'unverified'">All guests have been verified!</p>
+                <p v-else>No guests found.</p>
+            </div>
+
+            <div v-else class="verification-list">
+                <div v-for="guest in filteredGuests" :key="guest.id" class="verification-card">
+                    <div class="verification-guest">
+                        <div class="guest-avatar" :class="{ verified: guest.manually_verified }">
+                            {{ getInitials(guest.full_name) }}
+                        </div>
+                        <div class="guest-info">
+                            <h4>{{ guest.full_name }} <span v-if="guest.manually_verified" class="verified-badge">Verified</span></h4>
+                            <p>{{ guest.current_role }} at {{ guest.current_company }}</p>
+                        </div>
+                    </div>
+                    <div class="verification-actions">
+                        <template v-if="!guest.manually_verified">
+                            <button @click="verifyGuest(guest, 'verified')" class="button button-primary">Verify</button>
+                        </template>
+                        <template v-else>
+                            <button @click="verifyGuest(guest, 'unverified')" class="button">Unverify</button>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `,
+    data() {
+        return { filter: 'unverified' };
+    },
+    computed: {
+        guests() { return this.guestStore.guests; },
+        loading() { return this.guestStore.loading; },
+        filteredGuests() {
+            if (this.filter === 'verified') return this.guests.filter(g => g.manually_verified);
+            if (this.filter === 'unverified') return this.guests.filter(g => !g.manually_verified);
+            return this.guests;
+        },
+        verifiedCount() { return this.guests.filter(g => g.manually_verified).length; },
+        unverifiedCount() { return this.guests.filter(g => !g.manually_verified).length; },
+    },
+    setup() {
+        const guestStore = useGuestStore();
+        return { guestStore };
+    },
+    mounted() { this.guestStore.fetchGuests(); },
+    methods: {
+        getInitials(name) {
+            if (!name) return '?';
+            return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        },
+        async verifyGuest(guest, status) {
+            try {
+                await this.guestStore.verifyGuest(guest.id, status);
+                await this.guestStore.fetchGuests();
+            } catch (error) {
+                alert('Failed: ' + error.message);
+            }
+        },
+    },
+};
+
 // Content Analysis Store
 const useContentStore = defineStore('content', {
     state: () => ({
@@ -2560,6 +2818,20 @@ document.addEventListener('DOMContentLoaded', function() {
         app.component('guest-detail-modal', GuestDetailModal);
         app.component('add-appearance-modal', AddAppearanceModal);
         app.mount('#pit-app-guests');
+    }
+
+    // Deduplication Dashboard
+    if (document.getElementById('pit-app-deduplication')) {
+        const app = createApp(DeduplicationDashboard);
+        app.use(pinia);
+        app.mount('#pit-app-deduplication');
+    }
+
+    // Verification Queue
+    if (document.getElementById('pit-app-verification')) {
+        const app = createApp(VerificationQueue);
+        app.use(pinia);
+        app.mount('#pit-app-verification');
     }
 
     // Analytics
