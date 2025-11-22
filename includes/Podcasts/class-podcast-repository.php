@@ -260,10 +260,11 @@ class PIT_Podcast_Repository {
         $orderby = in_array($args['orderby'], $allowed_orderby) ? $args['orderby'] : 'created_at';
         $order = strtoupper($args['order']) === 'ASC' ? 'ASC' : 'DESC';
 
-        $sql = "SELECT p.*,
-                (SELECT COUNT(*) FROM $social_table WHERE podcast_id = p.id) as social_links_count
+        $sql = "SELECT p.*, COUNT(sl.id) as social_links_count
                 FROM $table p
+                LEFT JOIN $social_table sl ON p.id = sl.podcast_id
                 WHERE $where_clause
+                GROUP BY p.id
                 ORDER BY p.$orderby $order
                 LIMIT %d OFFSET %d";
 

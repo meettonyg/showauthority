@@ -128,6 +128,36 @@ class PIT_Appearance_Repository {
     }
 
     /**
+     * Get appearance counts for multiple guests (batch query)
+     *
+     * @param array $guest_ids Array of guest IDs
+     * @return array Counts keyed by guest_id
+     */
+    public static function get_counts_for_guests($guest_ids) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_guest_appearances';
+
+        if (empty($guest_ids)) {
+            return [];
+        }
+
+        $ids = array_map('intval', $guest_ids);
+        $placeholders = implode(',', array_fill(0, count($ids), '%d'));
+
+        $results = $wpdb->get_results($wpdb->prepare(
+            "SELECT guest_id, COUNT(*) as count FROM $table WHERE guest_id IN ($placeholders) GROUP BY guest_id",
+            ...$ids
+        ));
+
+        $counts = [];
+        foreach ($results as $row) {
+            $counts[$row->guest_id] = (int) $row->count;
+        }
+
+        return $counts;
+    }
+
+    /**
      * Get statistics
      *
      * @return array

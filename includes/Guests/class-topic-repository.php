@@ -231,4 +231,42 @@ class PIT_Topic_Repository {
             $topic_id
         ));
     }
+
+    /**
+     * Get topics for multiple guests (batch query)
+     *
+     * @param array $guest_ids Array of guest IDs
+     * @return array Topics grouped by guest_id
+     */
+    public static function get_for_guests($guest_ids) {
+        global $wpdb;
+        $topics_table = $wpdb->prefix . 'pit_topics';
+        $guest_topics_table = $wpdb->prefix . 'pit_guest_topics';
+
+        if (empty($guest_ids)) {
+            return [];
+        }
+
+        $ids = array_map('intval', $guest_ids);
+        $placeholders = implode(',', array_fill(0, count($ids), '%d'));
+
+        $results = $wpdb->get_results($wpdb->prepare(
+            "SELECT t.*, gt.guest_id, gt.confidence_score, gt.mention_count, gt.source
+            FROM $topics_table t
+            INNER JOIN $guest_topics_table gt ON t.id = gt.topic_id
+            WHERE gt.guest_id IN ($placeholders)
+            ORDER BY gt.guest_id, gt.confidence_score DESC, gt.mention_count DESC",
+            ...$ids
+        ));
+
+        // Group by guest_id
+        $grouped = [];
+        foreach ($results as $topic) {
+            $guest_id = $topic->guest_id;
+            unset($topic->guest_id); // Remove guest_id from topic object
+            $grouped[$guest_id][] = $topic;
+        }
+
+        return $grouped;
+    }
 }

@@ -134,6 +134,47 @@ class PIT_Metrics_Repository {
     }
 
     /**
+     * Get latest metrics for multiple podcasts (batch query)
+     *
+     * @param array $podcast_ids Array of podcast IDs
+     * @return array Metrics grouped by podcast_id
+     */
+    public static function get_latest_for_podcasts($podcast_ids) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_metrics';
+
+        if (empty($podcast_ids)) {
+            return [];
+        }
+
+        $ids = array_map('intval', $podcast_ids);
+        $placeholders = implode(',', array_fill(0, count($ids), '%d'));
+
+        $results = $wpdb->get_results($wpdb->prepare(
+            "SELECT m.*
+            FROM $table m
+            INNER JOIN (
+                SELECT podcast_id, platform, MAX(fetched_at) as max_date
+                FROM $table
+                WHERE podcast_id IN ($placeholders)
+                GROUP BY podcast_id, platform
+            ) latest ON m.podcast_id = latest.podcast_id
+                    AND m.platform = latest.platform
+                    AND m.fetched_at = latest.max_date
+            ORDER BY m.podcast_id, m.platform",
+            ...$ids
+        ));
+
+        // Group by podcast_id
+        $grouped = [];
+        foreach ($results as $metric) {
+            $grouped[$metric->podcast_id][] = $metric;
+        }
+
+        return $grouped;
+    }
+
+    /**
      * Check if metrics are expired
      *
      * @param int $podcast_id Podcast ID

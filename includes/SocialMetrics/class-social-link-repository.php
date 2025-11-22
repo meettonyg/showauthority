@@ -126,6 +126,37 @@ class PIT_Social_Link_Repository {
     }
 
     /**
+     * Get social links for multiple podcasts (batch query)
+     *
+     * @param array $podcast_ids Array of podcast IDs
+     * @return array Social links grouped by podcast_id
+     */
+    public static function get_for_podcasts($podcast_ids) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_social_links';
+
+        if (empty($podcast_ids)) {
+            return [];
+        }
+
+        $ids = array_map('intval', $podcast_ids);
+        $placeholders = implode(',', array_fill(0, count($ids), '%d'));
+
+        $results = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table WHERE podcast_id IN ($placeholders) AND active = 1 ORDER BY podcast_id, platform",
+            ...$ids
+        ));
+
+        // Group by podcast_id
+        $grouped = [];
+        foreach ($results as $link) {
+            $grouped[$link->podcast_id][] = $link;
+        }
+
+        return $grouped;
+    }
+
+    /**
      * Get statistics
      *
      * @return array Statistics

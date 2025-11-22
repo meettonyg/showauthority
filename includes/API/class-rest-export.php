@@ -71,23 +71,28 @@ class PIT_REST_Export extends PIT_REST_Base {
             return rest_ensure_response($guests);
         }
 
-        // CSV export
-        $csv = "ID,Full Name,Email,LinkedIn URL,Current Company,Current Role,Company Stage,Industry,Verified,Created At\n";
+        // CSV export using fputcsv for proper RFC 4180 compliance
+        $stream = fopen('php://memory', 'w');
+        fputcsv($stream, ['ID', 'Full Name', 'Email', 'LinkedIn URL', 'Current Company', 'Current Role', 'Company Stage', 'Industry', 'Verified', 'Created At']);
+
         foreach ($guests as $guest) {
-            $csv .= sprintf(
-                '%d,"%s","%s","%s","%s","%s","%s","%s",%s,"%s"' . "\n",
+            fputcsv($stream, [
                 $guest->id,
-                str_replace('"', '""', $guest->full_name ?? ''),
-                str_replace('"', '""', $guest->email ?? ''),
-                str_replace('"', '""', $guest->linkedin_url ?? ''),
-                str_replace('"', '""', $guest->current_company ?? ''),
-                str_replace('"', '""', $guest->current_role ?? ''),
-                str_replace('"', '""', $guest->company_stage ?? ''),
-                str_replace('"', '""', $guest->industry ?? ''),
+                $guest->full_name ?? '',
+                $guest->email ?? '',
+                $guest->linkedin_url ?? '',
+                $guest->current_company ?? '',
+                $guest->current_role ?? '',
+                $guest->company_stage ?? '',
+                $guest->industry ?? '',
                 $guest->manually_verified ? 'Yes' : 'No',
-                $guest->created_at ?? ''
-            );
+                $guest->created_at ?? '',
+            ]);
         }
+
+        rewind($stream);
+        $csv = stream_get_contents($stream);
+        fclose($stream);
 
         header('Content-Type: text/csv');
         header('Content-Disposition: attachment; filename="guests.csv"');
@@ -109,21 +114,26 @@ class PIT_REST_Export extends PIT_REST_Base {
             return rest_ensure_response($podcasts);
         }
 
-        // CSV export
-        $csv = "ID,Title,Author,RSS URL,Website URL,iTunes ID,Tracking Status,Created At\n";
+        // CSV export using fputcsv for proper RFC 4180 compliance
+        $stream = fopen('php://memory', 'w');
+        fputcsv($stream, ['ID', 'Title', 'Author', 'RSS URL', 'Website URL', 'iTunes ID', 'Tracking Status', 'Created At']);
+
         foreach ($podcasts as $podcast) {
-            $csv .= sprintf(
-                '%d,"%s","%s","%s","%s","%s","%s","%s"' . "\n",
+            fputcsv($stream, [
                 $podcast->id,
-                str_replace('"', '""', $podcast->title ?? ''),
-                str_replace('"', '""', $podcast->author ?? ''),
-                str_replace('"', '""', $podcast->rss_feed_url ?? ''),
-                str_replace('"', '""', $podcast->website_url ?? ''),
+                $podcast->title ?? '',
+                $podcast->author ?? '',
+                $podcast->rss_feed_url ?? '',
+                $podcast->website_url ?? '',
                 $podcast->itunes_id ?? '',
                 $podcast->tracking_status ?? '',
-                $podcast->created_at ?? ''
-            );
+                $podcast->created_at ?? '',
+            ]);
         }
+
+        rewind($stream);
+        $csv = stream_get_contents($stream);
+        fclose($stream);
 
         header('Content-Type: text/csv');
         header('Content-Disposition: attachment; filename="podcasts.csv"');
@@ -162,18 +172,23 @@ class PIT_REST_Export extends PIT_REST_Base {
             return rest_ensure_response($connections);
         }
 
-        // CSV export
-        $csv = "Guest 1 ID,Guest 1 Name,Guest 2 ID,Guest 2 Name,Shared Podcast\n";
+        // CSV export using fputcsv for proper RFC 4180 compliance
+        $stream = fopen('php://memory', 'w');
+        fputcsv($stream, ['Guest 1 ID', 'Guest 1 Name', 'Guest 2 ID', 'Guest 2 Name', 'Shared Podcast']);
+
         foreach ($connections as $conn) {
-            $csv .= sprintf(
-                '%d,"%s",%d,"%s","%s"' . "\n",
+            fputcsv($stream, [
                 $conn->guest1_id,
-                str_replace('"', '""', $conn->guest1_name ?? ''),
+                $conn->guest1_name ?? '',
                 $conn->guest2_id,
-                str_replace('"', '""', $conn->guest2_name ?? ''),
-                str_replace('"', '""', $conn->podcast_title ?? '')
-            );
+                $conn->guest2_name ?? '',
+                $conn->podcast_title ?? '',
+            ]);
         }
+
+        rewind($stream);
+        $csv = stream_get_contents($stream);
+        fclose($stream);
 
         header('Content-Type: text/csv');
         header('Content-Disposition: attachment; filename="network.csv"');
