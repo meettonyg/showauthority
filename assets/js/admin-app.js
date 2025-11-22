@@ -7,6 +7,243 @@
 const { createApp } = Vue;
 const { createPinia, defineStore } = Pinia;
 
+// Guest Store (Guest Intelligence)
+const useGuestStore = defineStore('guests', {
+    state: () => ({
+        guests: [],
+        currentGuest: null,
+        loading: false,
+        pagination: {
+            page: 1,
+            perPage: 20,
+            total: 0,
+        },
+        filters: {
+            search: '',
+            verified: '',
+            topic: '',
+            company_stage: '',
+        },
+        topics: [],
+        duplicates: [],
+    }),
+
+    actions: {
+        async fetchGuests() {
+            this.loading = true;
+            try {
+                const params = new URLSearchParams({
+                    page: this.pagination.page,
+                    per_page: this.pagination.perPage,
+                    search: this.filters.search,
+                    verified: this.filters.verified,
+                    topic: this.filters.topic,
+                    company_stage: this.filters.company_stage,
+                });
+
+                const response = await fetch(`${pitData.apiUrl}/guests?${params}`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+
+                const data = await response.json();
+                this.guests = data.guests || [];
+                this.pagination.total = data.total || 0;
+            } catch (error) {
+                console.error('Failed to fetch guests:', error);
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async fetchGuest(id) {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests/${id}`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                this.currentGuest = await response.json();
+                return this.currentGuest;
+            } catch (error) {
+                console.error('Failed to fetch guest:', error);
+                throw error;
+            }
+        },
+
+        async createGuest(guestData) {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': pitData.nonce,
+                    },
+                    body: JSON.stringify(guestData),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to create guest');
+                }
+
+                const data = await response.json();
+                await this.fetchGuests();
+                return data;
+            } catch (error) {
+                throw error;
+            }
+        },
+
+        async updateGuest(id, guestData) {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': pitData.nonce,
+                    },
+                    body: JSON.stringify(guestData),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to update guest');
+                }
+
+                const data = await response.json();
+                await this.fetchGuests();
+                return data;
+            } catch (error) {
+                throw error;
+            }
+        },
+
+        async deleteGuest(id) {
+            try {
+                await fetch(`${pitData.apiUrl}/guests/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                await this.fetchGuests();
+            } catch (error) {
+                throw error;
+            }
+        },
+
+        async verifyGuest(id, status, feedback = '') {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests/${id}/verify`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': pitData.nonce,
+                    },
+                    body: JSON.stringify({ status, feedback }),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to verify guest');
+                }
+
+                return await response.json();
+            } catch (error) {
+                throw error;
+            }
+        },
+
+        async fetchTopics() {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/topics`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                this.topics = await response.json();
+            } catch (error) {
+                console.error('Failed to fetch topics:', error);
+            }
+        },
+
+        async fetchGuestAppearances(guestId) {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests/${guestId}/appearances`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Failed to fetch appearances:', error);
+                return [];
+            }
+        },
+
+        async addGuestAppearance(guestId, appearanceData) {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests/${guestId}/appearances`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': pitData.nonce,
+                    },
+                    body: JSON.stringify(appearanceData),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to add appearance');
+                }
+
+                return await response.json();
+            } catch (error) {
+                throw error;
+            }
+        },
+
+        async fetchDuplicates() {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests/duplicates`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                this.duplicates = await response.json();
+            } catch (error) {
+                console.error('Failed to fetch duplicates:', error);
+            }
+        },
+
+        async mergeGuests(sourceId, targetId) {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests/merge`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': pitData.nonce,
+                    },
+                    body: JSON.stringify({ source_id: sourceId, target_id: targetId }),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to merge guests');
+                }
+
+                await this.fetchGuests();
+                await this.fetchDuplicates();
+                return await response.json();
+            } catch (error) {
+                throw error;
+            }
+        },
+
+        async fetchGuestNetwork(guestId) {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/guests/${guestId}/network`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Failed to fetch network:', error);
+                return { first_degree: [], second_degree: [] };
+            }
+        },
+    },
+});
+
 // Main Store
 const usePodcastStore = defineStore('podcasts', {
     state: () => ({
@@ -773,6 +1010,721 @@ const Settings = {
     },
 };
 
+// Guest Card Component
+const GuestCard = {
+    template: `
+        <div class="pit-guest-card" :class="{ 'verified': guest.manually_verified }">
+            <div class="guest-header">
+                <div class="guest-avatar">{{ getInitials(guest.full_name) }}</div>
+                <div class="guest-info">
+                    <h4>{{ guest.full_name }}</h4>
+                    <p class="guest-title">{{ guest.current_role }} at {{ guest.current_company }}</p>
+                </div>
+                <span v-if="guest.manually_verified" class="verified-badge" title="Verified">&#10003;</span>
+            </div>
+            <div class="guest-details">
+                <div v-if="guest.company_stage" class="detail-item">
+                    <span class="detail-label">Stage:</span>
+                    <span class="detail-value">{{ guest.company_stage }}</span>
+                </div>
+                <div v-if="guest.industry" class="detail-item">
+                    <span class="detail-label">Industry:</span>
+                    <span class="detail-value">{{ guest.industry }}</span>
+                </div>
+                <div v-if="guest.appearances_count" class="detail-item">
+                    <span class="detail-label">Appearances:</span>
+                    <span class="detail-value">{{ guest.appearances_count }}</span>
+                </div>
+            </div>
+            <div class="guest-links">
+                <a v-if="guest.linkedin_url" :href="guest.linkedin_url" target="_blank" class="social-link linkedin">LinkedIn</a>
+                <a v-if="guest.twitter_handle" :href="'https://twitter.com/' + guest.twitter_handle" target="_blank" class="social-link twitter">Twitter</a>
+                <a v-if="guest.email" :href="'mailto:' + guest.email" class="social-link email">Email</a>
+            </div>
+            <div class="guest-actions">
+                <button @click="$emit('view', guest)" class="button button-small">View</button>
+                <button @click="$emit('edit', guest)" class="button button-small">Edit</button>
+                <button @click="$emit('delete', guest)" class="button button-small button-link-delete">Delete</button>
+            </div>
+        </div>
+    `,
+    props: ['guest'],
+    emits: ['view', 'edit', 'delete'],
+    methods: {
+        getInitials(name) {
+            if (!name) return '?';
+            return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        },
+    },
+};
+
+// Add Guest Modal Component
+const AddGuestModal = {
+    template: `
+        <div class="pit-modal-overlay" @click="close">
+            <div class="pit-modal pit-modal-large" @click.stop>
+                <h2>{{ editMode ? 'Edit Guest' : 'Add New Guest' }}</h2>
+                <div class="modal-content">
+                    <div class="form-section">
+                        <h3>Basic Information</h3>
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label for="full_name">Full Name *</label>
+                                <input type="text" id="full_name" v-model="form.full_name" required class="widefat">
+                            </div>
+                        </div>
+                        <div class="form-row form-row-2">
+                            <div class="form-field">
+                                <label for="first_name">First Name</label>
+                                <input type="text" id="first_name" v-model="form.first_name" class="widefat">
+                            </div>
+                            <div class="form-field">
+                                <label for="last_name">Last Name</label>
+                                <input type="text" id="last_name" v-model="form.last_name" class="widefat">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Professional Details</h3>
+                        <div class="form-row form-row-2">
+                            <div class="form-field">
+                                <label for="current_company">Current Company</label>
+                                <input type="text" id="current_company" v-model="form.current_company" class="widefat">
+                            </div>
+                            <div class="form-field">
+                                <label for="current_role">Current Role</label>
+                                <input type="text" id="current_role" v-model="form.current_role" class="widefat">
+                            </div>
+                        </div>
+                        <div class="form-row form-row-3">
+                            <div class="form-field">
+                                <label for="company_stage">Company Stage</label>
+                                <select id="company_stage" v-model="form.company_stage" class="widefat">
+                                    <option value="">Select...</option>
+                                    <option value="pre-seed">Pre-Seed</option>
+                                    <option value="seed">Seed</option>
+                                    <option value="series-a">Series A</option>
+                                    <option value="series-b">Series B</option>
+                                    <option value="series-c+">Series C+</option>
+                                    <option value="scaleup">Scaleup</option>
+                                    <option value="public">Public</option>
+                                    <option value="bootstrapped">Bootstrapped</option>
+                                    <option value="post-exit">Post-Exit</option>
+                                </select>
+                            </div>
+                            <div class="form-field">
+                                <label for="company_revenue">Company Revenue</label>
+                                <input type="text" id="company_revenue" v-model="form.company_revenue" placeholder="e.g., $10M ARR" class="widefat">
+                            </div>
+                            <div class="form-field">
+                                <label for="industry">Industry</label>
+                                <input type="text" id="industry" v-model="form.industry" class="widefat">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label for="expertise_areas">Expertise Areas (comma-separated)</label>
+                                <input type="text" id="expertise_areas" v-model="form.expertise_areas" placeholder="AI, SaaS, Product Management" class="widefat">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label for="past_companies">Past Companies (comma-separated)</label>
+                                <input type="text" id="past_companies" v-model="form.past_companies" placeholder="Google, Meta, Stripe" class="widefat">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Contact Information</h3>
+                        <div class="form-row form-row-2">
+                            <div class="form-field">
+                                <label for="linkedin_url">LinkedIn URL</label>
+                                <input type="url" id="linkedin_url" v-model="form.linkedin_url" placeholder="https://linkedin.com/in/..." class="widefat">
+                            </div>
+                            <div class="form-field">
+                                <label for="email">Email</label>
+                                <input type="email" id="email" v-model="form.email" class="widefat">
+                            </div>
+                        </div>
+                        <div class="form-row form-row-2">
+                            <div class="form-field">
+                                <label for="twitter_handle">Twitter Handle</label>
+                                <input type="text" id="twitter_handle" v-model="form.twitter_handle" placeholder="@username" class="widefat">
+                            </div>
+                            <div class="form-field">
+                                <label for="website_url">Website</label>
+                                <input type="url" id="website_url" v-model="form.website_url" class="widefat">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Additional Information</h3>
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label for="notable_achievements">Notable Achievements</label>
+                                <textarea id="notable_achievements" v-model="form.notable_achievements" rows="3" class="widefat"></textarea>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label for="bio">Bio</label>
+                                <textarea id="bio" v-model="form.bio" rows="3" class="widefat"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="error" class="error-message">{{ error }}</div>
+                    <div v-if="success" class="success-message">{{ success }}</div>
+                </div>
+                <div class="modal-actions">
+                    <button @click="close" class="button">Cancel</button>
+                    <button @click="saveGuest" class="button button-primary" :disabled="loading">
+                        {{ loading ? 'Saving...' : (editMode ? 'Update Guest' : 'Add Guest') }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `,
+    props: {
+        guest: { type: Object, default: null },
+    },
+    data() {
+        return {
+            form: {
+                full_name: '',
+                first_name: '',
+                last_name: '',
+                current_company: '',
+                current_role: '',
+                company_stage: '',
+                company_revenue: '',
+                industry: '',
+                expertise_areas: '',
+                past_companies: '',
+                linkedin_url: '',
+                email: '',
+                twitter_handle: '',
+                website_url: '',
+                notable_achievements: '',
+                bio: '',
+            },
+            loading: false,
+            error: null,
+            success: null,
+        };
+    },
+    computed: {
+        editMode() {
+            return this.guest !== null;
+        },
+    },
+    setup() {
+        const store = useGuestStore();
+        return { store };
+    },
+    mounted() {
+        if (this.guest) {
+            this.form = { ...this.form, ...this.guest };
+        }
+    },
+    methods: {
+        async saveGuest() {
+            if (!this.form.full_name) {
+                this.error = 'Full name is required';
+                return;
+            }
+
+            this.loading = true;
+            this.error = null;
+            this.success = null;
+
+            try {
+                if (this.editMode) {
+                    await this.store.updateGuest(this.guest.id, this.form);
+                    this.success = 'Guest updated successfully';
+                } else {
+                    await this.store.createGuest(this.form);
+                    this.success = 'Guest added successfully';
+                }
+
+                setTimeout(() => {
+                    this.close();
+                }, 1500);
+            } catch (error) {
+                this.error = error.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+        close() {
+            this.$emit('close');
+        },
+    },
+};
+
+// Guest Directory Component
+const GuestDirectory = {
+    template: `
+        <div class="pit-guests">
+            <div class="pit-toolbar">
+                <div class="toolbar-left">
+                    <input
+                        type="text"
+                        v-model="filters.search"
+                        @input="onSearchChange"
+                        placeholder="Search guests..."
+                        class="search-input"
+                    />
+                    <select v-model="filters.verified" @change="applyFilters" class="filter-select">
+                        <option value="">All Verification</option>
+                        <option value="1">Verified Only</option>
+                        <option value="0">Unverified Only</option>
+                    </select>
+                    <select v-model="filters.company_stage" @change="applyFilters" class="filter-select">
+                        <option value="">All Stages</option>
+                        <option value="pre-seed">Pre-Seed</option>
+                        <option value="seed">Seed</option>
+                        <option value="series-a">Series A</option>
+                        <option value="series-b">Series B</option>
+                        <option value="series-c+">Series C+</option>
+                        <option value="scaleup">Scaleup</option>
+                        <option value="post-exit">Post-Exit</option>
+                    </select>
+                </div>
+                <div class="toolbar-right">
+                    <button @click="showAddModal = true" class="button button-primary">Add Guest</button>
+                </div>
+            </div>
+
+            <div v-if="loading" class="pit-loading">Loading guests...</div>
+
+            <div v-else-if="guests.length === 0" class="pit-empty">
+                <p>No guests found. Add your first guest to get started.</p>
+                <button @click="showAddModal = true" class="button button-primary">Add Guest</button>
+            </div>
+
+            <div v-else class="pit-guests-grid">
+                <guest-card
+                    v-for="guest in guests"
+                    :key="guest.id"
+                    :guest="guest"
+                    @view="viewGuest"
+                    @edit="editGuest"
+                    @delete="deleteGuest"
+                ></guest-card>
+            </div>
+
+            <div v-if="pagination.total > pagination.perPage" class="pit-pagination">
+                <button
+                    @click="prevPage"
+                    :disabled="pagination.page <= 1"
+                    class="button button-small"
+                >Previous</button>
+                <span class="pagination-info">
+                    Page {{ pagination.page }} of {{ totalPages }}
+                    ({{ pagination.total }} guests)
+                </span>
+                <button
+                    @click="nextPage"
+                    :disabled="pagination.page >= totalPages"
+                    class="button button-small"
+                >Next</button>
+            </div>
+
+            <add-guest-modal
+                v-if="showAddModal"
+                :guest="editingGuest"
+                @close="closeModal"
+            ></add-guest-modal>
+
+            <guest-detail-modal
+                v-if="showDetailModal"
+                :guest="viewingGuest"
+                @close="showDetailModal = false"
+                @edit="editGuest"
+            ></guest-detail-modal>
+        </div>
+    `,
+    data() {
+        return {
+            showAddModal: false,
+            showDetailModal: false,
+            editingGuest: null,
+            viewingGuest: null,
+        };
+    },
+    computed: {
+        guests() {
+            return this.store.guests;
+        },
+        loading() {
+            return this.store.loading;
+        },
+        filters() {
+            return this.store.filters;
+        },
+        pagination() {
+            return this.store.pagination;
+        },
+        totalPages() {
+            return Math.ceil(this.pagination.total / this.pagination.perPage);
+        },
+    },
+    setup() {
+        const store = useGuestStore();
+        return { store };
+    },
+    methods: {
+        onSearchChange() {
+            clearTimeout(this.searchTimeout);
+            this.searchTimeout = setTimeout(() => {
+                this.store.fetchGuests();
+            }, 500);
+        },
+        applyFilters() {
+            this.store.pagination.page = 1;
+            this.store.fetchGuests();
+        },
+        viewGuest(guest) {
+            this.viewingGuest = guest;
+            this.showDetailModal = true;
+        },
+        editGuest(guest) {
+            this.editingGuest = guest;
+            this.showAddModal = true;
+        },
+        deleteGuest(guest) {
+            if (confirm(`Delete guest "${guest.full_name}"? This cannot be undone.`)) {
+                this.store.deleteGuest(guest.id);
+            }
+        },
+        closeModal() {
+            this.showAddModal = false;
+            this.editingGuest = null;
+        },
+        prevPage() {
+            if (this.pagination.page > 1) {
+                this.store.pagination.page--;
+                this.store.fetchGuests();
+            }
+        },
+        nextPage() {
+            if (this.pagination.page < this.totalPages) {
+                this.store.pagination.page++;
+                this.store.fetchGuests();
+            }
+        },
+    },
+    mounted() {
+        this.store.fetchGuests();
+    },
+};
+
+// Guest Detail Modal Component
+const GuestDetailModal = {
+    template: `
+        <div class="pit-modal-overlay" @click="$emit('close')">
+            <div class="pit-modal pit-modal-large" @click.stop>
+                <div class="guest-detail-header">
+                    <div class="guest-avatar-large">{{ getInitials(guest.full_name) }}</div>
+                    <div class="guest-header-info">
+                        <h2>{{ guest.full_name }}</h2>
+                        <p class="guest-title">{{ guest.current_role }} at {{ guest.current_company }}</p>
+                        <div class="guest-badges">
+                            <span v-if="guest.manually_verified" class="badge badge-verified">Verified</span>
+                            <span v-if="guest.company_stage" class="badge badge-stage">{{ guest.company_stage }}</span>
+                            <span v-if="guest.industry" class="badge badge-industry">{{ guest.industry }}</span>
+                        </div>
+                    </div>
+                    <button @click="$emit('close')" class="close-button">&times;</button>
+                </div>
+
+                <div class="guest-detail-tabs">
+                    <button
+                        :class="{ active: activeTab === 'overview' }"
+                        @click="activeTab = 'overview'"
+                    >Overview</button>
+                    <button
+                        :class="{ active: activeTab === 'appearances' }"
+                        @click="activeTab = 'appearances'"
+                    >Appearances</button>
+                    <button
+                        :class="{ active: activeTab === 'network' }"
+                        @click="activeTab = 'network'"
+                    >Network</button>
+                </div>
+
+                <div class="guest-detail-content">
+                    <!-- Overview Tab -->
+                    <div v-if="activeTab === 'overview'" class="tab-content">
+                        <div class="info-section">
+                            <h3>Contact Information</h3>
+                            <div class="info-grid">
+                                <div v-if="guest.email" class="info-item">
+                                    <label>Email</label>
+                                    <a :href="'mailto:' + guest.email">{{ guest.email }}</a>
+                                </div>
+                                <div v-if="guest.linkedin_url" class="info-item">
+                                    <label>LinkedIn</label>
+                                    <a :href="guest.linkedin_url" target="_blank">View Profile</a>
+                                </div>
+                                <div v-if="guest.twitter_handle" class="info-item">
+                                    <label>Twitter</label>
+                                    <a :href="'https://twitter.com/' + guest.twitter_handle" target="_blank">@{{ guest.twitter_handle }}</a>
+                                </div>
+                                <div v-if="guest.website_url" class="info-item">
+                                    <label>Website</label>
+                                    <a :href="guest.website_url" target="_blank">{{ guest.website_url }}</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="guest.expertise_areas" class="info-section">
+                            <h3>Expertise Areas</h3>
+                            <div class="tags">
+                                <span v-for="area in parseList(guest.expertise_areas)" :key="area" class="tag">{{ area }}</span>
+                            </div>
+                        </div>
+
+                        <div v-if="guest.past_companies" class="info-section">
+                            <h3>Past Companies</h3>
+                            <div class="tags">
+                                <span v-for="company in parseList(guest.past_companies)" :key="company" class="tag">{{ company }}</span>
+                            </div>
+                        </div>
+
+                        <div v-if="guest.notable_achievements" class="info-section">
+                            <h3>Notable Achievements</h3>
+                            <p>{{ guest.notable_achievements }}</p>
+                        </div>
+
+                        <div v-if="guest.bio" class="info-section">
+                            <h3>Bio</h3>
+                            <p>{{ guest.bio }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Appearances Tab -->
+                    <div v-if="activeTab === 'appearances'" class="tab-content">
+                        <div v-if="loadingAppearances" class="loading">Loading appearances...</div>
+                        <div v-else-if="appearances.length === 0" class="empty">
+                            No podcast appearances recorded yet.
+                        </div>
+                        <div v-else class="appearances-list">
+                            <div v-for="appearance in appearances" :key="appearance.id" class="appearance-item">
+                                <div class="appearance-podcast">{{ appearance.podcast_name }}</div>
+                                <div class="appearance-episode">Episode {{ appearance.episode_number }}: {{ appearance.episode_title }}</div>
+                                <div class="appearance-date">{{ formatDate(appearance.episode_date) }}</div>
+                                <div v-if="appearance.topics_discussed" class="appearance-topics">
+                                    <span v-for="topic in parseList(appearance.topics_discussed)" :key="topic" class="tag-small">{{ topic }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Network Tab -->
+                    <div v-if="activeTab === 'network'" class="tab-content">
+                        <div v-if="loadingNetwork" class="loading">Calculating network...</div>
+                        <div v-else>
+                            <div class="network-stats">
+                                <div class="stat-item">
+                                    <div class="stat-value">{{ network.first_degree?.length || 0 }}</div>
+                                    <div class="stat-label">1st Degree Connections</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-value">{{ network.second_degree?.length || 0 }}</div>
+                                    <div class="stat-label">2nd Degree Connections</div>
+                                </div>
+                            </div>
+                            <div v-if="network.first_degree?.length > 0" class="network-section">
+                                <h4>1st Degree (Same Podcast Appearances)</h4>
+                                <div class="connection-list">
+                                    <div v-for="conn in network.first_degree" :key="conn.id" class="connection-item">
+                                        <span class="connection-name">{{ conn.full_name }}</span>
+                                        <span class="connection-info">{{ conn.current_company }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button @click="$emit('close')" class="button">Close</button>
+                    <button @click="$emit('edit', guest)" class="button button-primary">Edit Guest</button>
+                </div>
+            </div>
+        </div>
+    `,
+    props: ['guest'],
+    emits: ['close', 'edit'],
+    data() {
+        return {
+            activeTab: 'overview',
+            appearances: [],
+            loadingAppearances: false,
+            network: { first_degree: [], second_degree: [] },
+            loadingNetwork: false,
+        };
+    },
+    setup() {
+        const store = useGuestStore();
+        return { store };
+    },
+    watch: {
+        activeTab(newTab) {
+            if (newTab === 'appearances' && this.appearances.length === 0) {
+                this.loadAppearances();
+            } else if (newTab === 'network' && !this.network.first_degree?.length) {
+                this.loadNetwork();
+            }
+        },
+    },
+    methods: {
+        getInitials(name) {
+            if (!name) return '?';
+            return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        },
+        parseList(str) {
+            if (!str) return [];
+            return str.split(',').map(s => s.trim()).filter(s => s);
+        },
+        formatDate(dateStr) {
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString();
+        },
+        async loadAppearances() {
+            this.loadingAppearances = true;
+            try {
+                this.appearances = await this.store.fetchGuestAppearances(this.guest.id);
+            } finally {
+                this.loadingAppearances = false;
+            }
+        },
+        async loadNetwork() {
+            this.loadingNetwork = true;
+            try {
+                this.network = await this.store.fetchGuestNetwork(this.guest.id);
+            } finally {
+                this.loadingNetwork = false;
+            }
+        },
+    },
+};
+
+// Add Appearance Modal Component
+const AddAppearanceModal = {
+    template: `
+        <div class="pit-modal-overlay" @click="$emit('close')">
+            <div class="pit-modal" @click.stop>
+                <h2>Add Podcast Appearance</h2>
+                <div class="modal-content">
+                    <div class="form-field">
+                        <label for="podcast_id">Podcast *</label>
+                        <select id="podcast_id" v-model="form.podcast_id" class="widefat" required>
+                            <option value="">Select a podcast...</option>
+                            <option v-for="podcast in podcasts" :key="podcast.id" :value="podcast.id">
+                                {{ podcast.podcast_name }}
+                            </option>
+                        </select>
+                    </div>
+                    <div class="form-row form-row-2">
+                        <div class="form-field">
+                            <label for="episode_number">Episode #</label>
+                            <input type="number" id="episode_number" v-model="form.episode_number" class="widefat">
+                        </div>
+                        <div class="form-field">
+                            <label for="episode_date">Episode Date</label>
+                            <input type="date" id="episode_date" v-model="form.episode_date" class="widefat">
+                        </div>
+                    </div>
+                    <div class="form-field">
+                        <label for="episode_title">Episode Title</label>
+                        <input type="text" id="episode_title" v-model="form.episode_title" class="widefat">
+                    </div>
+                    <div class="form-field">
+                        <label for="episode_url">Episode URL</label>
+                        <input type="url" id="episode_url" v-model="form.episode_url" class="widefat">
+                    </div>
+                    <div class="form-field">
+                        <label for="topics_discussed">Topics Discussed (comma-separated)</label>
+                        <input type="text" id="topics_discussed" v-model="form.topics_discussed" class="widefat">
+                    </div>
+                    <div class="form-field">
+                        <label for="key_quotes">Key Quotes</label>
+                        <textarea id="key_quotes" v-model="form.key_quotes" rows="3" class="widefat"></textarea>
+                    </div>
+
+                    <div v-if="error" class="error-message">{{ error }}</div>
+                    <div v-if="success" class="success-message">{{ success }}</div>
+                </div>
+                <div class="modal-actions">
+                    <button @click="$emit('close')" class="button">Cancel</button>
+                    <button @click="saveAppearance" class="button button-primary" :disabled="loading">
+                        {{ loading ? 'Saving...' : 'Add Appearance' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `,
+    props: ['guestId'],
+    emits: ['close', 'saved'],
+    data() {
+        return {
+            form: {
+                podcast_id: '',
+                episode_number: '',
+                episode_title: '',
+                episode_date: '',
+                episode_url: '',
+                topics_discussed: '',
+                key_quotes: '',
+            },
+            podcasts: [],
+            loading: false,
+            error: null,
+            success: null,
+        };
+    },
+    setup() {
+        const guestStore = useGuestStore();
+        const podcastStore = usePodcastStore();
+        return { guestStore, podcastStore };
+    },
+    async mounted() {
+        await this.podcastStore.fetchPodcasts();
+        this.podcasts = this.podcastStore.podcasts;
+    },
+    methods: {
+        async saveAppearance() {
+            if (!this.form.podcast_id) {
+                this.error = 'Please select a podcast';
+                return;
+            }
+
+            this.loading = true;
+            this.error = null;
+
+            try {
+                await this.guestStore.addGuestAppearance(this.guestId, this.form);
+                this.success = 'Appearance added successfully';
+                setTimeout(() => {
+                    this.$emit('saved');
+                    this.$emit('close');
+                }, 1000);
+            } catch (error) {
+                this.error = error.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+    },
+};
+
 // Initialize Vue apps for each admin page
 document.addEventListener('DOMContentLoaded', function() {
     const pinia = createPinia();
@@ -791,6 +1743,17 @@ document.addEventListener('DOMContentLoaded', function() {
         app.use(pinia);
         app.component('add-podcast-modal', AddPodcastModal);
         app.mount('#pit-app-podcasts');
+    }
+
+    // Guest Directory
+    if (document.getElementById('pit-app-guests')) {
+        const app = createApp(GuestDirectory);
+        app.use(pinia);
+        app.component('guest-card', GuestCard);
+        app.component('add-guest-modal', AddGuestModal);
+        app.component('guest-detail-modal', GuestDetailModal);
+        app.component('add-appearance-modal', AddAppearanceModal);
+        app.mount('#pit-app-guests');
     }
 
     // Analytics

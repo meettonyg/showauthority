@@ -53,6 +53,16 @@ class PIT_Admin_Page {
             [__CLASS__, 'render_podcasts_page']
         );
 
+        // Guests Directory
+        add_submenu_page(
+            'podcast-influence',
+            __('Guests', 'podcast-influence-tracker'),
+            __('Guests', 'podcast-influence-tracker'),
+            'manage_options',
+            'podcast-influence-guests',
+            [__CLASS__, 'render_guests_page']
+        );
+
         // Analytics
         add_submenu_page(
             'podcast-influence',
@@ -98,6 +108,21 @@ class PIT_Admin_Page {
             <h1><?php _e('Podcasts', 'podcast-influence-tracker'); ?></h1>
 
             <div id="pit-app-podcasts">
+                <p><?php _e('Loading...', 'podcast-influence-tracker'); ?></p>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render guests page
+     */
+    public static function render_guests_page() {
+        ?>
+        <div class="wrap">
+            <h1><?php _e('Guest Directory', 'podcast-influence-tracker'); ?></h1>
+
+            <div id="pit-app-guests">
                 <p><?php _e('Loading...', 'podcast-influence-tracker'); ?></p>
             </div>
         </div>
