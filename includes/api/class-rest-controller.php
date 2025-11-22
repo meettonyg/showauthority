@@ -88,6 +88,20 @@ class PIT_REST_Controller {
             'permission_callback' => [__CLASS__, 'check_permission'],
         ]);
 
+        // Add metrics to social link
+        register_rest_route(self::NAMESPACE, '/social-links/(?P<id>\d+)/metrics', [
+            'methods' => 'POST',
+            'callback' => [__CLASS__, 'add_social_link_metrics'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        // Get guests for a podcast (convenience endpoint)
+        register_rest_route(self::NAMESPACE, '/podcasts/(?P<id>\d+)/guests', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_podcast_guests'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
         // Jobs endpoints
         register_rest_route(self::NAMESPACE, '/jobs/(?P<id>\d+)', [
             'methods' => 'GET',
@@ -532,13 +546,29 @@ class PIT_REST_Controller {
         $params = $request->get_json_params();
 
         $platform = $params['platform'] ?? '';
-        $profile_url = $params['profile_url'] ?? '';
+        $profile_url = $params['url'] ?? $params['profile_url'] ?? '';
+        $handle = $params['handle'] ?? '';
 
         if (empty($platform) || empty($profile_url)) {
-            return new WP_Error('missing_params', 'Platform and profile URL are required', ['status' => 400]);
+            return new WP_Error('missing_params', 'Platform and URL are required', ['status' => 400]);
         }
 
+        // Try using Discovery Engine first
         $result = PIT_Discovery_Engine::add_manual_link($podcast_id, $platform, $profile_url);
+
+        if (!$result) {
+            // Fallback: Insert directly
+            global $wpdb;
+            $table_name = $wpdb->prefix . 'guestify_social_links';
+            $result = $wpdb->insert($table_name, [
+                'podcast_id' => $podcast_id,
+                'platform' => sanitize_text_field($platform),
+                'url' => esc_url_raw($profile_url),
+                'handle' => sanitize_text_field($handle),
+                'source' => 'manual',
+                'created_at' => current_time('mysql'),
+            ]);
+        }
 
         if (!$result) {
             return new WP_Error('add_failed', 'Failed to add social link', ['status' => 500]);
@@ -556,6 +586,62 @@ class PIT_REST_Controller {
         $metrics = PIT_Database::get_latest_metrics($podcast_id);
 
         return rest_ensure_response($metrics);
+    }
+
+    /**
+     * Add metrics to a social link
+     */
+    public static function add_social_link_metrics($request) {
+        $social_link_id = (int) $request['id'];
+        $params = $request->get_json_params();
+
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'guestify_social_metrics';
+
+        $data = [
+            'social_link_id' => $social_link_id,
+            'followers_count' => isset($params['followers_count']) ? (int) $params['followers_count'] : null,
+            'following_count' => isset($params['following_count']) ? (int) $params['following_count'] : null,
+            'posts_count' => isset($params['posts_count']) ? (int) $params['posts_count'] : null,
+            'total_views' => isset($params['total_views']) ? (int) $params['total_views'] : null,
+            'engagement_rate' => isset($params['engagement_rate']) ? (float) $params['engagement_rate'] : null,
+            'avg_likes' => isset($params['avg_likes']) ? (int) $params['avg_likes'] : null,
+            'data_source' => $params['data_source'] ?? 'manual',
+            'data_quality_score' => isset($params['data_quality_score']) ? (int) $params['data_quality_score'] : 90,
+            'fetched_at' => $params['fetched_at'] ?? current_time('mysql'),
+        ];
+
+        $result = $wpdb->insert($table_name, $data);
+
+        if (!$result) {
+            return new WP_Error('insert_failed', 'Failed to add metrics', ['status' => 500]);
+        }
+
+        return rest_ensure_response([
+            'success' => true,
+            'id' => $wpdb->insert_id,
+        ]);
+    }
+
+    /**
+     * Get guests for a podcast
+     */
+    public static function get_podcast_guests($request) {
+        $podcast_id = (int) $request['id'];
+
+        global $wpdb;
+        $guests_table = $wpdb->prefix . 'guestify_guests';
+        $appearances_table = $wpdb->prefix . 'guestify_guest_appearances';
+
+        $guests = $wpdb->get_results($wpdb->prepare("
+            SELECT g.*, a.episode_number, a.episode_title, a.episode_date
+            FROM {$guests_table} g
+            INNER JOIN {$appearances_table} a ON g.id = a.guest_id
+            WHERE a.podcast_id = %d
+            ORDER BY a.episode_date DESC
+        ", $podcast_id));
+
+        return rest_ensure_response($guests ?: []);
     }
 
     /**

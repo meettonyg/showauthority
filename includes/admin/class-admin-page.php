@@ -103,15 +103,29 @@ class PIT_Admin_Page {
      * Render podcasts page
      */
     public static function render_podcasts_page() {
-        ?>
-        <div class="wrap">
-            <h1><?php _e('Podcasts', 'podcast-influence-tracker'); ?></h1>
+        $podcast_id = isset($_GET['podcast_id']) ? intval($_GET['podcast_id']) : 0;
 
-            <div id="pit-app-podcasts">
-                <p><?php _e('Loading...', 'podcast-influence-tracker'); ?></p>
+        if ($podcast_id > 0) {
+            // Show podcast detail view
+            ?>
+            <div class="wrap">
+                <div id="pit-app-podcast-detail" data-podcast-id="<?php echo esc_attr($podcast_id); ?>">
+                    <p><?php _e('Loading...', 'podcast-influence-tracker'); ?></p>
+                </div>
             </div>
-        </div>
-        <?php
+            <?php
+        } else {
+            // Show podcasts list
+            ?>
+            <div class="wrap">
+                <h1><?php _e('Podcasts', 'podcast-influence-tracker'); ?></h1>
+
+                <div id="pit-app-podcasts">
+                    <p><?php _e('Loading...', 'podcast-influence-tracker'); ?></p>
+                </div>
+            </div>
+            <?php
+        }
     }
 
     /**

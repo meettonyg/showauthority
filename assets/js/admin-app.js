@@ -1616,6 +1616,801 @@ const GuestDetailModal = {
     },
 };
 
+// Content Analysis Store
+const useContentStore = defineStore('content', {
+    state: () => ({
+        analysis: null,
+        loading: false,
+    }),
+
+    actions: {
+        async fetchAnalysis(podcastId) {
+            this.loading = true;
+            try {
+                const response = await fetch(`${pitData.apiUrl}/intelligence/podcasts/${podcastId}/content-analysis`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                this.analysis = await response.json();
+                return this.analysis;
+            } catch (error) {
+                console.error('Failed to fetch content analysis:', error);
+                return null;
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async saveAnalysis(podcastId, data) {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/intelligence/podcasts/${podcastId}/content-analysis`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': pitData.nonce,
+                    },
+                    body: JSON.stringify(data),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to save analysis');
+                }
+
+                return await response.json();
+            } catch (error) {
+                throw error;
+            }
+        },
+    },
+});
+
+// Podcast Detail Component (Multi-Tab)
+const PodcastDetail = {
+    template: `
+        <div class="pit-podcast-detail">
+            <div v-if="loading" class="pit-loading">Loading podcast details...</div>
+
+            <template v-else-if="podcast">
+                <div class="podcast-header">
+                    <div class="podcast-info">
+                        <h2>{{ podcast.podcast_name }}</h2>
+                        <p class="podcast-author">By {{ podcast.author }}</p>
+                        <div class="podcast-badges">
+                            <span class="badge" :class="'badge-' + podcast.tracking_status">{{ podcast.tracking_status }}</span>
+                            <span v-if="podcast.itunes_id" class="badge badge-itunes">iTunes</span>
+                        </div>
+                    </div>
+                    <div class="podcast-actions">
+                        <button @click="goBack" class="button">Back to List</button>
+                        <button v-if="!podcast.is_tracked" @click="trackPodcast" class="button button-primary">Track Metrics</button>
+                    </div>
+                </div>
+
+                <div class="detail-tabs">
+                    <button
+                        v-for="tab in tabs"
+                        :key="tab.id"
+                        :class="{ active: activeTab === tab.id }"
+                        @click="activeTab = tab.id"
+                    >{{ tab.label }}</button>
+                </div>
+
+                <div class="detail-content">
+                    <!-- Overview Tab -->
+                    <div v-if="activeTab === 'overview'" class="tab-content">
+                        <div class="overview-grid">
+                            <div class="info-card">
+                                <h3>Podcast Information</h3>
+                                <div class="info-list">
+                                    <div class="info-row">
+                                        <span class="label">RSS Feed:</span>
+                                        <a :href="podcast.rss_url" target="_blank" class="value">{{ podcast.rss_url }}</a>
+                                    </div>
+                                    <div v-if="podcast.homepage_url" class="info-row">
+                                        <span class="label">Homepage:</span>
+                                        <a :href="podcast.homepage_url" target="_blank" class="value">{{ podcast.homepage_url }}</a>
+                                    </div>
+                                    <div v-if="podcast.itunes_id" class="info-row">
+                                        <span class="label">iTunes ID:</span>
+                                        <span class="value">{{ podcast.itunes_id }}</span>
+                                    </div>
+                                    <div class="info-row">
+                                        <span class="label">Added:</span>
+                                        <span class="value">{{ formatDate(podcast.created_at) }}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="info-card">
+                                <h3>Quick Stats</h3>
+                                <div class="stats-mini">
+                                    <div class="stat-mini">
+                                        <div class="stat-mini-value">{{ podcast.social_links_count || 0 }}</div>
+                                        <div class="stat-mini-label">Social Accounts</div>
+                                    </div>
+                                    <div class="stat-mini">
+                                        <div class="stat-mini-value">{{ podcast.metrics_count || 0 }}</div>
+                                        <div class="stat-mini-label">Metrics Tracked</div>
+                                    </div>
+                                    <div class="stat-mini">
+                                        <div class="stat-mini-value">{{ podcast.guests_count || 0 }}</div>
+                                        <div class="stat-mini-label">Guests</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="podcast.description" class="description-card">
+                            <h3>Description</h3>
+                            <p>{{ podcast.description }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Social Metrics Tab -->
+                    <div v-if="activeTab === 'social'" class="tab-content">
+                        <div class="social-header">
+                            <h3>Social Accounts & Metrics</h3>
+                            <button @click="showAddSocialModal = true" class="button button-small">Add Social Account</button>
+                        </div>
+
+                        <div v-if="socialLinks.length === 0" class="empty-state">
+                            <p>No social accounts linked yet.</p>
+                            <button @click="showAddSocialModal = true" class="button button-primary">Add Social Account</button>
+                        </div>
+
+                        <div v-else class="social-cards">
+                            <div v-for="link in socialLinks" :key="link.id" class="social-card">
+                                <div class="social-card-header">
+                                    <span class="platform-badge" :class="'platform-' + link.platform">
+                                        {{ getPlatformIcon(link.platform) }} {{ formatPlatform(link.platform) }}
+                                    </span>
+                                    <button @click="showAddMetricsModal = link" class="button button-small">Add Metrics</button>
+                                </div>
+                                <div class="social-card-url">
+                                    <a :href="link.url" target="_blank">{{ link.url }}</a>
+                                </div>
+                                <div v-if="link.latest_metrics" class="social-card-metrics">
+                                    <div class="metric-item">
+                                        <span class="metric-value">{{ formatNumber(link.latest_metrics.followers_count) }}</span>
+                                        <span class="metric-label">Followers</span>
+                                    </div>
+                                    <div v-if="link.latest_metrics.following_count" class="metric-item">
+                                        <span class="metric-value">{{ formatNumber(link.latest_metrics.following_count) }}</span>
+                                        <span class="metric-label">Following</span>
+                                    </div>
+                                    <div v-if="link.latest_metrics.posts_count" class="metric-item">
+                                        <span class="metric-value">{{ formatNumber(link.latest_metrics.posts_count) }}</span>
+                                        <span class="metric-label">Posts</span>
+                                    </div>
+                                    <div v-if="link.latest_metrics.engagement_rate" class="metric-item">
+                                        <span class="metric-value">{{ link.latest_metrics.engagement_rate }}%</span>
+                                        <span class="metric-label">Engagement</span>
+                                    </div>
+                                </div>
+                                <div v-else class="social-card-empty">
+                                    No metrics yet. <a href="#" @click.prevent="showAddMetricsModal = link">Add manually</a>
+                                </div>
+                                <div v-if="link.latest_metrics" class="social-card-footer">
+                                    Last updated: {{ formatDate(link.latest_metrics.fetched_at) }}
+                                    <span v-if="link.latest_metrics.data_source" class="data-source">
+                                        via {{ link.latest_metrics.data_source }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Guests Tab -->
+                    <div v-if="activeTab === 'guests'" class="tab-content">
+                        <div class="guests-header">
+                            <h3>Podcast Guests</h3>
+                            <button @click="showAddGuestLink = true" class="button button-small">Link Guest</button>
+                        </div>
+
+                        <div v-if="guests.length === 0" class="empty-state">
+                            <p>No guests linked to this podcast yet.</p>
+                            <button @click="showAddGuestLink = true" class="button button-primary">Link Guest</button>
+                        </div>
+
+                        <div v-else class="guests-list">
+                            <div v-for="guest in guests" :key="guest.id" class="guest-list-item">
+                                <div class="guest-list-avatar">{{ getInitials(guest.full_name) }}</div>
+                                <div class="guest-list-info">
+                                    <div class="guest-list-name">{{ guest.full_name }}</div>
+                                    <div class="guest-list-role">{{ guest.current_role }} at {{ guest.current_company }}</div>
+                                    <div v-if="guest.episode_title" class="guest-list-episode">
+                                        Episode {{ guest.episode_number }}: {{ guest.episode_title }}
+                                    </div>
+                                </div>
+                                <div class="guest-list-actions">
+                                    <span v-if="guest.manually_verified" class="verified-badge">Verified</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Content Analysis Tab -->
+                    <div v-if="activeTab === 'content'" class="tab-content">
+                        <div class="content-header">
+                            <h3>Content Analysis</h3>
+                            <button @click="showContentAnalysisModal = true" class="button button-small">
+                                {{ contentAnalysis ? 'Edit Analysis' : 'Add Analysis' }}
+                            </button>
+                        </div>
+
+                        <div v-if="!contentAnalysis" class="empty-state">
+                            <p>No content analysis yet. Add analysis manually to track topics and keywords.</p>
+                            <button @click="showContentAnalysisModal = true" class="button button-primary">Add Analysis</button>
+                        </div>
+
+                        <template v-else>
+                            <div class="content-grid">
+                                <div class="content-card">
+                                    <h4>Topic Clusters</h4>
+                                    <div v-if="contentAnalysis.topic_clusters" class="topic-bars">
+                                        <div v-for="topic in parsedTopics" :key="topic.name" class="topic-bar">
+                                            <div class="topic-bar-label">
+                                                <span class="topic-name">{{ topic.name }}</span>
+                                                <span class="topic-percent">{{ topic.percentage }}%</span>
+                                            </div>
+                                            <div class="topic-bar-track">
+                                                <div class="topic-bar-fill" :style="{ width: topic.percentage + '%', backgroundColor: topic.color }"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="content-card">
+                                    <h4>Publishing Pattern</h4>
+                                    <div class="pattern-info">
+                                        <div v-if="contentAnalysis.publishing_frequency" class="pattern-item">
+                                            <span class="pattern-label">Frequency:</span>
+                                            <span class="pattern-value">{{ contentAnalysis.publishing_frequency }}</span>
+                                        </div>
+                                        <div v-if="contentAnalysis.avg_episode_length" class="pattern-item">
+                                            <span class="pattern-label">Avg Length:</span>
+                                            <span class="pattern-value">{{ contentAnalysis.avg_episode_length }} min</span>
+                                        </div>
+                                        <div v-if="contentAnalysis.format_type" class="pattern-item">
+                                            <span class="pattern-label">Format:</span>
+                                            <span class="pattern-value">{{ contentAnalysis.format_type }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-if="contentAnalysis.keywords" class="keywords-section">
+                                <h4>Top Keywords</h4>
+                                <div class="keywords-cloud">
+                                    <span v-for="keyword in parsedKeywords" :key="keyword" class="keyword-tag">
+                                        {{ keyword }}
+                                    </span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Export Tab -->
+                    <div v-if="activeTab === 'export'" class="tab-content">
+                        <h3>Export Data</h3>
+                        <div class="export-options">
+                            <div class="export-option">
+                                <h4>Social Metrics</h4>
+                                <p>Export all social metrics history for this podcast</p>
+                                <button @click="exportData('social-metrics', 'csv')" class="button">Export CSV</button>
+                                <button @click="exportData('social-metrics', 'json')" class="button">Export JSON</button>
+                            </div>
+                            <div class="export-option">
+                                <h4>Guest Directory</h4>
+                                <p>Export all guest information for this podcast</p>
+                                <button @click="exportData('guests', 'csv')" class="button">Export CSV</button>
+                                <button @click="exportData('guests', 'json')" class="button">Export JSON</button>
+                            </div>
+                            <div class="export-option">
+                                <h4>Content Analysis</h4>
+                                <p>Export content analysis data</p>
+                                <button @click="exportData('content-analysis', 'json')" class="button">Export JSON</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <add-social-link-modal
+                v-if="showAddSocialModal"
+                :podcast-id="podcastId"
+                @close="showAddSocialModal = false"
+                @saved="refreshSocialLinks"
+            ></add-social-link-modal>
+
+            <add-metrics-modal
+                v-if="showAddMetricsModal"
+                :social-link="showAddMetricsModal"
+                @close="showAddMetricsModal = null"
+                @saved="refreshSocialLinks"
+            ></add-metrics-modal>
+
+            <content-analysis-modal
+                v-if="showContentAnalysisModal"
+                :podcast-id="podcastId"
+                :existing="contentAnalysis"
+                @close="showContentAnalysisModal = false"
+                @saved="refreshContentAnalysis"
+            ></content-analysis-modal>
+        </div>
+    `,
+    props: ['podcastId'],
+    data() {
+        return {
+            podcast: null,
+            loading: true,
+            activeTab: 'overview',
+            tabs: [
+                { id: 'overview', label: 'Overview' },
+                { id: 'social', label: 'Social Metrics' },
+                { id: 'guests', label: 'Guests' },
+                { id: 'content', label: 'Content Analysis' },
+                { id: 'export', label: 'Export' },
+            ],
+            socialLinks: [],
+            guests: [],
+            contentAnalysis: null,
+            showAddSocialModal: false,
+            showAddMetricsModal: null,
+            showAddGuestLink: false,
+            showContentAnalysisModal: false,
+        };
+    },
+    computed: {
+        parsedTopics() {
+            if (!this.contentAnalysis?.topic_clusters) return [];
+            try {
+                const topics = JSON.parse(this.contentAnalysis.topic_clusters);
+                return Array.isArray(topics) ? topics : [];
+            } catch {
+                return [];
+            }
+        },
+        parsedKeywords() {
+            if (!this.contentAnalysis?.keywords) return [];
+            return this.contentAnalysis.keywords.split(',').map(k => k.trim()).filter(k => k);
+        },
+    },
+    async mounted() {
+        await this.loadPodcast();
+    },
+    methods: {
+        async loadPodcast() {
+            this.loading = true;
+            try {
+                const response = await fetch(`${pitData.apiUrl}/podcasts/${this.podcastId}`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                this.podcast = await response.json();
+
+                // Load related data
+                await Promise.all([
+                    this.loadSocialLinks(),
+                    this.loadGuests(),
+                    this.loadContentAnalysis(),
+                ]);
+            } catch (error) {
+                console.error('Failed to load podcast:', error);
+            } finally {
+                this.loading = false;
+            }
+        },
+        async loadSocialLinks() {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/podcasts/${this.podcastId}/social-links`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                this.socialLinks = await response.json();
+            } catch (error) {
+                console.error('Failed to load social links:', error);
+            }
+        },
+        async loadGuests() {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/podcasts/${this.podcastId}/guests`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                this.guests = await response.json();
+            } catch (error) {
+                console.error('Failed to load guests:', error);
+            }
+        },
+        async loadContentAnalysis() {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/intelligence/podcasts/${this.podcastId}/content-analysis`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+                if (response.ok) {
+                    this.contentAnalysis = await response.json();
+                }
+            } catch (error) {
+                console.error('Failed to load content analysis:', error);
+            }
+        },
+        refreshSocialLinks() {
+            this.loadSocialLinks();
+        },
+        refreshContentAnalysis() {
+            this.loadContentAnalysis();
+            this.showContentAnalysisModal = false;
+        },
+        goBack() {
+            window.location.href = window.location.href.replace(/&podcast_id=\d+/, '');
+        },
+        trackPodcast() {
+            if (confirm('Start tracking metrics for this podcast? This will incur API costs.')) {
+                // Implement tracking
+            }
+        },
+        async exportData(type, format) {
+            try {
+                const response = await fetch(
+                    `${pitData.apiUrl}/podcasts/${this.podcastId}/export/${type}?format=${format}`,
+                    { headers: { 'X-WP-Nonce': pitData.nonce } }
+                );
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${this.podcast.podcast_name}-${type}.${format}`;
+                a.click();
+            } catch (error) {
+                alert('Export failed: ' + error.message);
+            }
+        },
+        formatDate(dateStr) {
+            if (!dateStr) return '';
+            return new Date(dateStr).toLocaleDateString();
+        },
+        formatNumber(num) {
+            if (!num) return '0';
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        },
+        formatPlatform(platform) {
+            const names = {
+                youtube: 'YouTube', twitter: 'Twitter', instagram: 'Instagram',
+                facebook: 'Facebook', linkedin: 'LinkedIn', tiktok: 'TikTok',
+                spotify: 'Spotify', apple_podcasts: 'Apple Podcasts'
+            };
+            return names[platform] || platform;
+        },
+        getPlatformIcon(platform) {
+            const icons = {
+                youtube: '▶️', twitter: '🐦', instagram: '📷',
+                facebook: '👍', linkedin: '💼', tiktok: '🎵',
+                spotify: '🎧', apple_podcasts: '🎙️'
+            };
+            return icons[platform] || '🔗';
+        },
+        getInitials(name) {
+            if (!name) return '?';
+            return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        },
+    },
+};
+
+// Add Social Link Modal
+const AddSocialLinkModal = {
+    template: `
+        <div class="pit-modal-overlay" @click="$emit('close')">
+            <div class="pit-modal" @click.stop>
+                <h2>Add Social Account</h2>
+                <div class="modal-content">
+                    <div class="form-field">
+                        <label for="platform">Platform *</label>
+                        <select id="platform" v-model="form.platform" class="widefat">
+                            <option value="">Select platform...</option>
+                            <option value="youtube">YouTube</option>
+                            <option value="twitter">Twitter / X</option>
+                            <option value="instagram">Instagram</option>
+                            <option value="facebook">Facebook</option>
+                            <option value="linkedin">LinkedIn</option>
+                            <option value="tiktok">TikTok</option>
+                            <option value="spotify">Spotify</option>
+                            <option value="apple_podcasts">Apple Podcasts</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label for="url">URL *</label>
+                        <input type="url" id="url" v-model="form.url" placeholder="https://..." class="widefat">
+                    </div>
+                    <div class="form-field">
+                        <label for="handle">Handle / Username</label>
+                        <input type="text" id="handle" v-model="form.handle" placeholder="@username" class="widefat">
+                    </div>
+                    <div v-if="error" class="error-message">{{ error }}</div>
+                </div>
+                <div class="modal-actions">
+                    <button @click="$emit('close')" class="button">Cancel</button>
+                    <button @click="save" class="button button-primary" :disabled="loading">
+                        {{ loading ? 'Saving...' : 'Add Account' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `,
+    props: ['podcastId'],
+    emits: ['close', 'saved'],
+    data() {
+        return {
+            form: { platform: '', url: '', handle: '' },
+            loading: false,
+            error: null,
+        };
+    },
+    methods: {
+        async save() {
+            if (!this.form.platform || !this.form.url) {
+                this.error = 'Platform and URL are required';
+                return;
+            }
+            this.loading = true;
+            this.error = null;
+            try {
+                const response = await fetch(`${pitData.apiUrl}/podcasts/${this.podcastId}/social-links`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': pitData.nonce },
+                    body: JSON.stringify(this.form),
+                });
+                if (!response.ok) throw new Error('Failed to add social account');
+                this.$emit('saved');
+                this.$emit('close');
+            } catch (error) {
+                this.error = error.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+    },
+};
+
+// Add Metrics Modal
+const AddMetricsModal = {
+    template: `
+        <div class="pit-modal-overlay" @click="$emit('close')">
+            <div class="pit-modal" @click.stop>
+                <h2>Add Metrics</h2>
+                <p class="modal-subtitle">{{ formatPlatform(socialLink.platform) }}: {{ socialLink.url }}</p>
+                <div class="modal-content">
+                    <div class="form-row form-row-2">
+                        <div class="form-field">
+                            <label>Followers / Subscribers *</label>
+                            <input type="number" v-model="form.followers_count" class="widefat">
+                        </div>
+                        <div class="form-field">
+                            <label>Following</label>
+                            <input type="number" v-model="form.following_count" class="widefat">
+                        </div>
+                    </div>
+                    <div class="form-row form-row-2">
+                        <div class="form-field">
+                            <label>Posts / Videos</label>
+                            <input type="number" v-model="form.posts_count" class="widefat">
+                        </div>
+                        <div class="form-field">
+                            <label>Total Views</label>
+                            <input type="number" v-model="form.total_views" class="widefat">
+                        </div>
+                    </div>
+                    <div class="form-row form-row-2">
+                        <div class="form-field">
+                            <label>Engagement Rate (%)</label>
+                            <input type="number" step="0.01" v-model="form.engagement_rate" class="widefat">
+                        </div>
+                        <div class="form-field">
+                            <label>Avg Likes</label>
+                            <input type="number" v-model="form.avg_likes" class="widefat">
+                        </div>
+                    </div>
+                    <div class="form-row form-row-2">
+                        <div class="form-field">
+                            <label>Fetched Date</label>
+                            <input type="date" v-model="form.fetched_at" class="widefat">
+                        </div>
+                        <div class="form-field">
+                            <label>Data Quality (0-100)</label>
+                            <input type="number" min="0" max="100" v-model="form.data_quality_score" class="widefat">
+                        </div>
+                    </div>
+                    <div v-if="error" class="error-message">{{ error }}</div>
+                </div>
+                <div class="modal-actions">
+                    <button @click="$emit('close')" class="button">Cancel</button>
+                    <button @click="save" class="button button-primary" :disabled="loading">
+                        {{ loading ? 'Saving...' : 'Save Metrics' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `,
+    props: ['socialLink'],
+    emits: ['close', 'saved'],
+    data() {
+        return {
+            form: {
+                followers_count: '',
+                following_count: '',
+                posts_count: '',
+                total_views: '',
+                engagement_rate: '',
+                avg_likes: '',
+                fetched_at: new Date().toISOString().split('T')[0],
+                data_quality_score: 90,
+                data_source: 'manual',
+            },
+            loading: false,
+            error: null,
+        };
+    },
+    methods: {
+        formatPlatform(platform) {
+            const names = { youtube: 'YouTube', twitter: 'Twitter', instagram: 'Instagram', linkedin: 'LinkedIn' };
+            return names[platform] || platform;
+        },
+        async save() {
+            if (!this.form.followers_count) {
+                this.error = 'Followers count is required';
+                return;
+            }
+            this.loading = true;
+            this.error = null;
+            try {
+                const response = await fetch(`${pitData.apiUrl}/social-links/${this.socialLink.id}/metrics`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': pitData.nonce },
+                    body: JSON.stringify(this.form),
+                });
+                if (!response.ok) throw new Error('Failed to save metrics');
+                this.$emit('saved');
+                this.$emit('close');
+            } catch (error) {
+                this.error = error.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+    },
+};
+
+// Content Analysis Modal
+const ContentAnalysisModal = {
+    template: `
+        <div class="pit-modal-overlay" @click="$emit('close')">
+            <div class="pit-modal pit-modal-large" @click.stop>
+                <h2>{{ existing ? 'Edit' : 'Add' }} Content Analysis</h2>
+                <div class="modal-content">
+                    <div class="form-section">
+                        <h3>Topic Clusters</h3>
+                        <div v-for="(topic, index) in form.topics" :key="index" class="topic-row">
+                            <input type="text" v-model="topic.name" placeholder="Topic name" class="topic-name">
+                            <input type="number" v-model="topic.percentage" placeholder="%" min="0" max="100" class="topic-percent">
+                            <input type="color" v-model="topic.color" class="topic-color">
+                            <button @click="removeTopic(index)" class="button button-small button-link-delete">X</button>
+                        </div>
+                        <button @click="addTopic" class="button button-small">+ Add Topic</button>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Keywords</h3>
+                        <div class="form-field">
+                            <label>Top Keywords (comma-separated)</label>
+                            <input type="text" v-model="form.keywords" placeholder="SaaS, Scaling, AI, Fundraising" class="widefat">
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Publishing Pattern</h3>
+                        <div class="form-row form-row-3">
+                            <div class="form-field">
+                                <label>Frequency</label>
+                                <select v-model="form.publishing_frequency" class="widefat">
+                                    <option value="">Select...</option>
+                                    <option value="daily">Daily</option>
+                                    <option value="twice-weekly">Twice Weekly</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="bi-weekly">Bi-Weekly</option>
+                                    <option value="monthly">Monthly</option>
+                                    <option value="irregular">Irregular</option>
+                                </select>
+                            </div>
+                            <div class="form-field">
+                                <label>Avg Episode Length (min)</label>
+                                <input type="number" v-model="form.avg_episode_length" class="widefat">
+                            </div>
+                            <div class="form-field">
+                                <label>Format Type</label>
+                                <select v-model="form.format_type" class="widefat">
+                                    <option value="">Select...</option>
+                                    <option value="interview">1-on-1 Interviews</option>
+                                    <option value="panel">Panel Discussion</option>
+                                    <option value="solo">Solo/Monologue</option>
+                                    <option value="co-hosted">Co-hosted</option>
+                                    <option value="mixed">Mixed Format</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="error" class="error-message">{{ error }}</div>
+                </div>
+                <div class="modal-actions">
+                    <button @click="$emit('close')" class="button">Cancel</button>
+                    <button @click="save" class="button button-primary" :disabled="loading">
+                        {{ loading ? 'Saving...' : 'Save Analysis' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `,
+    props: ['podcastId', 'existing'],
+    emits: ['close', 'saved'],
+    data() {
+        return {
+            form: {
+                topics: [{ name: '', percentage: '', color: '#0073aa' }],
+                keywords: '',
+                publishing_frequency: '',
+                avg_episode_length: '',
+                format_type: '',
+            },
+            loading: false,
+            error: null,
+        };
+    },
+    mounted() {
+        if (this.existing) {
+            if (this.existing.topic_clusters) {
+                try {
+                    this.form.topics = JSON.parse(this.existing.topic_clusters);
+                } catch {}
+            }
+            this.form.keywords = this.existing.keywords || '';
+            this.form.publishing_frequency = this.existing.publishing_frequency || '';
+            this.form.avg_episode_length = this.existing.avg_episode_length || '';
+            this.form.format_type = this.existing.format_type || '';
+        }
+    },
+    methods: {
+        addTopic() {
+            this.form.topics.push({ name: '', percentage: '', color: '#' + Math.floor(Math.random()*16777215).toString(16) });
+        },
+        removeTopic(index) {
+            this.form.topics.splice(index, 1);
+        },
+        async save() {
+            this.loading = true;
+            this.error = null;
+            try {
+                const data = {
+                    topic_clusters: JSON.stringify(this.form.topics.filter(t => t.name)),
+                    keywords: this.form.keywords,
+                    publishing_frequency: this.form.publishing_frequency,
+                    avg_episode_length: this.form.avg_episode_length,
+                    format_type: this.form.format_type,
+                };
+                const response = await fetch(`${pitData.apiUrl}/intelligence/podcasts/${this.podcastId}/content-analysis`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': pitData.nonce },
+                    body: JSON.stringify(data),
+                });
+                if (!response.ok) throw new Error('Failed to save analysis');
+                this.$emit('saved');
+            } catch (error) {
+                this.error = error.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+    },
+};
+
 // Add Appearance Modal Component
 const AddAppearanceModal = {
     template: `
@@ -1743,6 +2538,17 @@ document.addEventListener('DOMContentLoaded', function() {
         app.use(pinia);
         app.component('add-podcast-modal', AddPodcastModal);
         app.mount('#pit-app-podcasts');
+    }
+
+    // Podcast Detail View
+    if (document.getElementById('pit-app-podcast-detail')) {
+        const podcastId = document.getElementById('pit-app-podcast-detail').dataset.podcastId;
+        const app = createApp(PodcastDetail, { podcastId: parseInt(podcastId) });
+        app.use(pinia);
+        app.component('add-social-link-modal', AddSocialLinkModal);
+        app.component('add-metrics-modal', AddMetricsModal);
+        app.component('content-analysis-modal', ContentAnalysisModal);
+        app.mount('#pit-app-podcast-detail');
     }
 
     // Guest Directory
