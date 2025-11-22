@@ -5,9 +5,49 @@ All notable changes to the Podcast Influence Tracker plugin will be documented i
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-11-22
+
+### Major Restructure
+
+Complete codebase restructuring for production readiness.
+
+### Changed
+
+#### Architecture
+- **Domain-based organization** - Reorganized from phase-based (`layer-1/`, `layer-2/`, `layer-3/`) to domain-based (`Podcasts/`, `Guests/`, `SocialMetrics/`, `Jobs/`)
+- **Repository pattern** - Clean separation of data access from business logic
+- **Split REST controllers** - Monolithic controller split into domain-specific controllers (`REST_Podcasts`, `REST_Guests`, `REST_Export`)
+- **Unified database schema** - Consolidated `pit_*` and `guestify_*` tables into single unified schema
+
+#### Database
+- New unified schema with proper foreign keys and indexes
+- Added `pit_guest_appearances` table
+- Added `pit_topics` and `pit_guest_topics` tables
+- Added `pit_guest_network` table for network connections
+- Added `pit_content_analysis` table
+- Added `pit_podcast_contacts` table
+
+#### New Features
+- Guest network analysis (1st and 2nd degree connections)
+- Topic taxonomy for guest expertise
+- Guest verification workflow
+- Improved deduplication (LinkedIn URL hash, email hash)
+- CSV and JSON export for guests, podcasts, and network data
+
+### Removed
+- Obsolete implementation documentation files (190KB total)
+- Phase-based folder naming
+
+### Fixed
+- Export queries using wrong column names
+- Missing metrics table in database creation
+- Inconsistent permission callbacks in REST API
+
+---
+
 ## [1.0.0] - 2025-11-20
 
-### 🎉 Initial Release
+### Initial Release
 
 Complete implementation of the Podcast Influence Tracking System with hybrid "just-in-time" strategy.
 
@@ -221,4 +261,4 @@ Compared to traditional "scrape everything upfront" approach:
 
 ---
 
-For more information, see [README.md](README.md) and [INSTALLATION.md](INSTALLATION.md).
+For more information, see [README.md](README.md).
