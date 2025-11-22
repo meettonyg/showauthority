@@ -74,9 +74,9 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/Podcasts/class-content-analysis-repository.php';
 
         // Discovery Engine
-        require_once PIT_PLUGIN_DIR . 'includes/layer-1/class-rss-parser.php';
-        require_once PIT_PLUGIN_DIR . 'includes/layer-1/class-homepage-scraper.php';
-        require_once PIT_PLUGIN_DIR . 'includes/layer-1/class-discovery-engine.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Podcasts/class-rss-parser.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Podcasts/class-homepage-scraper.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Podcasts/class-discovery-engine.php';
 
         // ===========================================
         // GUESTS DOMAIN
@@ -91,14 +91,14 @@ class Podcast_Influence_Tracker {
         // ===========================================
         require_once PIT_PLUGIN_DIR . 'includes/SocialMetrics/class-social-link-repository.php';
         require_once PIT_PLUGIN_DIR . 'includes/SocialMetrics/class-metrics-repository.php';
-        require_once PIT_PLUGIN_DIR . 'includes/layer-2/class-metrics-fetcher.php';
+        require_once PIT_PLUGIN_DIR . 'includes/SocialMetrics/class-metrics-fetcher.php';
 
         // ===========================================
         // JOBS DOMAIN
         // ===========================================
         require_once PIT_PLUGIN_DIR . 'includes/Jobs/class-job-repository.php';
-        require_once PIT_PLUGIN_DIR . 'includes/layer-2/class-job-queue.php';
-        require_once PIT_PLUGIN_DIR . 'includes/layer-3/class-background-refresh.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Jobs/class-job-queue.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Jobs/class-background-refresh.php';
 
         // ===========================================
         // API INTEGRATIONS
