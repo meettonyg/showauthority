@@ -168,7 +168,7 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
         }
 
         // Use discovery engine
-        $result = PIT_Podcast_Discovery::discover($rss_url);
+        $result = PIT_Discovery_Engine::discover($rss_url);
 
         if (is_wp_error($result)) {
             return $result;
@@ -236,7 +236,7 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
         $params = $request->get_json_params();
         $platforms = $params['platforms'] ?? [];
 
-        $job_id = PIT_Job_Service::queue_tracking_job($podcast_id, $platforms);
+        $job_id = PIT_Job_Queue::queue_job($podcast_id, 'initial_tracking', $platforms);
 
         if (!$job_id) {
             return self::error('queue_failed', 'Failed to queue tracking job', 500);
@@ -271,7 +271,7 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
         $params = $request->get_json_params();
         $platforms = $params['platforms'] ?? [];
 
-        $job_id = PIT_Job_Service::queue_refresh_job($podcast_id, $platforms);
+        $job_id = PIT_Job_Queue::queue_job($podcast_id, 'manual_refresh', $platforms, 80);
 
         if (!$job_id) {
             return self::error('refresh_failed', 'Failed to queue refresh job', 500);

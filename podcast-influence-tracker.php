@@ -28,7 +28,7 @@ define('PIT_PLUGIN_BASENAME', plugin_basename(__FILE__));
 /**
  * Main Plugin Class
  *
- * Restructured for v2.0 with domain-based organization.
+ * Domain-based organization for v2.0.
  */
 class Podcast_Influence_Tracker {
 
@@ -58,24 +58,22 @@ class Podcast_Influence_Tracker {
     /**
      * Load required dependencies
      *
-     * Organized by domain for better maintainability.
+     * Organized by domain for maintainability.
      */
     private function load_dependencies() {
         // ===========================================
-        // CORE CLASSES
+        // CORE
         // ===========================================
         require_once PIT_PLUGIN_DIR . 'includes/Core/class-database-schema.php';
-
-        // Legacy database class (for backwards compatibility during migration)
-        require_once PIT_PLUGIN_DIR . 'includes/class-database.php';
 
         // ===========================================
         // PODCASTS DOMAIN
         // ===========================================
         require_once PIT_PLUGIN_DIR . 'includes/Podcasts/class-podcast-repository.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Podcasts/class-contact-repository.php';
         require_once PIT_PLUGIN_DIR . 'includes/Podcasts/class-content-analysis-repository.php';
 
-        // Legacy discovery classes
+        // Discovery Engine
         require_once PIT_PLUGIN_DIR . 'includes/layer-1/class-rss-parser.php';
         require_once PIT_PLUGIN_DIR . 'includes/layer-1/class-homepage-scraper.php';
         require_once PIT_PLUGIN_DIR . 'includes/layer-1/class-discovery-engine.php';
@@ -93,16 +91,12 @@ class Podcast_Influence_Tracker {
         // ===========================================
         require_once PIT_PLUGIN_DIR . 'includes/SocialMetrics/class-social-link-repository.php';
         require_once PIT_PLUGIN_DIR . 'includes/SocialMetrics/class-metrics-repository.php';
-
-        // Legacy metrics fetcher
         require_once PIT_PLUGIN_DIR . 'includes/layer-2/class-metrics-fetcher.php';
 
         // ===========================================
         // JOBS DOMAIN
         // ===========================================
         require_once PIT_PLUGIN_DIR . 'includes/Jobs/class-job-repository.php';
-
-        // Legacy job queue classes
         require_once PIT_PLUGIN_DIR . 'includes/layer-2/class-job-queue.php';
         require_once PIT_PLUGIN_DIR . 'includes/layer-3/class-background-refresh.php';
 
@@ -114,15 +108,12 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-itunes-resolver.php';
 
         // ===========================================
-        // REST API (New split controllers)
+        // REST API
         // ===========================================
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-base.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-podcasts.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-guests.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-export.php';
-
-        // Legacy REST controller (for backwards compatibility)
-        require_once PIT_PLUGIN_DIR . 'includes/api/class-rest-controller.php';
 
         // ===========================================
         // ADMIN
@@ -135,18 +126,6 @@ class Podcast_Influence_Tracker {
         // COST TRACKING
         // ===========================================
         require_once PIT_PLUGIN_DIR . 'includes/class-cost-tracker.php';
-
-        // ===========================================
-        // BRIDGES (Legacy integrations)
-        // ===========================================
-        if (file_exists(PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-podcast-intelligence-manager.php')) {
-            require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-podcast-intelligence-manager.php';
-            require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-formidable-podcast-bridge.php';
-            require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-email-integration.php';
-            require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-shortcodes.php';
-            require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-frontend-forms.php';
-            require_once PIT_PLUGIN_DIR . 'includes/podcast-intelligence/class-rss-bridge.php';
-        }
     }
 
     /**
@@ -168,7 +147,7 @@ class Podcast_Influence_Tracker {
      * Plugin activation
      */
     public function activate() {
-        // Create new unified database schema
+        // Create database schema
         Database_Schema::create_tables();
 
         // Schedule cron job for background refresh
@@ -183,11 +162,6 @@ class Podcast_Influence_Tracker {
 
         // Flush rewrite rules
         flush_rewrite_rules();
-
-        // Set flag for migration notice
-        if (get_option('pit_db_version') && version_compare(get_option('pit_db_version'), '2.0.0', '<')) {
-            update_option('pit_needs_migration', true);
-        }
     }
 
     /**
@@ -212,26 +186,6 @@ class Podcast_Influence_Tracker {
         // Add custom cron schedules
         add_filter('cron_schedules', [$this, 'add_cron_schedules']);
 
-        // Initialize legacy bridges if available
-        if (class_exists('PIT_Podcast_Intelligence_Manager')) {
-            PIT_Podcast_Intelligence_Manager::get_instance();
-        }
-        if (class_exists('PIT_Formidable_Podcast_Bridge')) {
-            PIT_Formidable_Podcast_Bridge::get_instance();
-        }
-        if (class_exists('PIT_Email_Integration')) {
-            PIT_Email_Integration::get_instance();
-        }
-        if (class_exists('PIT_Shortcodes')) {
-            PIT_Shortcodes::get_instance();
-        }
-        if (class_exists('PIT_Frontend_Forms')) {
-            PIT_Frontend_Forms::get_instance();
-        }
-        if (class_exists('PIT_RSS_Bridge')) {
-            PIT_RSS_Bridge::get_instance();
-        }
-
         // Initialize admin components
         PIT_Admin_Page::init();
         PIT_Admin_Bulk_Tools::get_instance();
@@ -247,13 +201,9 @@ class Podcast_Influence_Tracker {
      * Register REST API routes
      */
     public function register_rest_routes() {
-        // New domain-based controllers
         PIT_REST_Podcasts::register_routes();
         PIT_REST_Guests::register_routes();
         PIT_REST_Export::register_routes();
-
-        // Legacy controller (for backwards compatibility)
-        PIT_REST_Controller::init();
     }
 
     /**
@@ -327,16 +277,6 @@ class Podcast_Influence_Tracker {
         // Frontend scripts if needed
     }
 }
-
-/**
- * Backwards compatibility aliases for class names
- *
- * These allow old code to continue working with new class names.
- */
-class_alias('PIT_Podcast_Repository', 'PIT_Podcast_Discovery');
-class_alias('PIT_Job_Repository', 'PIT_Job_Service');
-class_alias('PIT_Appearance_Repository', 'PIT_Guest_Appearance');
-class_alias('PIT_Social_Link_Repository', 'PIT_Social_Links');
 
 /**
  * Initialize the plugin
