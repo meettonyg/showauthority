@@ -20,7 +20,7 @@ class Database_Schema {
     /**
      * Database version for migrations
      */
-    const DB_VERSION = '2.0.0';
+    const DB_VERSION = '3.0.0';
 
     /**
      * Create all database tables
@@ -31,12 +31,114 @@ class Database_Schema {
 
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
 
+        self::create_user_tables($charset_collate);
         self::create_podcast_tables($charset_collate);
         self::create_guest_tables($charset_collate);
         self::create_social_metrics_tables($charset_collate);
         self::create_job_tables($charset_collate);
 
         update_option('pit_db_version', self::DB_VERSION);
+    }
+
+    /**
+     * Create user/multi-tenancy tables
+     */
+    private static function create_user_tables($charset_collate) {
+        global $wpdb;
+
+        // User limits and usage tracking
+        $table_limits = $wpdb->prefix . 'pit_user_limits';
+        $sql_limits = "CREATE TABLE $table_limits (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            user_id bigint(20) UNSIGNED NOT NULL,
+
+            -- Plan Info
+            plan_type enum('free', 'starter', 'pro', 'enterprise') DEFAULT 'free',
+            plan_started_at datetime DEFAULT NULL,
+            plan_expires_at datetime DEFAULT NULL,
+
+            -- Limits
+            max_tracked_podcasts int(11) DEFAULT 10,
+            max_guests int(11) DEFAULT 100,
+            max_api_calls_month int(11) DEFAULT 500,
+            max_exports_month int(11) DEFAULT 10,
+
+            -- Current Usage (reset monthly)
+            current_tracked_podcasts int(11) DEFAULT 0,
+            current_guests int(11) DEFAULT 0,
+            current_api_calls int(11) DEFAULT 0,
+            current_exports int(11) DEFAULT 0,
+
+            -- Billing cycle
+            billing_cycle_start date DEFAULT NULL,
+            last_usage_reset datetime DEFAULT NULL,
+
+            -- Metadata
+            stripe_customer_id varchar(100) DEFAULT NULL,
+            stripe_subscription_id varchar(100) DEFAULT NULL,
+
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (id),
+            UNIQUE KEY user_id_unique (user_id),
+            KEY plan_type_idx (plan_type)
+        ) $charset_collate;";
+
+        dbDelta($sql_limits);
+
+        // User podcast tracking (many-to-many: which podcasts each user tracks)
+        $table_user_podcasts = $wpdb->prefix . 'pit_user_podcasts';
+        $sql_user_podcasts = "CREATE TABLE $table_user_podcasts (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            user_id bigint(20) UNSIGNED NOT NULL,
+            podcast_id bigint(20) UNSIGNED NOT NULL,
+
+            -- User-specific tracking status
+            is_tracked tinyint(1) DEFAULT 1,
+            tracking_status enum('not_tracked', 'queued', 'processing', 'tracked', 'failed') DEFAULT 'queued',
+
+            -- User notes/tags
+            user_notes text DEFAULT NULL,
+            user_tags varchar(500) DEFAULT NULL,
+            is_favorite tinyint(1) DEFAULT 0,
+
+            -- User-specific metrics preferences
+            platforms_to_track text DEFAULT NULL,
+            refresh_frequency enum('daily', 'weekly', 'monthly', 'manual') DEFAULT 'weekly',
+
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (id),
+            UNIQUE KEY user_podcast_unique (user_id, podcast_id),
+            KEY user_id_idx (user_id),
+            KEY podcast_id_idx (podcast_id),
+            KEY is_tracked_idx (is_tracked)
+        ) $charset_collate;";
+
+        dbDelta($sql_user_podcasts);
+
+        // API rate limiting
+        $table_rate_limits = $wpdb->prefix . 'pit_rate_limits';
+        $sql_rate_limits = "CREATE TABLE $table_rate_limits (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            user_id bigint(20) UNSIGNED NOT NULL,
+            endpoint varchar(100) NOT NULL,
+
+            request_count int(11) DEFAULT 1,
+            window_start datetime NOT NULL,
+            window_seconds int(11) DEFAULT 60,
+
+            PRIMARY KEY (id),
+            UNIQUE KEY user_endpoint_window (user_id, endpoint, window_start),
+            KEY user_id_idx (user_id)
+        ) $charset_collate;";
+
+        dbDelta($sql_rate_limits);
     }
 
     /**
@@ -119,10 +221,22 @@ class Database_Schema {
 
         dbDelta($sql_podcasts);
 
-        // Podcast contacts (hosts, producers)
+        // Podcast contacts (hosts, producers) - CROWDSOURCED
         $table_contacts = $wpdb->prefix . 'pit_podcast_contacts';
         $sql_contacts = "CREATE TABLE $table_contacts (
             id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            -- Ownership & Visibility (Crowdsourcing)
+            created_by_user_id bigint(20) UNSIGNED DEFAULT NULL,
+            is_public tinyint(1) DEFAULT 1,
+            visibility enum('public', 'private', 'verified_only') DEFAULT 'public',
+
+            -- Community Verification
+            community_verified tinyint(1) DEFAULT 0,
+            verification_count int(11) DEFAULT 0,
+            last_verified_at datetime DEFAULT NULL,
+            last_verified_by bigint(20) UNSIGNED DEFAULT NULL,
+            report_count int(11) DEFAULT 0,
 
             -- Identity
             full_name varchar(255) NOT NULL,
@@ -166,7 +280,10 @@ class Database_Schema {
 
             PRIMARY KEY (id),
             KEY full_name_idx (full_name),
-            KEY email_idx (email)
+            KEY email_idx (email),
+            KEY created_by_user_id_idx (created_by_user_id),
+            KEY is_public_idx (is_public),
+            KEY community_verified_idx (community_verified)
         ) $charset_collate;";
 
         dbDelta($sql_contacts);
@@ -243,10 +360,13 @@ class Database_Schema {
     private static function create_guest_tables($charset_collate) {
         global $wpdb;
 
-        // Guests table
+        // Guests table - USER OWNED
         $table_guests = $wpdb->prefix . 'pit_guests';
         $sql_guests = "CREATE TABLE $table_guests (
             id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            -- User Ownership
+            user_id bigint(20) UNSIGNED NOT NULL,
 
             -- Identity
             full_name varchar(255) NOT NULL,
@@ -315,6 +435,7 @@ class Database_Schema {
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
             PRIMARY KEY (id),
+            KEY user_id_idx (user_id),
             KEY full_name_idx (full_name),
             KEY email_hash_idx (email_hash),
             KEY linkedin_url_hash_idx (linkedin_url_hash),
@@ -541,10 +662,13 @@ class Database_Schema {
     private static function create_job_tables($charset_collate) {
         global $wpdb;
 
-        // Job queue
+        // Job queue - USER OWNED
         $table_jobs = $wpdb->prefix . 'pit_jobs';
         $sql_jobs = "CREATE TABLE $table_jobs (
             id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            -- User Ownership
+            user_id bigint(20) UNSIGNED NOT NULL,
 
             podcast_id bigint(20) UNSIGNED NOT NULL,
 
@@ -567,6 +691,7 @@ class Database_Schema {
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
 
             PRIMARY KEY (id),
+            KEY user_id_idx (user_id),
             KEY podcast_id_idx (podcast_id),
             KEY status_idx (status),
             KEY priority_idx (priority),
@@ -575,10 +700,13 @@ class Database_Schema {
 
         dbDelta($sql_jobs);
 
-        // Cost log
+        // Cost log - USER OWNED
         $table_costs = $wpdb->prefix . 'pit_cost_log';
         $sql_costs = "CREATE TABLE $table_costs (
             id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            -- User Ownership
+            user_id bigint(20) UNSIGNED NOT NULL,
 
             podcast_id bigint(20) UNSIGNED DEFAULT NULL,
             job_id bigint(20) UNSIGNED DEFAULT NULL,
@@ -595,6 +723,7 @@ class Database_Schema {
             logged_at datetime DEFAULT CURRENT_TIMESTAMP,
 
             PRIMARY KEY (id),
+            KEY user_id_idx (user_id),
             KEY podcast_id_idx (podcast_id),
             KEY job_id_idx (job_id),
             KEY action_type_idx (action_type),
@@ -626,17 +755,25 @@ class Database_Schema {
         global $wpdb;
 
         $tables = [
+            // User tables
+            'pit_user_limits',
+            'pit_user_podcasts',
+            'pit_rate_limits',
+            // Podcast tables
             'pit_podcasts',
             'pit_podcast_contacts',
             'pit_podcast_contact_relationships',
             'pit_content_analysis',
+            // Guest tables
             'pit_guests',
             'pit_guest_appearances',
             'pit_topics',
             'pit_guest_topics',
             'pit_guest_network',
+            // Social metrics tables
             'pit_social_links',
             'pit_metrics',
+            // Job tables
             'pit_jobs',
             'pit_cost_log',
         ];
