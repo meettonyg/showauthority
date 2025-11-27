@@ -112,6 +112,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-youtube-api.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-apify-client.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-itunes-resolver.php';
+        require_once PIT_PLUGIN_DIR . 'includes/integrations/class-formidable-integration.php';
 
         // ===========================================
         // REST API
@@ -120,6 +121,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-podcasts.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-guests.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-export.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-public.php';
 
         // ===========================================
         // ADMIN
@@ -132,6 +134,11 @@ class Podcast_Influence_Tracker {
         // COST TRACKING
         // ===========================================
         require_once PIT_PLUGIN_DIR . 'includes/class-cost-tracker.php';
+
+        // ===========================================
+        // FRONTEND / SHORTCODES
+        // ===========================================
+        require_once PIT_PLUGIN_DIR . 'includes/class-shortcodes.php';
     }
 
     /**
@@ -208,8 +215,14 @@ class Podcast_Influence_Tracker {
         PIT_Admin_Page::init();
         PIT_Admin_Bulk_Tools::get_instance();
 
+        // Initialize frontend shortcodes
+        PIT_Shortcodes::init();
+
         // Initialize background jobs
         PIT_Background_Refresh::init();
+
+        // Initialize Formidable Forms integration
+        PIT_Formidable_Integration::init();
 
         // Hook for job processing
         add_action('pit_process_jobs', ['PIT_Job_Queue', 'process_next_job']);
@@ -228,6 +241,7 @@ class Podcast_Influence_Tracker {
         PIT_REST_Podcasts::register_routes();
         PIT_REST_Guests::register_routes();
         PIT_REST_Export::register_routes();
+        PIT_REST_Public::register_routes();
     }
 
     /**
