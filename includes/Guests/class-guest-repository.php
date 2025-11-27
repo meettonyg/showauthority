@@ -3,6 +3,7 @@
  * Guest Repository
  *
  * Handles all database operations for guests.
+ * Guests are user-owned records.
  *
  * @package PodcastInfluenceTracker
  * @subpackage Guests
@@ -15,53 +16,94 @@ if (!defined('ABSPATH')) {
 class PIT_Guest_Repository {
 
     /**
-     * Get guest by ID
+     * Get guest by ID (with optional user scoping)
      *
      * @param int $guest_id Guest ID
+     * @param int|null $user_id User ID for ownership check (null for admin)
      * @return object|null Guest object or null
      */
-    public static function get($guest_id) {
+    public static function get($guest_id, $user_id = null) {
         global $wpdb;
         $table = $wpdb->prefix . 'pit_guests';
 
-        return $wpdb->get_row($wpdb->prepare(
+        $guest = $wpdb->get_row($wpdb->prepare(
             "SELECT * FROM $table WHERE id = %d AND is_merged = 0",
             $guest_id
         ));
+
+        // Check ownership if user_id provided
+        if ($guest && $user_id !== null && !PIT_User_Context::is_admin()) {
+            if ((int) $guest->user_id !== (int) $user_id) {
+                return null;
+            }
+        }
+
+        return $guest;
     }
 
     /**
-     * Get guest by LinkedIn URL
+     * Check if user owns a guest record
+     *
+     * @param int $guest_id Guest ID
+     * @param int $user_id User ID
+     * @return bool
+     */
+    public static function user_owns($guest_id, $user_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_guests';
+
+        $owner_id = $wpdb->get_var($wpdb->prepare(
+            "SELECT user_id FROM $table WHERE id = %d",
+            $guest_id
+        ));
+
+        return $owner_id !== null && (int) $owner_id === (int) $user_id;
+    }
+
+    /**
+     * Get guest by LinkedIn URL (scoped to user)
      *
      * @param string $linkedin_url LinkedIn URL
+     * @param int|null $user_id User ID for scoping
      * @return object|null Guest object or null
      */
-    public static function get_by_linkedin($linkedin_url) {
+    public static function get_by_linkedin($linkedin_url, $user_id = null) {
         global $wpdb;
         $table = $wpdb->prefix . 'pit_guests';
         $hash = md5($linkedin_url);
 
-        return $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table WHERE linkedin_url_hash = %s AND is_merged = 0",
-            $hash
-        ));
+        $query = "SELECT * FROM $table WHERE linkedin_url_hash = %s AND is_merged = 0";
+        $params = [$hash];
+
+        if ($user_id !== null && !PIT_User_Context::is_admin()) {
+            $query .= " AND user_id = %d";
+            $params[] = $user_id;
+        }
+
+        return $wpdb->get_row($wpdb->prepare($query, ...$params));
     }
 
     /**
-     * Get guest by email
+     * Get guest by email (scoped to user)
      *
      * @param string $email Email address
+     * @param int|null $user_id User ID for scoping
      * @return object|null Guest object or null
      */
-    public static function get_by_email($email) {
+    public static function get_by_email($email, $user_id = null) {
         global $wpdb;
         $table = $wpdb->prefix . 'pit_guests';
         $hash = md5(strtolower(trim($email)));
 
-        return $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table WHERE email_hash = %s AND is_merged = 0",
-            $hash
-        ));
+        $query = "SELECT * FROM $table WHERE email_hash = %s AND is_merged = 0";
+        $params = [$hash];
+
+        if ($user_id !== null && !PIT_User_Context::is_admin()) {
+            $query .= " AND user_id = %d";
+            $params[] = $user_id;
+        }
+
+        return $wpdb->get_row($wpdb->prepare($query, ...$params));
     }
 
     /**
@@ -74,12 +116,24 @@ class PIT_Guest_Repository {
         global $wpdb;
         $table = $wpdb->prefix . 'pit_guests';
 
+        // Set user_id if not provided
+        if (!isset($data['user_id'])) {
+            $data['user_id'] = PIT_User_Context::get_user_id();
+        }
+
         // Generate hashes for deduplication
         $data = self::add_hashes($data);
 
         $wpdb->insert($table, $data);
 
-        return $wpdb->insert_id ?: false;
+        $guest_id = $wpdb->insert_id ?: false;
+
+        // Increment user's guest count
+        if ($guest_id && isset($data['user_id']) && $data['user_id'] > 0) {
+            PIT_User_Limits_Repository::increment_guests($data['user_id']);
+        }
+
+        return $guest_id;
     }
 
     /**
@@ -103,6 +157,7 @@ class PIT_Guest_Repository {
 
     /**
      * Insert or update guest (upsert with deduplication)
+     * Scoped to user - each user has their own guest records
      *
      * Deduplication priority:
      * 1. LinkedIn URL (highest confidence)
@@ -110,30 +165,37 @@ class PIT_Guest_Repository {
      * 3. Create new (never match by name alone)
      *
      * @param array $data Guest data
+     * @param int|null $user_id User ID for scoping (defaults to current user)
      * @return int Guest ID
      */
-    public static function upsert($data) {
+    public static function upsert($data, $user_id = null) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_guests';
+
+        // Set user_id
+        if ($user_id === null) {
+            $user_id = PIT_User_Context::get_user_id();
+        }
+        $data['user_id'] = $user_id;
         $data = self::add_hashes($data);
 
         $existing_id = null;
 
-        // Priority 1: LinkedIn URL
+        // Priority 1: LinkedIn URL (scoped to user)
         if (!empty($data['linkedin_url_hash'])) {
-            global $wpdb;
-            $table = $wpdb->prefix . 'pit_guests';
             $existing_id = $wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM $table WHERE linkedin_url_hash = %s AND is_merged = 0",
-                $data['linkedin_url_hash']
+                "SELECT id FROM $table WHERE linkedin_url_hash = %s AND user_id = %d AND is_merged = 0",
+                $data['linkedin_url_hash'],
+                $user_id
             ));
         }
 
-        // Priority 2: Email
+        // Priority 2: Email (scoped to user)
         if (!$existing_id && !empty($data['email_hash'])) {
-            global $wpdb;
-            $table = $wpdb->prefix . 'pit_guests';
             $existing_id = $wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM $table WHERE email_hash = %s AND is_merged = 0",
-                $data['email_hash']
+                "SELECT id FROM $table WHERE email_hash = %s AND user_id = %d AND is_merged = 0",
+                $data['email_hash'],
+                $user_id
             ));
         }
 
@@ -159,7 +221,7 @@ class PIT_Guest_Repository {
     }
 
     /**
-     * List guests with filtering and pagination
+     * List guests with filtering and pagination (scoped to user)
      *
      * @param array $args Query arguments
      * @return array Results with guests, total, and pages
@@ -179,12 +241,24 @@ class PIT_Guest_Repository {
             'verified_only' => false,
             'enriched_only' => false,
             'exclude_merged' => true,
+            'user_id' => null, // User scoping
         ];
 
         $args = wp_parse_args($args, $defaults);
 
         $where = [];
         $prepare_args = [];
+
+        // User scoping - non-admins can only see their own guests
+        if (!PIT_User_Context::is_admin()) {
+            $user_id = $args['user_id'] ?? PIT_User_Context::get_user_id();
+            $where[] = 'user_id = %d';
+            $prepare_args[] = $user_id;
+        } elseif (!empty($args['user_id'])) {
+            // Admin filtering by specific user
+            $where[] = 'user_id = %d';
+            $prepare_args[] = $args['user_id'];
+        }
 
         if ($args['exclude_merged']) {
             $where[] = 'is_merged = 0';
@@ -247,15 +321,25 @@ class PIT_Guest_Repository {
     }
 
     /**
-     * Find potential duplicates
+     * Find potential duplicates (scoped to user)
      *
+     * @param int|null $user_id User ID (null for admin to see all)
      * @return array Duplicate pairs
      */
-    public static function find_duplicates() {
+    public static function find_duplicates($user_id = null) {
         global $wpdb;
         $table = $wpdb->prefix . 'pit_guests';
 
         $duplicates = [];
+
+        // Build user clause
+        $user_clause = '';
+        if (!PIT_User_Context::is_admin()) {
+            $user_id = $user_id ?? PIT_User_Context::get_user_id();
+            $user_clause = $wpdb->prepare(" AND g1.user_id = %d AND g2.user_id = %d", $user_id, $user_id);
+        } elseif ($user_id !== null) {
+            $user_clause = $wpdb->prepare(" AND g1.user_id = %d AND g2.user_id = %d", $user_id, $user_id);
+        }
 
         // LinkedIn URL duplicates
         $linkedin_dups = $wpdb->get_results("
@@ -269,6 +353,7 @@ class PIT_Guest_Repository {
               AND g1.linkedin_url_hash != ''
               AND g1.is_merged = 0
               AND g2.is_merged = 0
+              {$user_clause}
         ");
 
         foreach ($linkedin_dups as $dup) {
@@ -296,6 +381,7 @@ class PIT_Guest_Repository {
               AND g1.is_merged = 0
               AND g2.is_merged = 0
               AND (g1.linkedin_url_hash IS NULL OR g1.linkedin_url_hash != g2.linkedin_url_hash)
+              {$user_clause}
         ");
 
         foreach ($email_dups as $dup) {
@@ -392,18 +478,28 @@ class PIT_Guest_Repository {
     }
 
     /**
-     * Get statistics
+     * Get statistics (scoped to user)
      *
+     * @param int|null $user_id User ID (null for admin to see all)
      * @return array Statistics
      */
-    public static function get_statistics() {
+    public static function get_statistics($user_id = null) {
         global $wpdb;
         $table = $wpdb->prefix . 'pit_guests';
 
+        // Build user clause
+        $user_clause = '';
+        if (!PIT_User_Context::is_admin()) {
+            $user_id = $user_id ?? PIT_User_Context::get_user_id();
+            $user_clause = $wpdb->prepare(" AND user_id = %d", $user_id);
+        } elseif ($user_id !== null) {
+            $user_clause = $wpdb->prepare(" AND user_id = %d", $user_id);
+        }
+
         return [
-            'total' => (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE is_merged = 0"),
-            'verified' => (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE manually_verified = 1 AND is_merged = 0"),
-            'enriched' => (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE enrichment_provider IS NOT NULL AND is_merged = 0"),
+            'total' => (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE is_merged = 0 {$user_clause}"),
+            'verified' => (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE manually_verified = 1 AND is_merged = 0 {$user_clause}"),
+            'enriched' => (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE enrichment_provider IS NOT NULL AND is_merged = 0 {$user_clause}"),
         ];
     }
 }

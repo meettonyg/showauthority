@@ -66,6 +66,12 @@ class Podcast_Influence_Tracker {
         // ===========================================
         require_once PIT_PLUGIN_DIR . 'includes/Core/class-database-schema.php';
 
+        // Multi-tenancy / SaaS Support
+        require_once PIT_PLUGIN_DIR . 'includes/Core/class-user-context.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Core/class-user-limits-repository.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Core/class-user-podcasts-repository.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Core/class-rate-limiter.php';
+
         // ===========================================
         // PODCASTS DOMAIN
         // ===========================================
@@ -160,6 +166,16 @@ class Podcast_Influence_Tracker {
             wp_schedule_event(time(), 'every_minute', 'pit_process_jobs');
         }
 
+        // Schedule rate limit cleanup (hourly)
+        if (!wp_next_scheduled('pit_rate_limit_cleanup')) {
+            wp_schedule_event(time(), 'hourly', 'pit_rate_limit_cleanup');
+        }
+
+        // Schedule monthly usage reset (daily check)
+        if (!wp_next_scheduled('pit_monthly_usage_reset')) {
+            wp_schedule_event(time(), 'daily', 'pit_monthly_usage_reset');
+        }
+
         // Flush rewrite rules
         flush_rewrite_rules();
     }
@@ -171,6 +187,8 @@ class Podcast_Influence_Tracker {
         // Clear scheduled cron jobs
         wp_clear_scheduled_hook('pit_background_refresh');
         wp_clear_scheduled_hook('pit_process_jobs');
+        wp_clear_scheduled_hook('pit_rate_limit_cleanup');
+        wp_clear_scheduled_hook('pit_monthly_usage_reset');
 
         // Flush rewrite rules
         flush_rewrite_rules();
@@ -195,6 +213,12 @@ class Podcast_Influence_Tracker {
 
         // Hook for job processing
         add_action('pit_process_jobs', ['PIT_Job_Queue', 'process_next_job']);
+
+        // Hook for rate limit cleanup
+        add_action('pit_rate_limit_cleanup', ['PIT_Rate_Limiter', 'cleanup']);
+
+        // Hook for monthly usage reset
+        add_action('pit_monthly_usage_reset', ['PIT_User_Limits_Repository', 'reset_monthly_usage']);
     }
 
     /**
