@@ -251,24 +251,25 @@ class Podcast_Influence_Tracker {
             return;
         }
 
-        // Vue 3 and dependencies
+        // Vue 3 - load in header to ensure it's available globally
         wp_enqueue_script(
             'pit-vue',
-            'https://unpkg.com/vue@3/dist/vue.global.prod.js',
+            'https://unpkg.com/vue@3.3.4/dist/vue.global.prod.js',
             [],
             '3.3.4',
-            true
+            false // Load in header
         );
 
+        // Pinia - depends on Vue being loaded first
         wp_enqueue_script(
             'pit-pinia',
-            'https://unpkg.com/pinia@2/dist/pinia.iife.prod.js',
+            'https://unpkg.com/pinia@2.1.7/dist/pinia.iife.js',
             ['pit-vue'],
-            '2.1.6',
-            true
+            '2.1.7',
+            false // Load in header
         );
 
-        // Admin app
+        // Admin app - load in footer after Vue and Pinia are ready
         wp_enqueue_script(
             'pit-admin-app',
             PIT_PLUGIN_URL . 'assets/js/admin-app.js',
@@ -285,8 +286,8 @@ class Podcast_Influence_Tracker {
             PIT_VERSION
         );
 
-        // Localize script
-        wp_localize_script('pit-admin-app', 'pitData', [
+        // Localize script - attach to pit-vue so it's available before admin-app loads
+        wp_localize_script('pit-vue', 'pitData', [
             'apiUrl' => rest_url('podcast-influence/v1'),
             'nonce' => wp_create_nonce('wp_rest'),
             'settings' => PIT_Settings::get_all(),
