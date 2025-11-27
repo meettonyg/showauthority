@@ -25,6 +25,12 @@ class PIT_Settings {
         'refresh_frequency' => 'weekly',
         'enable_notifications' => true,
         'notification_email' => '',
+
+        // Formidable Forms Integration
+        'tracker_form_id' => 0,
+        'rss_field_id' => '',
+        'podcast_name_field_id' => '',
+        'formidable_auto_sync' => true,
     ];
 
     /**

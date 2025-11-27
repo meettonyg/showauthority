@@ -20,7 +20,7 @@ class Database_Schema {
     /**
      * Database version for migrations
      */
-    const DB_VERSION = '3.0.0';
+    const DB_VERSION = '3.1.0';
 
     /**
      * Create all database tables
@@ -202,6 +202,10 @@ class Database_Schema {
             source varchar(50) DEFAULT NULL,
             feed_migration_history text DEFAULT NULL,
 
+            -- Formidable Forms Integration
+            formidable_entry_id bigint(20) UNSIGNED DEFAULT NULL,
+            last_synced_at datetime DEFAULT NULL,
+
             -- Status
             is_active tinyint(1) DEFAULT 1,
 
@@ -216,7 +220,8 @@ class Database_Schema {
             KEY title_idx (title(191)),
             KEY is_tracked_idx (is_tracked),
             KEY tracking_status_idx (tracking_status),
-            KEY source_idx (source)
+            KEY source_idx (source),
+            KEY formidable_entry_idx (formidable_entry_id)
         ) $charset_collate;";
 
         dbDelta($sql_podcasts);

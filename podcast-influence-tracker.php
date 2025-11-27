@@ -112,6 +112,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-youtube-api.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-apify-client.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-itunes-resolver.php';
+        require_once PIT_PLUGIN_DIR . 'includes/integrations/class-formidable-integration.php';
 
         // ===========================================
         // REST API
@@ -120,6 +121,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-podcasts.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-guests.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-export.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-public.php';
 
         // ===========================================
         // ADMIN
@@ -132,6 +134,11 @@ class Podcast_Influence_Tracker {
         // COST TRACKING
         // ===========================================
         require_once PIT_PLUGIN_DIR . 'includes/class-cost-tracker.php';
+
+        // ===========================================
+        // FRONTEND / SHORTCODES
+        // ===========================================
+        require_once PIT_PLUGIN_DIR . 'includes/class-shortcodes.php';
     }
 
     /**
@@ -208,8 +215,14 @@ class Podcast_Influence_Tracker {
         PIT_Admin_Page::init();
         PIT_Admin_Bulk_Tools::get_instance();
 
+        // Initialize frontend shortcodes
+        PIT_Shortcodes::init();
+
         // Initialize background jobs
         PIT_Background_Refresh::init();
+
+        // Initialize Formidable Forms integration
+        PIT_Formidable_Integration::init();
 
         // Hook for job processing
         add_action('pit_process_jobs', ['PIT_Job_Queue', 'process_next_job']);
@@ -228,6 +241,7 @@ class Podcast_Influence_Tracker {
         PIT_REST_Podcasts::register_routes();
         PIT_REST_Guests::register_routes();
         PIT_REST_Export::register_routes();
+        PIT_REST_Public::register_routes();
     }
 
     /**
@@ -251,24 +265,25 @@ class Podcast_Influence_Tracker {
             return;
         }
 
-        // Vue 3 and dependencies
+        // Vue 3 - load in header to ensure it's available globally
         wp_enqueue_script(
             'pit-vue',
-            'https://unpkg.com/vue@3/dist/vue.global.prod.js',
+            'https://unpkg.com/vue@3.3.4/dist/vue.global.prod.js',
             [],
             '3.3.4',
-            true
+            false // Load in header
         );
 
+        // Pinia - depends on Vue being loaded first
         wp_enqueue_script(
             'pit-pinia',
-            'https://unpkg.com/pinia@2/dist/pinia.iife.prod.js',
+            'https://unpkg.com/pinia@2.1.7/dist/pinia.iife.js',
             ['pit-vue'],
-            '2.1.6',
-            true
+            '2.1.7',
+            false // Load in header
         );
 
-        // Admin app
+        // Admin app - load in footer after Vue and Pinia are ready
         wp_enqueue_script(
             'pit-admin-app',
             PIT_PLUGIN_URL . 'assets/js/admin-app.js',
@@ -285,8 +300,8 @@ class Podcast_Influence_Tracker {
             PIT_VERSION
         );
 
-        // Localize script
-        wp_localize_script('pit-admin-app', 'pitData', [
+        // Localize script - attach to pit-vue so it's available before admin-app loads
+        wp_localize_script('pit-vue', 'pitData', [
             'apiUrl' => rest_url('podcast-influence/v1'),
             'nonce' => wp_create_nonce('wp_rest'),
             'settings' => PIT_Settings::get_all(),
