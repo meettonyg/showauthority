@@ -56,6 +56,17 @@ class PIT_REST_Formidable {
             ]
         );
 
+        // GET /formidable/failed - Get failed entries with details
+        register_rest_route(
+            self::NAMESPACE,
+            '/formidable/failed',
+            [
+                'methods'             => WP_REST_Server::READABLE,
+                'callback'            => [__CLASS__, 'get_failed_entries'],
+                'permission_callback' => [__CLASS__, 'check_admin_permission'],
+            ]
+        );
+
         // POST /formidable/retry - Retry failed syncs
         register_rest_route(
             self::NAMESPACE,
@@ -64,6 +75,23 @@ class PIT_REST_Formidable {
                 'methods'             => WP_REST_Server::CREATABLE,
                 'callback'            => [__CLASS__, 'retry_failed'],
                 'permission_callback' => [__CLASS__, 'check_admin_permission'],
+            ]
+        );
+
+        // GET /formidable/diagnose/(?P<entry_id>\d+) - Diagnose specific entry
+        register_rest_route(
+            self::NAMESPACE,
+            '/formidable/diagnose/(?P<entry_id>\d+)',
+            [
+                'methods'             => WP_REST_Server::READABLE,
+                'callback'            => [__CLASS__, 'diagnose_entry'],
+                'permission_callback' => [__CLASS__, 'check_admin_permission'],
+                'args'                => [
+                    'entry_id' => [
+                        'required' => true,
+                        'type'     => 'integer',
+                    ],
+                ],
             ]
         );
     }
@@ -128,6 +156,7 @@ class PIT_REST_Formidable {
         }
 
         $synced = 0;
+        $skipped = 0;
         $podcasts_created = 0;
         $failed = 0;
         $errors = [];
@@ -139,6 +168,7 @@ class PIT_REST_Formidable {
                 
                 if ($existing_link && $existing_link->sync_status === 'synced') {
                     // Already synced successfully, skip
+                    $skipped++;
                     continue;
                 }
 
@@ -173,6 +203,7 @@ class PIT_REST_Formidable {
             'success'          => true,
             'message'          => "Sync completed. {$synced} entries synced, {$podcasts_created} new podcasts created.",
             'synced'           => $synced,
+            'skipped'          => $skipped,
             'podcasts_created' => $podcasts_created,
             'failed'           => $failed,
             'total_entries'    => count($entries),
@@ -226,6 +257,82 @@ class PIT_REST_Formidable {
     }
 
     /**
+     * Get failed entries with details
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response
+     */
+    public static function get_failed_entries($request) {
+        global $wpdb;
+
+        $links_table = $wpdb->prefix . 'pit_formidable_podcast_links';
+        $entries_table = $wpdb->prefix . 'frm_items';
+        $metas_table = $wpdb->prefix . 'frm_item_metas';
+
+        // Check if table exists
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$links_table'");
+        if (!$table_exists) {
+            return rest_ensure_response([
+                'failed_entries' => [],
+                'count'          => 0,
+                'message'        => 'Link table does not exist',
+            ]);
+        }
+
+        // Get RSS field ID from settings
+        $rss_field_id = PIT_Settings::get('rss_field_id', '');
+        $podcast_name_field_id = 9926; // Podcast field in Interview Tracker
+
+        // Get failed entries with their error messages
+        $failed = $wpdb->get_results(
+            "SELECT 
+                l.id,
+                l.formidable_entry_id,
+                l.sync_status,
+                l.sync_error,
+                l.rss_url_at_sync,
+                l.created_at,
+                l.updated_at,
+                e.created_at as entry_created_at
+             FROM $links_table l
+             LEFT JOIN $entries_table e ON l.formidable_entry_id = e.id
+             WHERE l.sync_status = 'failed'
+             ORDER BY l.updated_at DESC"
+        );
+
+        // Enrich with podcast name and RSS URL from Formidable
+        foreach ($failed as &$entry) {
+            // Get podcast name from Formidable entry
+            $podcast_name = $wpdb->get_var($wpdb->prepare(
+                "SELECT meta_value FROM $metas_table WHERE item_id = %d AND field_id = %d",
+                $entry->formidable_entry_id,
+                $podcast_name_field_id
+            ));
+            $entry->podcast_name = $podcast_name ?: '(Unknown)';
+
+            // Get RSS URL from Formidable entry if not stored
+            if (empty($entry->rss_url_at_sync) && $rss_field_id) {
+                $rss_url = $wpdb->get_var($wpdb->prepare(
+                    "SELECT meta_value FROM $metas_table WHERE item_id = %d AND field_id = %d",
+                    $entry->formidable_entry_id,
+                    $rss_field_id
+                ));
+                $entry->rss_url = $rss_url ?: '(No RSS URL)';
+            } else {
+                $entry->rss_url = $entry->rss_url_at_sync ?: '(No RSS URL)';
+            }
+
+            // Add edit link
+            $entry->edit_url = admin_url("admin.php?page=formidable-entries&frm_action=edit&id={$entry->formidable_entry_id}");
+        }
+
+        return rest_ensure_response([
+            'failed_entries' => $failed,
+            'count'          => count($failed),
+        ]);
+    }
+
+    /**
      * Retry failed sync entries
      *
      * @param WP_REST_Request $request
@@ -247,6 +354,153 @@ class PIT_REST_Formidable {
             'retried' => $retried,
             'message' => "{$retried} entries retried",
         ]);
+    }
+
+    /**
+     * Diagnose a specific Formidable entry
+     * Shows link status, podcast status, and any issues
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response
+     */
+    public static function diagnose_entry($request) {
+        global $wpdb;
+
+        $entry_id = (int) $request->get_param('entry_id');
+        
+        $links_table = $wpdb->prefix . 'pit_formidable_podcast_links';
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+        $entries_table = $wpdb->prefix . 'frm_items';
+        $metas_table = $wpdb->prefix . 'frm_item_metas';
+
+        $diagnosis = [
+            'entry_id' => $entry_id,
+            'issues' => [],
+            'status' => 'unknown',
+        ];
+
+        // 1. Check if Formidable entry exists
+        $entry = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $entries_table WHERE id = %d",
+            $entry_id
+        ));
+
+        if (!$entry) {
+            $diagnosis['issues'][] = "Formidable entry #$entry_id does not exist";
+            $diagnosis['status'] = 'error';
+            return rest_ensure_response($diagnosis);
+        }
+
+        $diagnosis['formidable_entry'] = [
+            'id' => $entry->id,
+            'form_id' => $entry->form_id,
+            'is_draft' => $entry->is_draft,
+            'created_at' => $entry->created_at,
+            'user_id' => $entry->user_id,
+        ];
+
+        // 2. Get RSS URL from entry
+        $rss_field_id = PIT_Settings::get('rss_field_id', '');
+        $rss_url = $rss_field_id ? $wpdb->get_var($wpdb->prepare(
+            "SELECT meta_value FROM $metas_table WHERE item_id = %d AND field_id = %d",
+            $entry_id,
+            $rss_field_id
+        )) : null;
+
+        $diagnosis['rss_url'] = $rss_url ?: '(not found)';
+        $diagnosis['rss_field_id'] = $rss_field_id;
+
+        if (!$rss_url) {
+            $diagnosis['issues'][] = "No RSS URL found in field $rss_field_id";
+        }
+
+        // 3. Check link table
+        $link = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $links_table WHERE formidable_entry_id = %d",
+            $entry_id
+        ));
+
+        if (!$link) {
+            $diagnosis['link_record'] = null;
+            $diagnosis['issues'][] = "No link record exists in pit_formidable_podcast_links";
+        } else {
+            $diagnosis['link_record'] = [
+                'id' => $link->id,
+                'podcast_id' => $link->podcast_id,
+                'sync_status' => $link->sync_status,
+                'sync_error' => $link->sync_error,
+                'rss_url_at_sync' => $link->rss_url_at_sync,
+                'synced_at' => $link->synced_at,
+                'created_at' => $link->created_at,
+            ];
+
+            if ($link->sync_status === 'failed') {
+                $diagnosis['issues'][] = "Link status is 'failed': " . ($link->sync_error ?: 'Unknown error');
+            }
+
+            if (empty($link->podcast_id)) {
+                $diagnosis['issues'][] = "Link record has NULL podcast_id";
+            }
+        }
+
+        // 4. Check podcast table
+        if ($link && !empty($link->podcast_id)) {
+            $podcast = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $podcasts_table WHERE id = %d",
+                $link->podcast_id
+            ));
+
+            if (!$podcast) {
+                $diagnosis['podcast_record'] = null;
+                $diagnosis['issues'][] = "CRITICAL: Podcast ID {$link->podcast_id} does NOT exist in pit_podcasts table!";
+            } else {
+                $diagnosis['podcast_record'] = [
+                    'id' => $podcast->id,
+                    'title' => $podcast->title,
+                    'rss_feed_url' => $podcast->rss_feed_url,
+                    'tracking_status' => $podcast->tracking_status,
+                    'source' => $podcast->source,
+                    'created_at' => $podcast->created_at,
+                ];
+            }
+        }
+
+        // 5. Check if podcast exists by RSS URL (maybe different ID)
+        if ($rss_url) {
+            $podcast_by_rss = $wpdb->get_row($wpdb->prepare(
+                "SELECT id, title, rss_feed_url FROM $podcasts_table WHERE rss_feed_url = %s",
+                $rss_url
+            ));
+
+            $diagnosis['podcast_by_rss'] = $podcast_by_rss ? [
+                'id' => $podcast_by_rss->id,
+                'title' => $podcast_by_rss->title,
+            ] : null;
+
+            if (!$podcast_by_rss) {
+                $diagnosis['issues'][] = "No podcast found with RSS URL: $rss_url";
+            }
+
+            if ($podcast_by_rss && $link && $link->podcast_id != $podcast_by_rss->id) {
+                $diagnosis['issues'][] = "MISMATCH: Link points to podcast_id {$link->podcast_id}, but RSS URL matches podcast_id {$podcast_by_rss->id}";
+            }
+        }
+
+        // 6. Determine final status
+        if (empty($diagnosis['issues'])) {
+            $diagnosis['status'] = 'healthy';
+        } elseif (count($diagnosis['issues']) === 1 && strpos($diagnosis['issues'][0], 'failed') !== false) {
+            $diagnosis['status'] = 'sync_failed';
+        } else {
+            $diagnosis['status'] = 'error';
+        }
+
+        // 7. Suggest fix
+        if ($diagnosis['status'] !== 'healthy') {
+            $diagnosis['suggested_fix'] = 'Re-run sync by clicking "Sync Now" in Settings, or check error logs for details';
+        }
+
+        return rest_ensure_response($diagnosis);
     }
 
     /**
@@ -274,15 +528,21 @@ class PIT_REST_Formidable {
      * @return string|null
      */
     private static function get_entry_field_value($entry_id, $field_id) {
-        // Method 1: Use Formidable Pro helper
-        if (class_exists('FrmProEntryMetaHelper')) {
-            $value = FrmProEntryMetaHelper::get_post_or_meta_value($entry_id, $field_id);
-            if ($value) {
-                return $value;
-            }
+        // Direct database lookup (most reliable)
+        global $wpdb;
+        $table = $wpdb->prefix . 'frm_item_metas';
+
+        $value = $wpdb->get_var($wpdb->prepare(
+            "SELECT meta_value FROM $table WHERE item_id = %d AND field_id = %d",
+            $entry_id,
+            $field_id
+        ));
+
+        if ($value) {
+            return $value;
         }
 
-        // Method 2: Use Formidable EntryMeta
+        // Fallback: Use Formidable EntryMeta
         if (class_exists('FrmEntryMeta')) {
             $value = FrmEntryMeta::get_entry_meta_by_field($entry_id, $field_id);
             if ($value) {
@@ -290,14 +550,6 @@ class PIT_REST_Formidable {
             }
         }
 
-        // Method 3: Direct database lookup
-        global $wpdb;
-        $table = $wpdb->prefix . 'frm_item_metas';
-
-        return $wpdb->get_var($wpdb->prepare(
-            "SELECT meta_value FROM $table WHERE item_id = %d AND field_id = %d",
-            $entry_id,
-            $field_id
-        ));
+        return null;
     }
 }

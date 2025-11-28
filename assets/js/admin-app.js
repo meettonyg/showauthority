@@ -828,7 +828,7 @@ const Analytics = {
     },
 };
 
-// Settings Component
+// Settings Component - Updated with View Failed Entries
 const Settings = {
     template: `
         <div class="pit-settings">
@@ -921,9 +921,16 @@ const Settings = {
                             Sync existing Interview Tracker entries with the podcast database. 
                             This will create podcast records for any entries not yet linked.
                         </p>
-                        <div style="display:flex;align-items:center;gap:15px">
+                        <div style="display:flex;align-items:center;gap:15px;flex-wrap:wrap">
                             <button type="button" @click="syncFormidableEntries" class="button" :disabled="syncing">
                                 {{ syncing ? 'Syncing...' : 'Sync Now' }}
+                            </button>
+                            <button type="button" @click="retryFailedEntries" class="button" :disabled="retrying || !syncStats?.failed_entries">
+                                {{ retrying ? 'Retrying...' : 'Retry Failed (' + (syncStats?.failed_entries || 0) + ')' }}
+                            </button>
+                            <button type="button" @click="toggleFailedEntries" class="button" 
+                                v-if="syncStats?.failed_entries > 0">
+                                {{ showFailedEntries ? 'Hide Failed' : 'View Failed Entries' }}
                             </button>
                             <span v-if="syncStatus" :class="syncStatus.success ? 'success-message' : 'error-message'">
                                 {{ syncStatus.message }}
@@ -934,9 +941,39 @@ const Settings = {
                             <ul style="margin:5px 0 0 20px;padding:0">
                                 <li>Total linked entries: {{ syncStats.total_entries }}</li>
                                 <li>Unique podcasts: {{ syncStats.unique_podcasts }}</li>
-                                <li>Failed entries: {{ syncStats.failed_entries }}</li>
+                                <li>Failed entries: <span :style="syncStats.failed_entries > 0 ? 'color:#dc3232;font-weight:bold' : ''">{{ syncStats.failed_entries }}</span></li>
                                 <li v-if="syncStats.last_sync">Last sync: {{ formatDate(syncStats.last_sync) }}</li>
                             </ul>
+                        </div>
+
+                        <!-- Failed Entries Table -->
+                        <div v-if="showFailedEntries && failedEntries.length > 0" style="margin-top:15px">
+                            <h4 style="margin-bottom:10px;color:#dc3232">Failed Entries ({{ failedEntries.length }})</h4>
+                            <table class="wp-list-table widefat fixed striped" style="margin-top:10px">
+                                <thead>
+                                    <tr>
+                                        <th style="width:80px">Entry ID</th>
+                                        <th>Podcast Name</th>
+                                        <th>RSS URL</th>
+                                        <th>Error</th>
+                                        <th style="width:80px">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="entry in failedEntries" :key="entry.id">
+                                        <td><strong>#{{ entry.formidable_entry_id }}</strong></td>
+                                        <td>{{ entry.podcast_name || '(Unknown)' }}</td>
+                                        <td style="word-break:break-all;font-size:12px">{{ entry.rss_url || '(No RSS)' }}</td>
+                                        <td style="color:#dc3232;font-size:12px">{{ entry.sync_error || 'Unknown error' }}</td>
+                                        <td>
+                                            <a :href="entry.edit_url" target="_blank" class="button button-small">Edit</a>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div v-else-if="showFailedEntries && loadingFailed" style="margin-top:15px;padding:20px;text-align:center">
+                            Loading failed entries...
                         </div>
                     </div>
                 </div>
@@ -971,6 +1008,11 @@ const Settings = {
             syncing: false,
             syncStatus: null,
             syncStats: null,
+            // Failed entries handling
+            showFailedEntries: false,
+            failedEntries: [],
+            loadingFailed: false,
+            retrying: false,
         };
     },
     methods: {
@@ -1058,6 +1100,11 @@ const Settings = {
 
                 // Refresh stats after sync
                 await this.fetchSyncStats();
+                
+                // Refresh failed entries if showing
+                if (this.showFailedEntries) {
+                    await this.fetchFailedEntries();
+                }
             } catch (error) {
                 this.syncStatus = {
                     success: false,
@@ -1078,6 +1125,67 @@ const Settings = {
                 }
             } catch (error) {
                 console.error('Failed to fetch sync stats:', error);
+            }
+        },
+        async toggleFailedEntries() {
+            this.showFailedEntries = !this.showFailedEntries;
+            if (this.showFailedEntries && this.failedEntries.length === 0) {
+                await this.fetchFailedEntries();
+            }
+        },
+        async fetchFailedEntries() {
+            this.loadingFailed = true;
+            try {
+                const response = await fetch(`${pitData.apiUrl}/formidable/failed`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    this.failedEntries = data.failed_entries || [];
+                }
+            } catch (error) {
+                console.error('Failed to fetch failed entries:', error);
+            } finally {
+                this.loadingFailed = false;
+            }
+        },
+        async retryFailedEntries() {
+            this.retrying = true;
+            this.syncStatus = null;
+
+            try {
+                const response = await fetch(`${pitData.apiUrl}/formidable/retry`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': pitData.nonce,
+                    },
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'Retry failed');
+                }
+
+                this.syncStatus = {
+                    success: true,
+                    message: `Retried ${data.retried || 0} entries`,
+                };
+
+                // Refresh stats and failed entries
+                await this.fetchSyncStats();
+                if (this.showFailedEntries) {
+                    await this.fetchFailedEntries();
+                }
+            } catch (error) {
+                this.syncStatus = {
+                    success: false,
+                    message: error.message,
+                };
+            } finally {
+                this.retrying = false;
             }
         },
     },

@@ -469,16 +469,24 @@ class PIT_Shortcodes {
      * Uses the pit_formidable_podcast_links table for the relationship.
      */
     private static function get_podcast_from_formidable_context() {
-        // Check for entry_id in URL first
-        $entry_id = isset($_GET['entry_id']) ? absint($_GET['entry_id']) : 0;
-        if (!$entry_id) {
-            $entry_id = isset($_GET['entry']) ? absint($_GET['entry']) : 0;
+        // Check for entry_id in URL - multiple parameter names used by Formidable
+        $entry_id = 0;
+        
+        // Check various URL parameter names
+        $param_names = ['entry_id', 'entry', 'interid', 'id'];
+        foreach ($param_names as $param) {
+            if (isset($_GET[$param]) && absint($_GET[$param]) > 0) {
+                $entry_id = absint($_GET[$param]);
+                break;
+            }
         }
 
-        // Method 1: Check global $entry (set by Formidable in views)
-        global $entry;
-        if (!$entry_id && isset($entry) && is_object($entry)) {
-            $entry_id = $entry->id;
+        // Fallback: Check global $entry (set by Formidable in views)
+        if (!$entry_id) {
+            global $entry;
+            if (isset($entry) && is_object($entry) && isset($entry->id)) {
+                $entry_id = absint($entry->id);
+            }
         }
 
         if (!$entry_id) {
