@@ -122,6 +122,34 @@ class PIT_REST_Formidable {
                 ],
             ]
         );
+
+        // GET /formidable/by-podcast/(?P<podcast_id>\d+) - Get entry ID for a podcast
+        register_rest_route(
+            self::NAMESPACE,
+            '/formidable/by-podcast/(?P<podcast_id>\d+)',
+            [
+                'methods'             => WP_REST_Server::READABLE,
+                'callback'            => [__CLASS__, 'get_entry_for_podcast'],
+                'permission_callback' => [__CLASS__, 'check_admin_permission'],
+                'args'                => [
+                    'podcast_id' => [
+                        'required' => true,
+                        'type'     => 'integer',
+                    ],
+                ],
+            ]
+        );
+
+        // GET /formidable/by-podcasts - Get entry IDs for multiple podcasts
+        register_rest_route(
+            self::NAMESPACE,
+            '/formidable/by-podcasts',
+            [
+                'methods'             => WP_REST_Server::READABLE,
+                'callback'            => [__CLASS__, 'get_entries_for_podcasts'],
+                'permission_callback' => [__CLASS__, 'check_admin_permission'],
+            ]
+        );
     }
 
     /**
@@ -639,5 +667,94 @@ class PIT_REST_Formidable {
         }
 
         return null;
+    }
+
+    /**
+     * Get Formidable entry ID for a podcast
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response
+     */
+    public static function get_entry_for_podcast($request) {
+        global $wpdb;
+
+        $podcast_id = (int) $request->get_param('podcast_id');
+        $links_table = $wpdb->prefix . 'pit_formidable_podcast_links';
+
+        $link = $wpdb->get_row($wpdb->prepare(
+            "SELECT formidable_entry_id, sync_status FROM $links_table WHERE podcast_id = %d LIMIT 1",
+            $podcast_id
+        ));
+
+        if (!$link) {
+            return rest_ensure_response([
+                'podcast_id' => $podcast_id,
+                'entry_id' => null,
+                'message' => 'No Formidable entry linked to this podcast',
+            ]);
+        }
+
+        return rest_ensure_response([
+            'podcast_id' => $podcast_id,
+            'entry_id' => (int) $link->formidable_entry_id,
+            'sync_status' => $link->sync_status,
+            'interview_url' => "https://guestify.ai/app/interview/detail/?interid={$link->formidable_entry_id}",
+        ]);
+    }
+
+    /**
+     * Get Formidable entry IDs for multiple podcasts
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response
+     */
+    public static function get_entries_for_podcasts($request) {
+        global $wpdb;
+
+        $podcast_ids_param = $request->get_param('podcast_ids');
+        
+        if (empty($podcast_ids_param)) {
+            return new WP_Error('missing_param', 'podcast_ids parameter is required', ['status' => 400]);
+        }
+
+        $podcast_ids = array_map('intval', explode(',', $podcast_ids_param));
+        $links_table = $wpdb->prefix . 'pit_formidable_podcast_links';
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+
+        $placeholders = implode(',', array_fill(0, count($podcast_ids), '%d'));
+
+        $links = $wpdb->get_results($wpdb->prepare(
+            "SELECT l.podcast_id, l.formidable_entry_id, l.sync_status, p.title as podcast_title
+             FROM $links_table l
+             LEFT JOIN $podcasts_table p ON l.podcast_id = p.id
+             WHERE l.podcast_id IN ($placeholders)",
+            ...$podcast_ids
+        ));
+
+        $result = [];
+        foreach ($links as $link) {
+            $result[$link->podcast_id] = [
+                'podcast_id' => (int) $link->podcast_id,
+                'podcast_title' => $link->podcast_title,
+                'entry_id' => (int) $link->formidable_entry_id,
+                'sync_status' => $link->sync_status,
+                'interview_url' => "https://guestify.ai/app/interview/detail/?interid={$link->formidable_entry_id}",
+            ];
+        }
+
+        // Include missing podcast IDs
+        foreach ($podcast_ids as $pid) {
+            if (!isset($result[$pid])) {
+                $result[$pid] = [
+                    'podcast_id' => $pid,
+                    'podcast_title' => null,
+                    'entry_id' => null,
+                    'sync_status' => null,
+                    'interview_url' => null,
+                ];
+            }
+        }
+
+        return rest_ensure_response($result);
     }
 }
