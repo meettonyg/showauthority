@@ -3,7 +3,8 @@
  * Formidable Forms Integration
  *
  * Syncs Interview Tracker form entries with the podcast database.
- * Pulls RSS feed URLs from form entries and triggers podcast discovery.
+ * Uses a separate link table (pit_formidable_podcast_links) for many-to-one relationships.
+ * Multiple users can track the same podcast from different Formidable entries.
  *
  * @package PodcastInfluenceTracker
  * @subpackage Integrations
@@ -46,62 +47,188 @@ class PIT_Formidable_Integration {
             return; // Not the interview tracker form
         }
 
-        // Get the entry
-        $entry = self::get_entry($entry_id);
-        if (!$entry) {
+        // Get RSS field configuration
+        $rss_field_id = PIT_Settings::get('rss_field_id', '');
+
+        if (!$rss_field_id) {
+            self::log_sync_error($entry_id, 'RSS field not configured');
             return;
         }
 
-        // Get RSS field configuration
-        $rss_field_id = PIT_Settings::get('rss_field_id', '');
-        $podcast_name_field_id = PIT_Settings::get('podcast_name_field_id', '');
-
-        if (!$rss_field_id) {
-            return; // RSS field not configured
-        }
-
         // Extract RSS URL from entry
-        $rss_url = self::get_field_value($entry, $rss_field_id);
+        $rss_url = self::get_entry_field_value($entry_id, $rss_field_id);
+        
         if (!$rss_url || !filter_var($rss_url, FILTER_VALIDATE_URL)) {
-            return; // No valid RSS URL
+            self::log_sync_error($entry_id, 'Invalid or missing RSS URL');
+            return;
         }
 
-        // Get podcast name (optional)
-        $podcast_name = $podcast_name_field_id
-            ? self::get_field_value($entry, $podcast_name_field_id)
-            : '';
+        try {
+            // Find or create podcast
+            $podcast_id = self::find_or_create_podcast($rss_url);
 
-        // Check if podcast already exists by RSS URL
-        global $wpdb;
-        $table = $wpdb->prefix . 'pit_podcasts';
+            if (!$podcast_id) {
+                self::log_sync_error($entry_id, 'Failed to find or create podcast');
+                return;
+            }
 
-        $existing = $wpdb->get_row($wpdb->prepare(
-            "SELECT id FROM $table WHERE rss_feed_url = %s",
-            $rss_url
-        ));
+            // Create/update link between entry and podcast
+            self::link_entry_to_podcast($entry_id, $podcast_id, $rss_url);
 
-        if ($existing) {
-            // Update existing podcast with Formidable entry link
-            $wpdb->update(
-                $table,
-                [
-                    'formidable_entry_id' => $entry_id,
-                    'last_synced_at' => current_time('mysql'),
-                ],
-                ['id' => $existing->id]
-            );
-
-            $podcast_id = $existing->id;
-        } else {
-            // Create new podcast using Discovery Engine for full parsing
-            $podcast_id = self::discover_and_create_podcast($rss_url, $podcast_name, $entry_id);
-        }
-
-        if ($podcast_id) {
-            // Queue discovery job for this podcast
-            self::queue_discovery($podcast_id, $rss_url);
+            // Queue discovery job if not already processed
+            self::maybe_queue_discovery($podcast_id);
 
             do_action('pit_formidable_entry_synced', $podcast_id, $entry_id);
+
+        } catch (Exception $e) {
+            self::log_sync_error($entry_id, $e->getMessage());
+        }
+    }
+
+    /**
+     * Find existing podcast or create new one from RSS
+     *
+     * @param string $rss_url
+     * @return int|false Podcast ID
+     */
+    private static function find_or_create_podcast($rss_url) {
+        // Check if podcast already exists by RSS URL
+        $existing = PIT_Podcast_Repository::get_by_rss($rss_url);
+
+        if ($existing) {
+            return $existing->id;
+        }
+
+        // Create new podcast using Discovery Engine
+        if (class_exists('PIT_Discovery_Engine')) {
+            try {
+                $result = PIT_Discovery_Engine::discover_from_rss($rss_url);
+
+                if ($result && !empty($result['podcast_id'])) {
+                    return $result['podcast_id'];
+                }
+            } catch (Exception $e) {
+                error_log('PIT Formidable Integration - Discovery failed: ' . $e->getMessage());
+            }
+        }
+
+        // Fallback: Create basic podcast entry
+        $podcast_data = [
+            'title'           => self::extract_podcast_name_from_url($rss_url),
+            'rss_feed_url'    => $rss_url,
+            'tracking_status' => 'not_tracked',
+            'source'          => 'formidable_import',
+        ];
+
+        return PIT_Podcast_Repository::create($podcast_data);
+    }
+
+    /**
+     * Create or update link between Formidable entry and podcast
+     *
+     * @param int $entry_id
+     * @param int $podcast_id
+     * @param string $rss_url
+     */
+    private static function link_entry_to_podcast($entry_id, $podcast_id, $rss_url) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_formidable_podcast_links';
+
+        $user_id = get_current_user_id() ?: 0;
+
+        // Check if link already exists
+        $existing = $wpdb->get_row($wpdb->prepare(
+            "SELECT id FROM $table WHERE formidable_entry_id = %d",
+            $entry_id
+        ));
+
+        $data = [
+            'formidable_entry_id' => $entry_id,
+            'podcast_id'          => $podcast_id,
+            'user_id'             => $user_id,
+            'synced_at'           => current_time('mysql'),
+            'sync_status'         => 'synced',
+            'sync_error'          => null,
+            'rss_url_at_sync'     => $rss_url,
+            'updated_at'          => current_time('mysql'),
+        ];
+
+        if ($existing) {
+            $wpdb->update($table, $data, ['id' => $existing->id]);
+        } else {
+            $data['created_at'] = current_time('mysql');
+            $wpdb->insert($table, $data);
+        }
+    }
+
+    /**
+     * Log sync error for an entry
+     *
+     * @param int $entry_id
+     * @param string $error_message
+     */
+    private static function log_sync_error($entry_id, $error_message) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_formidable_podcast_links';
+
+        $existing = $wpdb->get_row($wpdb->prepare(
+            "SELECT id FROM $table WHERE formidable_entry_id = %d",
+            $entry_id
+        ));
+
+        $data = [
+            'sync_status' => 'failed',
+            'sync_error'  => $error_message,
+            'updated_at'  => current_time('mysql'),
+        ];
+
+        if ($existing) {
+            $wpdb->update($table, $data, ['id' => $existing->id]);
+        } else {
+            $data['formidable_entry_id'] = $entry_id;
+            $data['user_id'] = get_current_user_id() ?: 0;
+            $data['created_at'] = current_time('mysql');
+            $wpdb->insert($table, $data);
+        }
+
+        error_log("PIT Formidable Sync Error [Entry $entry_id]: $error_message");
+    }
+
+    /**
+     * Queue discovery job if podcast hasn't been processed
+     *
+     * @param int $podcast_id
+     */
+    private static function maybe_queue_discovery($podcast_id) {
+        // Check if podcast has already been enriched
+        $podcast = PIT_Podcast_Repository::get($podcast_id);
+
+        if (!$podcast) {
+            return;
+        }
+
+        // Skip if already discovered or tracked
+        if (!empty($podcast->social_links_discovered) || $podcast->tracking_status === 'tracked') {
+            return;
+        }
+
+        // Check if job already queued
+        if (class_exists('PIT_Job_Queue') && PIT_Job_Queue::has_pending_job($podcast_id, 'initial_tracking')) {
+            return;
+        }
+
+        // Queue enrichment job
+        $user_id = get_current_user_id() ?: 1;
+
+        if (class_exists('PIT_Job_Queue')) {
+            PIT_Job_Queue::add([
+                'user_id'            => $user_id,
+                'podcast_id'         => $podcast_id,
+                'job_type'           => 'initial_tracking',
+                'platforms_to_fetch' => json_encode(['twitter', 'instagram', 'youtube', 'linkedin', 'facebook']),
+                'status'             => 'queued',
+                'priority'           => 50,
+            ]);
         }
     }
 
@@ -112,129 +239,196 @@ class PIT_Formidable_Integration {
         $tracker_form_id = PIT_Settings::get('tracker_form_id', 0);
 
         if (!$tracker_form_id) {
-            return;
+            return 0;
         }
 
         // Get all entries for this form
-        $entries = self::get_form_entries($tracker_form_id);
-
-        foreach ($entries as $entry) {
-            self::sync_entry($entry->id, $tracker_form_id);
-        }
-    }
-
-    /**
-     * Queue podcast discovery job
-     *
-     * @param int $podcast_id
-     * @param string $rss_url
-     */
-    private static function queue_discovery($podcast_id, $rss_url) {
-        // Queue enrichment job (contacts, social links, etc.)
-        $user_id = get_current_user_id() ?: 1; // Default to admin if no user context
-
-        PIT_Job_Queue::add([
-            'user_id'           => $user_id,
-            'podcast_id'        => $podcast_id,
-            'job_type'          => 'initial_tracking',
-            'platforms_to_fetch' => json_encode(['twitter', 'instagram', 'youtube', 'linkedin', 'facebook']),
-            'status'            => 'queued',
-            'priority'          => 50,
-        ]);
-    }
-
-    /**
-     * Discover and create a new podcast from RSS feed
-     *
-     * Uses the Discovery Engine to parse RSS and extract metadata.
-     *
-     * @param string $rss_url RSS feed URL
-     * @param string $podcast_name Optional name override
-     * @param int $entry_id Formidable entry ID
-     * @return int|false Podcast ID or false on failure
-     */
-    private static function discover_and_create_podcast($rss_url, $podcast_name, $entry_id) {
-        // Use Discovery Engine if available
-        if (class_exists('PIT_Discovery_Engine')) {
-            try {
-                $result = PIT_Discovery_Engine::discover_from_rss($rss_url);
-
-                if ($result && !empty($result['podcast_id'])) {
-                    // Update with Formidable entry link
-                    PIT_Podcast_Repository::update($result['podcast_id'], [
-                        'formidable_entry_id' => $entry_id,
-                        'last_synced_at' => current_time('mysql'),
-                    ]);
-
-                    return $result['podcast_id'];
-                }
-            } catch (Exception $e) {
-                error_log('PIT Formidable Integration - Discovery failed: ' . $e->getMessage());
-            }
-        }
-
-        // Fallback: Create basic podcast entry and queue for discovery
-        $podcast_data = [
-            'title' => $podcast_name ?: self::extract_podcast_name_from_url($rss_url),
-            'rss_feed_url' => $rss_url,
-            'formidable_entry_id' => $entry_id,
-            'tracking_status' => 'queued',
-            'last_synced_at' => current_time('mysql'),
-        ];
-
-        return PIT_Podcast_Repository::create($podcast_data);
-    }
-
-    /**
-     * Get Formidable entry by ID
-     *
-     * @param int $entry_id
-     * @return object|null
-     */
-    private static function get_entry($entry_id) {
-        if (!class_exists('FrmEntry')) {
-            return null;
-        }
-
-        return FrmEntry::getOne($entry_id, true);
-    }
-
-    /**
-     * Get all entries for a form
-     *
-     * @param int $form_id
-     * @return array
-     */
-    private static function get_form_entries($form_id) {
         global $wpdb;
-
         $table = $wpdb->prefix . 'frm_items';
 
-        return $wpdb->get_results($wpdb->prepare(
+        $entries = $wpdb->get_results($wpdb->prepare(
             "SELECT id FROM $table WHERE form_id = %d AND is_draft = 0",
-            $form_id
+            $tracker_form_id
+        ));
+
+        $synced = 0;
+        foreach ($entries as $entry) {
+            self::sync_entry($entry->id, $tracker_form_id);
+            $synced++;
+        }
+
+        return $synced;
+    }
+
+    /**
+     * Get podcast ID for a Formidable entry
+     *
+     * @param int $entry_id
+     * @return int|null
+     */
+    public static function get_podcast_for_entry($entry_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_formidable_podcast_links';
+
+        return $wpdb->get_var($wpdb->prepare(
+            "SELECT podcast_id FROM $table WHERE formidable_entry_id = %d AND sync_status = 'synced'",
+            $entry_id
         ));
     }
 
     /**
-     * Get field value from entry
+     * Get all entry IDs linked to a podcast
      *
-     * @param object $entry
-     * @param string $field_id
-     * @return string
+     * @param int $podcast_id
+     * @return array
      */
-    private static function get_field_value($entry, $field_id) {
-        if (!$entry || !isset($entry->metas)) {
-            return '';
+    public static function get_entries_for_podcast($podcast_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_formidable_podcast_links';
+
+        return $wpdb->get_col($wpdb->prepare(
+            "SELECT formidable_entry_id FROM $table WHERE podcast_id = %d AND sync_status = 'synced'",
+            $podcast_id
+        ));
+    }
+
+    /**
+     * Get full link record for an entry
+     *
+     * @param int $entry_id
+     * @return object|null
+     */
+    public static function get_link_for_entry($entry_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_formidable_podcast_links';
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE formidable_entry_id = %d",
+            $entry_id
+        ));
+    }
+
+    /**
+     * Get entries that need syncing (no successful link)
+     *
+     * @return array
+     */
+    public static function get_entries_needing_sync() {
+        global $wpdb;
+
+        $tracker_form_id = PIT_Settings::get('tracker_form_id', 0);
+        if (!$tracker_form_id) {
+            return [];
         }
 
-        foreach ($entry->metas as $meta) {
-            if ((string) $meta->field_id === (string) $field_id) {
-                return $meta->meta_value;
+        $entries_table = $wpdb->prefix . 'frm_items';
+        $links_table = $wpdb->prefix . 'pit_formidable_podcast_links';
+
+        // Find entries without a successful link
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT e.id, e.created_at, l.sync_status, l.sync_error
+             FROM $entries_table e
+             LEFT JOIN $links_table l ON e.id = l.formidable_entry_id
+             WHERE e.form_id = %d 
+               AND e.is_draft = 0
+               AND (l.id IS NULL OR l.sync_status != 'synced')
+             ORDER BY e.created_at DESC",
+            $tracker_form_id
+        ));
+    }
+
+    /**
+     * Retry all failed sync entries
+     *
+     * @return int Number of entries retried
+     */
+    public static function retry_failed_syncs() {
+        $tracker_form_id = PIT_Settings::get('tracker_form_id', 0);
+        if (!$tracker_form_id) {
+            return 0;
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_formidable_podcast_links';
+
+        $failed = $wpdb->get_col(
+            "SELECT formidable_entry_id FROM $table WHERE sync_status = 'failed'"
+        );
+
+        foreach ($failed as $entry_id) {
+            self::sync_entry($entry_id, $tracker_form_id);
+        }
+
+        return count($failed);
+    }
+
+    /**
+     * Get sync status statistics
+     *
+     * @return array
+     */
+    public static function get_sync_status() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_formidable_podcast_links';
+
+        // Check if table exists
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table'");
+        
+        if (!$table_exists) {
+            return [
+                'total_entries'   => 0,
+                'unique_podcasts' => 0,
+                'failed_entries'  => 0,
+                'last_sync'       => null,
+            ];
+        }
+
+        $total = $wpdb->get_var("SELECT COUNT(*) FROM $table");
+        $unique_podcasts = $wpdb->get_var("SELECT COUNT(DISTINCT podcast_id) FROM $table WHERE podcast_id IS NOT NULL");
+        $failed = $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE sync_status = 'failed'");
+        $last_sync = $wpdb->get_var("SELECT MAX(synced_at) FROM $table WHERE sync_status = 'synced'");
+
+        return [
+            'total_entries'   => (int) $total,
+            'unique_podcasts' => (int) $unique_podcasts,
+            'failed_entries'  => (int) $failed,
+            'last_sync'       => $last_sync,
+        ];
+    }
+
+    /**
+     * Get field value from Formidable entry
+     *
+     * @param int $entry_id
+     * @param int|string $field_id
+     * @return string|null
+     */
+    private static function get_entry_field_value($entry_id, $field_id) {
+        // Method 1: Use Formidable Pro helper
+        if (class_exists('FrmProEntryMetaHelper')) {
+            $value = FrmProEntryMetaHelper::get_post_or_meta_value($entry_id, $field_id);
+            if ($value) {
+                return $value;
             }
         }
 
-        return '';
+        // Method 2: Use Formidable EntryMeta
+        if (class_exists('FrmEntryMeta')) {
+            $value = FrmEntryMeta::get_entry_meta_by_field($entry_id, $field_id);
+            if ($value) {
+                return $value;
+            }
+        }
+
+        // Method 3: Direct database lookup
+        global $wpdb;
+        $table = $wpdb->prefix . 'frm_item_metas';
+
+        return $wpdb->get_var($wpdb->prepare(
+            "SELECT meta_value FROM $table WHERE item_id = %d AND field_id = %d",
+            $entry_id,
+            $field_id
+        ));
     }
 
     /**
@@ -251,28 +445,5 @@ class PIT_Formidable_Integration {
         $host = preg_replace('/^www\./i', '', $host);
 
         return ucwords(str_replace(['.', '-', '_'], ' ', $host));
-    }
-
-    /**
-     * Get sync status for admin display
-     *
-     * @return array
-     */
-    public static function get_sync_status() {
-        global $wpdb;
-        $table = $wpdb->prefix . 'pit_podcasts';
-
-        $total_synced = $wpdb->get_var(
-            "SELECT COUNT(*) FROM $table WHERE formidable_entry_id IS NOT NULL"
-        );
-
-        $last_sync = $wpdb->get_var(
-            "SELECT MAX(last_synced_at) FROM $table WHERE formidable_entry_id IS NOT NULL"
-        );
-
-        return [
-            'total_synced' => (int) $total_synced,
-            'last_sync' => $last_sync,
-        ];
     }
 }

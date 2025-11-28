@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('PIT_VERSION', '2.0.0');
+define('PIT_VERSION', '2.0.1');
 define('PIT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PIT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('PIT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -123,6 +123,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-export.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-public.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-settings.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-formidable.php';
 
         // ===========================================
         // ADMIN
@@ -209,6 +210,11 @@ class Podcast_Influence_Tracker {
         // Load text domain
         load_plugin_textdomain('podcast-influence-tracker', false, dirname(PIT_PLUGIN_BASENAME) . '/languages');
 
+        // Check for database migration
+        if (Database_Schema::needs_migration()) {
+            Database_Schema::migrate();
+        }
+
         // Add custom cron schedules
         add_filter('cron_schedules', [$this, 'add_cron_schedules']);
 
@@ -244,6 +250,7 @@ class Podcast_Influence_Tracker {
         PIT_REST_Export::register_routes();
         PIT_REST_Public::register_routes();
         PIT_REST_Settings::register_routes();
+        PIT_REST_Formidable::register_routes();
     }
 
     /**

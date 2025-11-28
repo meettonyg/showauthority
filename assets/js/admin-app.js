@@ -914,6 +914,31 @@ const Settings = {
                             min="0" class="small-text">
                         <span class="description">Field ID that contains the RSS feed URL</span>
                     </div>
+
+                    <div class="setting-row" style="margin-top:20px;padding-top:20px;border-top:1px solid #ddd">
+                        <h4 style="margin-top:0">Sync Interview Tracker Entries</h4>
+                        <p class="description" style="margin-bottom:10px">
+                            Sync existing Interview Tracker entries with the podcast database. 
+                            This will create podcast records for any entries not yet linked.
+                        </p>
+                        <div style="display:flex;align-items:center;gap:15px">
+                            <button type="button" @click="syncFormidableEntries" class="button" :disabled="syncing">
+                                {{ syncing ? 'Syncing...' : 'Sync Now' }}
+                            </button>
+                            <span v-if="syncStatus" :class="syncStatus.success ? 'success-message' : 'error-message'">
+                                {{ syncStatus.message }}
+                            </span>
+                        </div>
+                        <div v-if="syncStats" style="margin-top:15px;padding:10px;background:#f5f5f5;border-radius:4px">
+                            <strong>Sync Status:</strong>
+                            <ul style="margin:5px 0 0 20px;padding:0">
+                                <li>Total linked entries: {{ syncStats.total_entries }}</li>
+                                <li>Unique podcasts: {{ syncStats.unique_podcasts }}</li>
+                                <li>Failed entries: {{ syncStats.failed_entries }}</li>
+                                <li v-if="syncStats.last_sync">Last sync: {{ formatDate(syncStats.last_sync) }}</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
 
                 <p class="submit">
@@ -943,9 +968,16 @@ const Settings = {
             saving: false,
             saved: false,
             error: null,
+            syncing: false,
+            syncStatus: null,
+            syncStats: null,
         };
     },
     methods: {
+        formatDate(dateStr) {
+            if (!dateStr) return '';
+            return new Date(dateStr).toLocaleString();
+        },
         formatPlatform(platform) {
             const names = {
                 youtube: 'YouTube',
@@ -1000,6 +1032,54 @@ const Settings = {
                 this.saving = false;
             }
         },
+        async syncFormidableEntries() {
+            this.syncing = true;
+            this.syncStatus = null;
+
+            try {
+                const response = await fetch(`${pitData.apiUrl}/formidable/sync`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': pitData.nonce,
+                    },
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'Sync failed');
+                }
+
+                this.syncStatus = {
+                    success: true,
+                    message: `Synced ${data.synced || 0} entries, created ${data.podcasts_created || 0} podcasts`,
+                };
+
+                // Refresh stats after sync
+                await this.fetchSyncStats();
+            } catch (error) {
+                this.syncStatus = {
+                    success: false,
+                    message: error.message,
+                };
+            } finally {
+                this.syncing = false;
+            }
+        },
+        async fetchSyncStats() {
+            try {
+                const response = await fetch(`${pitData.apiUrl}/formidable/status`, {
+                    headers: { 'X-WP-Nonce': pitData.nonce },
+                });
+
+                if (response.ok) {
+                    this.syncStats = await response.json();
+                }
+            } catch (error) {
+                console.error('Failed to fetch sync stats:', error);
+            }
+        },
     },
     mounted() {
         // Load initial settings from pitData if available
@@ -1007,6 +1087,7 @@ const Settings = {
             this.settings = { ...this.settings, ...pitData.settings };
         }
         this.fetchSettings();
+        this.fetchSyncStats();
     },
 };
 
