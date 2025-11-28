@@ -26,6 +26,19 @@ class PIT_Shortcodes {
         add_shortcode('podcast_metrics', [__CLASS__, 'podcast_metrics']);
         add_shortcode('podcast_contacts', [__CLASS__, 'podcast_contacts']);
 
+        // Platform-specific social link shortcodes
+        add_shortcode('podcast_youtube', [__CLASS__, 'podcast_youtube']);
+        add_shortcode('podcast_twitter', [__CLASS__, 'podcast_twitter']);
+        add_shortcode('podcast_linkedin', [__CLASS__, 'podcast_linkedin']);
+        add_shortcode('podcast_facebook', [__CLASS__, 'podcast_facebook']);
+        add_shortcode('podcast_instagram', [__CLASS__, 'podcast_instagram']);
+        add_shortcode('podcast_tiktok', [__CLASS__, 'podcast_tiktok']);
+        add_shortcode('podcast_spotify', [__CLASS__, 'podcast_spotify']);
+        add_shortcode('podcast_apple', [__CLASS__, 'podcast_apple']);
+        
+        // Generic social links shortcode (shows all)
+        add_shortcode('podcast_social_links', [__CLASS__, 'podcast_social_links']);
+
         // Enqueue frontend scripts/styles
         add_action('wp_enqueue_scripts', [__CLASS__, 'enqueue_assets']);
     }
@@ -626,5 +639,345 @@ class PIT_Shortcodes {
             }
         }
         return substr($initials, 0, 2);
+    }
+
+    /**
+     * ===========================================
+     * PLATFORM-SPECIFIC SOCIAL LINK SHORTCODES
+     * ===========================================
+     */
+
+    /**
+     * Platform display configurations
+     */
+    private static function get_platform_config() {
+        return [
+            'youtube' => [
+                'name' => 'YouTube',
+                'icon' => '📺',
+                'color' => '#FF0000',
+                'cta' => 'Subscribe',
+            ],
+            'twitter' => [
+                'name' => 'Twitter/X',
+                'icon' => '𝕏',
+                'color' => '#000000',
+                'cta' => 'Follow',
+            ],
+            'linkedin' => [
+                'name' => 'LinkedIn',
+                'icon' => '💼',
+                'color' => '#0077B5',
+                'cta' => 'Connect',
+            ],
+            'facebook' => [
+                'name' => 'Facebook',
+                'icon' => '📘',
+                'color' => '#1877F2',
+                'cta' => 'Like',
+            ],
+            'instagram' => [
+                'name' => 'Instagram',
+                'icon' => '📷',
+                'color' => '#E4405F',
+                'cta' => 'Follow',
+            ],
+            'tiktok' => [
+                'name' => 'TikTok',
+                'icon' => '🎵',
+                'color' => '#000000',
+                'cta' => 'Follow',
+            ],
+            'spotify' => [
+                'name' => 'Spotify',
+                'icon' => '🎧',
+                'color' => '#1DB954',
+                'cta' => 'Listen',
+            ],
+            'apple_podcasts' => [
+                'name' => 'Apple Podcasts',
+                'icon' => '🎙️',
+                'color' => '#9933CC',
+                'cta' => 'Listen',
+            ],
+        ];
+    }
+
+    /**
+     * Get social link for a specific platform
+     *
+     * @param int $podcast_id Podcast ID
+     * @param string $platform Platform name
+     * @return object|null Social link object or null
+     */
+    private static function get_social_link_by_platform($podcast_id, $platform) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_social_links';
+
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE podcast_id = %d AND platform = %s AND active = 1 LIMIT 1",
+            $podcast_id,
+            $platform
+        ));
+    }
+
+    /**
+     * Get all social links for a podcast
+     *
+     * @param int $podcast_id Podcast ID
+     * @return array Array of social link objects
+     */
+    private static function get_all_social_links($podcast_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_social_links';
+
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table WHERE podcast_id = %d AND active = 1 ORDER BY platform ASC",
+            $podcast_id
+        ));
+    }
+
+    /**
+     * Generic platform shortcode handler
+     *
+     * @param array $atts Shortcode attributes
+     * @param string $platform Platform name
+     * @return string HTML output
+     */
+    private static function platform_shortcode($atts, $platform) {
+        $atts = shortcode_atts([
+            'podcast_id' => 0,
+            'rss'        => '',
+            'layout'     => 'button',  // button, link, icon, url_only
+            'class'      => '',
+            'target'     => '_blank',
+            'show_handle' => 'yes',
+            'fallback'   => '',        // Text to show if not found
+        ], $atts);
+
+        // Get podcast
+        $podcast = null;
+        if ($atts['podcast_id']) {
+            $podcast = self::get_podcast_by_id((int) $atts['podcast_id']);
+        } elseif ($atts['rss']) {
+            $podcast = self::get_podcast_by_rss($atts['rss']);
+        } else {
+            $podcast = self::get_podcast_from_formidable_context();
+        }
+
+        if (!$podcast) {
+            return $atts['fallback'] ? esc_html($atts['fallback']) : '';
+        }
+
+        // Get social link for this platform
+        $link = self::get_social_link_by_platform($podcast->id, $platform);
+
+        if (!$link || empty($link->profile_url)) {
+            return $atts['fallback'] ? esc_html($atts['fallback']) : '';
+        }
+
+        $config = self::get_platform_config()[$platform] ?? [
+            'name' => ucfirst($platform),
+            'icon' => '🔗',
+            'color' => '#333333',
+            'cta' => 'Visit',
+        ];
+
+        // Render based on layout
+        return self::render_social_link($link, $config, $atts);
+    }
+
+    /**
+     * Render a single social link
+     */
+    private static function render_social_link($link, $config, $atts) {
+        $url = esc_url($link->profile_url);
+        $handle = esc_html($link->profile_handle);
+        $name = esc_html($config['name']);
+        $icon = $config['icon'];
+        $color = esc_attr($config['color']);
+        $cta = esc_html($config['cta']);
+        $target = esc_attr($atts['target']);
+        $class = esc_attr($atts['class']);
+        $show_handle = $atts['show_handle'] === 'yes';
+
+        switch ($atts['layout']) {
+            case 'url_only':
+                return $url;
+
+            case 'icon':
+                return sprintf(
+                    '<a href="%s" target="%s" class="pit-social-icon pit-social-%s %s" title="%s" style="color: %s;">%s</a>',
+                    $url, $target, esc_attr($link->platform), $class, $name, $color, $icon
+                );
+
+            case 'link':
+                $text = $show_handle && $handle ? "@{$handle}" : $name;
+                return sprintf(
+                    '<a href="%s" target="%s" class="pit-social-link pit-social-%s %s">%s</a>',
+                    $url, $target, esc_attr($link->platform), $class, $text
+                );
+
+            case 'button':
+            default:
+                $text = $show_handle && $handle ? "{$cta} @{$handle}" : "{$cta} on {$name}";
+                return sprintf(
+                    '<a href="%s" target="%s" class="pit-social-button pit-social-%s %s" style="background-color: %s; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; display: inline-block;">%s %s</a>',
+                    $url, $target, esc_attr($link->platform), $class, $color, $icon, $text
+                );
+        }
+    }
+
+    /**
+     * YouTube shortcode
+     * Usage: [podcast_youtube] or [podcast_youtube podcast_id="123" layout="button"]
+     */
+    public static function podcast_youtube($atts) {
+        return self::platform_shortcode($atts, 'youtube');
+    }
+
+    /**
+     * Twitter/X shortcode
+     * Usage: [podcast_twitter] or [podcast_twitter layout="icon"]
+     */
+    public static function podcast_twitter($atts) {
+        return self::platform_shortcode($atts, 'twitter');
+    }
+
+    /**
+     * LinkedIn shortcode
+     * Usage: [podcast_linkedin] or [podcast_linkedin layout="link"]
+     */
+    public static function podcast_linkedin($atts) {
+        return self::platform_shortcode($atts, 'linkedin');
+    }
+
+    /**
+     * Facebook shortcode
+     * Usage: [podcast_facebook]
+     */
+    public static function podcast_facebook($atts) {
+        return self::platform_shortcode($atts, 'facebook');
+    }
+
+    /**
+     * Instagram shortcode
+     * Usage: [podcast_instagram]
+     */
+    public static function podcast_instagram($atts) {
+        return self::platform_shortcode($atts, 'instagram');
+    }
+
+    /**
+     * TikTok shortcode
+     * Usage: [podcast_tiktok]
+     */
+    public static function podcast_tiktok($atts) {
+        return self::platform_shortcode($atts, 'tiktok');
+    }
+
+    /**
+     * Spotify shortcode
+     * Usage: [podcast_spotify]
+     */
+    public static function podcast_spotify($atts) {
+        return self::platform_shortcode($atts, 'spotify');
+    }
+
+    /**
+     * Apple Podcasts shortcode
+     * Usage: [podcast_apple]
+     */
+    public static function podcast_apple($atts) {
+        return self::platform_shortcode($atts, 'apple_podcasts');
+    }
+
+    /**
+     * All social links shortcode
+     *
+     * Usage: [podcast_social_links]
+     *        [podcast_social_links layout="icons" platforms="youtube,twitter,linkedin"]
+     *        [podcast_social_links layout="buttons"]
+     */
+    public static function podcast_social_links($atts) {
+        $atts = shortcode_atts([
+            'podcast_id' => 0,
+            'rss'        => '',
+            'layout'     => 'icons',    // icons, buttons, links, list
+            'platforms'  => '',         // Comma-separated list, empty = all
+            'class'      => '',
+            'target'     => '_blank',
+            'separator'  => ' ',
+        ], $atts);
+
+        // Get podcast
+        $podcast = null;
+        if ($atts['podcast_id']) {
+            $podcast = self::get_podcast_by_id((int) $atts['podcast_id']);
+        } elseif ($atts['rss']) {
+            $podcast = self::get_podcast_by_rss($atts['rss']);
+        } else {
+            $podcast = self::get_podcast_from_formidable_context();
+        }
+
+        if (!$podcast) {
+            return '';
+        }
+
+        // Get all social links
+        $links = self::get_all_social_links($podcast->id);
+
+        if (empty($links)) {
+            return '';
+        }
+
+        // Filter by platforms if specified
+        if (!empty($atts['platforms'])) {
+            $allowed = array_map('trim', explode(',', strtolower($atts['platforms'])));
+            $links = array_filter($links, function($link) use ($allowed) {
+                return in_array($link->platform, $allowed);
+            });
+        }
+
+        if (empty($links)) {
+            return '';
+        }
+
+        $configs = self::get_platform_config();
+        $output_parts = [];
+
+        // Map layout to individual link layout
+        $link_layout = 'icon';
+        if ($atts['layout'] === 'buttons') {
+            $link_layout = 'button';
+        } elseif ($atts['layout'] === 'links' || $atts['layout'] === 'list') {
+            $link_layout = 'link';
+        }
+
+        foreach ($links as $link) {
+            $config = $configs[$link->platform] ?? [
+                'name' => ucfirst($link->platform),
+                'icon' => '🔗',
+                'color' => '#333333',
+                'cta' => 'Visit',
+            ];
+
+            $link_atts = [
+                'layout' => $link_layout,
+                'class' => $atts['class'],
+                'target' => $atts['target'],
+                'show_handle' => 'no',
+            ];
+
+            $output_parts[] = self::render_social_link($link, $config, $link_atts);
+        }
+
+        // Render based on layout
+        if ($atts['layout'] === 'list') {
+            return '<ul class="pit-social-list"><li>' . implode('</li><li>', $output_parts) . '</li></ul>';
+        }
+
+        $wrapper_class = 'pit-social-links pit-social-' . esc_attr($atts['layout']);
+        return '<div class="' . $wrapper_class . '">' . implode($atts['separator'], $output_parts) . '</div>';
     }
 }

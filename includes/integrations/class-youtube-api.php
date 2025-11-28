@@ -329,4 +329,214 @@ class PIT_YouTube_API {
             'cost_usd' => 0, // Free tier
         ];
     }
+
+    /**
+     * Check if YouTube API is configured
+     *
+     * @return bool
+     */
+    public static function is_configured() {
+        $settings = PIT_Settings::get_all();
+        $api_key = $settings['youtube_api_key'] ?? '';
+        return !empty($api_key);
+    }
+
+    /**
+     * Test API connection
+     *
+     * @return array|WP_Error Test results
+     */
+    public static function test_connection() {
+        $settings = PIT_Settings::get_all();
+        $api_key = $settings['youtube_api_key'] ?? '';
+
+        if (empty($api_key)) {
+            return new WP_Error('no_api_key', 'YouTube API key not configured. Add it in Settings.');
+        }
+
+        // Test with a known channel (YouTube's own channel)
+        $endpoint = self::API_BASE_URL . '/channels';
+        $params = [
+            'part' => 'statistics',
+            'id' => 'UCBR8-60-B28hp2BmDPdntcQ', // YouTube channel
+            'key' => $api_key,
+        ];
+
+        $response = wp_remote_get(add_query_arg($params, $endpoint), [
+            'timeout' => 15,
+        ]);
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($status_code !== 200) {
+            $error_msg = $body['error']['message'] ?? 'Unknown error';
+            return new WP_Error('api_error', "API test failed ($status_code): $error_msg");
+        }
+
+        if (empty($body['items'])) {
+            return new WP_Error('unexpected_response', 'API returned empty response');
+        }
+
+        return [
+            'success' => true,
+            'message' => 'YouTube API connection successful',
+            'quota_note' => 'Free tier: 10,000 quota units/day',
+        ];
+    }
+
+    /**
+     * Estimate quota usage for batch fetch
+     *
+     * @param int $channel_count Number of channels
+     * @return array Quota estimate
+     */
+    public static function estimate_quota_usage($channel_count) {
+        // channels.list with statistics,snippet = ~3 quota units per request
+        // Each request can handle 50 channels
+        $requests_needed = ceil($channel_count / 50);
+        $quota_per_request = 3;
+        $total_quota = $requests_needed * $quota_per_request;
+
+        return [
+            'channels' => $channel_count,
+            'requests_needed' => $requests_needed,
+            'quota_per_request' => $quota_per_request,
+            'total_quota' => $total_quota,
+            'daily_limit' => 10000,
+            'percentage_of_daily' => round(($total_quota / 10000) * 100, 2) . '%',
+        ];
+    }
+
+    /**
+     * Batch fetch metrics for multiple channels
+     *
+     * YouTube API allows up to 50 channel IDs per request.
+     *
+     * @param array $channels Array of ['podcast_id' => X, 'profile_url' => Y, 'handle' => Z]
+     * @return array Results keyed by podcast_id
+     */
+    public static function batch_fetch($channels) {
+        $settings = PIT_Settings::get_all();
+        $api_key = $settings['youtube_api_key'] ?? '';
+
+        if (empty($api_key)) {
+            return new WP_Error('no_api_key', 'YouTube API key not configured');
+        }
+
+        $results = [];
+        $channel_map = []; // channel_id => podcast_id
+
+        // First, resolve all channel IDs
+        foreach ($channels as $channel) {
+            $channel_id = self::extract_channel_id(
+                $channel['profile_url'],
+                $channel['handle'] ?? '',
+                $api_key
+            );
+
+            if (is_wp_error($channel_id)) {
+                $results[$channel['podcast_id']] = [
+                    'success' => false,
+                    'error' => $channel_id->get_error_message(),
+                ];
+                continue;
+            }
+
+            $channel_map[$channel_id] = $channel['podcast_id'];
+        }
+
+        if (empty($channel_map)) {
+            return $results;
+        }
+
+        // Batch fetch in groups of 50
+        $channel_ids = array_keys($channel_map);
+        $batches = array_chunk($channel_ids, 50);
+
+        foreach ($batches as $batch) {
+            $endpoint = self::API_BASE_URL . '/channels';
+            $params = [
+                'part' => 'statistics,snippet',
+                'id' => implode(',', $batch),
+                'key' => $api_key,
+            ];
+
+            $response = wp_remote_get(add_query_arg($params, $endpoint), [
+                'timeout' => 30,
+            ]);
+
+            if (is_wp_error($response)) {
+                foreach ($batch as $cid) {
+                    $podcast_id = $channel_map[$cid];
+                    if (!isset($results[$podcast_id])) {
+                        $results[$podcast_id] = [
+                            'success' => false,
+                            'error' => $response->get_error_message(),
+                        ];
+                    }
+                }
+                continue;
+            }
+
+            $body = json_decode(wp_remote_retrieve_body($response), true);
+
+            if (isset($body['error'])) {
+                foreach ($batch as $cid) {
+                    $podcast_id = $channel_map[$cid];
+                    if (!isset($results[$podcast_id])) {
+                        $results[$podcast_id] = [
+                            'success' => false,
+                            'error' => $body['error']['message'] ?? 'API error',
+                        ];
+                    }
+                }
+                continue;
+            }
+
+            // Process results
+            foreach ($body['items'] ?? [] as $item) {
+                $cid = $item['id'];
+                $podcast_id = $channel_map[$cid] ?? null;
+
+                if (!$podcast_id) continue;
+
+                $stats = $item['statistics'] ?? [];
+
+                $results[$podcast_id] = [
+                    'success' => true,
+                    'subscribers' => (int) ($stats['subscriberCount'] ?? 0),
+                    'followers' => (int) ($stats['subscriberCount'] ?? 0),
+                    'total_views' => (int) ($stats['viewCount'] ?? 0),
+                    'videos' => (int) ($stats['videoCount'] ?? 0),
+                    'channel_id' => $cid,
+                    'channel_title' => $item['snippet']['title'] ?? '',
+                    'raw_data' => [
+                        'statistics' => $stats,
+                        'snippet' => $item['snippet'] ?? [],
+                    ],
+                ];
+            }
+
+            // Mark any missing channels as not found
+            foreach ($batch as $cid) {
+                $podcast_id = $channel_map[$cid];
+                if (!isset($results[$podcast_id])) {
+                    $results[$podcast_id] = [
+                        'success' => false,
+                        'error' => 'Channel not found in API response',
+                    ];
+                }
+            }
+
+            // Small delay between batches
+            usleep(100000); // 0.1 seconds
+        }
+
+        return $results;
+    }
 }

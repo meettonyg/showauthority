@@ -124,6 +124,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-public.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-settings.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-formidable.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-metrics.php';
 
         // ===========================================
         // ADMIN
@@ -251,6 +252,7 @@ class Podcast_Influence_Tracker {
         PIT_REST_Public::register_routes();
         PIT_REST_Settings::register_routes();
         PIT_REST_Formidable::register_routes();
+        PIT_REST_Metrics::register_routes();
     }
 
     /**
