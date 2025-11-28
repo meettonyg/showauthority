@@ -24,6 +24,7 @@ class PIT_Shortcodes {
         add_shortcode('guest_card', [__CLASS__, 'guest_card']);
         add_shortcode('guest_list', [__CLASS__, 'guest_list']);
         add_shortcode('podcast_metrics', [__CLASS__, 'podcast_metrics']);
+        add_shortcode('podcast_contacts', [__CLASS__, 'podcast_contacts']);
 
         // Enqueue frontend scripts/styles
         add_action('wp_enqueue_scripts', [__CLASS__, 'enqueue_assets']);
@@ -346,5 +347,272 @@ class PIT_Shortcodes {
         $output .= '</div></div></div>';
 
         return $output;
+    }
+
+    /**
+     * Podcast contacts shortcode
+     *
+     * Displays contacts associated with a podcast.
+     * Integrates with Formidable Forms RSS field.
+     *
+     * Usage: [podcast_contacts]
+     *        [podcast_contacts rss="https://example.com/feed.xml"]
+     *        [podcast_contacts podcast_id="123"]
+     *        [podcast_contacts layout="cards|list|inline"]
+     */
+    public static function podcast_contacts($atts) {
+        $atts = shortcode_atts([
+            'rss'        => '',         // RSS feed URL
+            'podcast_id' => 0,          // Direct podcast ID
+            'layout'     => 'cards',    // cards, list, or inline
+            'roles'      => '',         // Filter by roles (comma-separated)
+            'limit'      => 10,         // Max contacts to show
+        ], $atts);
+
+        $podcast = null;
+
+        // Method 1: Direct podcast ID
+        if ($atts['podcast_id']) {
+            $podcast = self::get_podcast_by_id((int) $atts['podcast_id']);
+        }
+        // Method 2: RSS feed URL provided directly
+        elseif ($atts['rss']) {
+            $podcast = self::get_podcast_by_rss($atts['rss']);
+        }
+        // Method 3: Check for Formidable Forms context (auto-detect RSS from entry)
+        else {
+            $podcast = self::get_podcast_from_formidable_context();
+        }
+
+        if (!$podcast) {
+            return '<div class="pit-error">Podcast not found. Make sure the podcast is added to the Influence Tracker.</div>';
+        }
+
+        // Get contacts for this podcast
+        $user_id = get_current_user_id();
+        $contacts = PIT_Contact_Repository::get_for_podcast($podcast->id, $user_id);
+
+        if (empty($contacts)) {
+            return '<div class="pit-no-contacts">No contacts found for this podcast.</div>';
+        }
+
+        // Filter by roles if specified
+        if ($atts['roles']) {
+            $allowed_roles = array_map('trim', explode(',', strtolower($atts['roles'])));
+            $contacts = array_filter($contacts, function($contact) use ($allowed_roles) {
+                return in_array(strtolower($contact->role), $allowed_roles);
+            });
+        }
+
+        // Limit results
+        $contacts = array_slice($contacts, 0, (int) $atts['limit']);
+
+        // Render based on layout
+        switch ($atts['layout']) {
+            case 'list':
+                return self::render_contacts_list($contacts, $podcast);
+            case 'inline':
+                return self::render_contacts_inline($contacts, $podcast);
+            case 'cards':
+            default:
+                return self::render_contacts_cards($contacts, $podcast);
+        }
+    }
+
+    /**
+     * Get podcast by ID
+     */
+    private static function get_podcast_by_id($podcast_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_podcasts';
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE id = %d",
+            $podcast_id
+        ));
+    }
+
+    /**
+     * Get podcast by RSS feed URL
+     */
+    private static function get_podcast_by_rss($rss_url) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_podcasts';
+
+        // Clean up the RSS URL
+        $rss_url = trim($rss_url);
+
+        // Try exact match first
+        $podcast = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE rss_feed_url = %s",
+            $rss_url
+        ));
+
+        // If not found, try with/without trailing slash
+        if (!$podcast) {
+            $alt_url = rtrim($rss_url, '/') === $rss_url
+                ? $rss_url . '/'
+                : rtrim($rss_url, '/');
+
+            $podcast = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $table WHERE rss_feed_url = %s",
+                $alt_url
+            ));
+        }
+
+        return $podcast;
+    }
+
+    /**
+     * Get podcast from Formidable Forms context
+     *
+     * Attempts to find the podcast linked to the current Formidable entry.
+     * Uses the pit_formidable_podcast_links table for the relationship.
+     */
+    private static function get_podcast_from_formidable_context() {
+        // Check for entry_id in URL first
+        $entry_id = isset($_GET['entry_id']) ? absint($_GET['entry_id']) : 0;
+        if (!$entry_id) {
+            $entry_id = isset($_GET['entry']) ? absint($_GET['entry']) : 0;
+        }
+
+        // Method 1: Check global $entry (set by Formidable in views)
+        global $entry;
+        if (!$entry_id && isset($entry) && is_object($entry)) {
+            $entry_id = $entry->id;
+        }
+
+        if (!$entry_id) {
+            return null;
+        }
+
+        // Method 1: Use Formidable Integration link table (preferred)
+        if (class_exists('PIT_Formidable_Integration')) {
+            $podcast_id = PIT_Formidable_Integration::get_podcast_for_entry($entry_id);
+            if ($podcast_id) {
+                return self::get_podcast_by_id($podcast_id);
+            }
+        }
+
+        // Method 2: Fallback - Look up RSS from field and find podcast
+        $settings = PIT_Settings::get_all();
+        $rss_field_id = isset($settings['rss_field_id']) ? $settings['rss_field_id'] : '';
+
+        if (empty($rss_field_id)) {
+            return null;
+        }
+
+        $rss_url = null;
+
+        // Try to get RSS from Formidable entry
+        if (class_exists('FrmProEntryMetaHelper')) {
+            $rss_url = FrmProEntryMetaHelper::get_post_or_meta_value($entry_id, $rss_field_id);
+        } elseif (class_exists('FrmEntryMeta')) {
+            $rss_url = FrmEntryMeta::get_entry_meta_by_field($entry_id, $rss_field_id);
+        }
+
+        if ($rss_url) {
+            return self::get_podcast_by_rss($rss_url);
+        }
+
+        return null;
+    }
+
+    /**
+     * Render contacts as cards
+     */
+    private static function render_contacts_cards($contacts, $podcast) {
+        $output = '<div class="pit-contacts-grid">';
+
+        foreach ($contacts as $contact) {
+            $output .= '<div class="pit-contact-card">';
+
+            // Avatar/initials
+            $initials = self::get_initials($contact->full_name);
+            $output .= '<div class="pit-contact-header">';
+            $output .= '<div class="pit-contact-avatar">' . esc_html($initials) . '</div>';
+            $output .= '<div class="pit-contact-info">';
+            $output .= '<h4 class="pit-contact-name">' . esc_html($contact->full_name) . '</h4>';
+            if ($contact->role) {
+                $output .= '<span class="pit-contact-role">' . esc_html(ucfirst($contact->role)) . '</span>';
+            }
+            $output .= '</div></div>';
+
+            // Contact details
+            $output .= '<div class="pit-contact-details">';
+
+            if ($contact->email) {
+                $output .= '<div class="pit-contact-item">';
+                $output .= '<a href="mailto:' . esc_attr($contact->email) . '">' . esc_html($contact->email) . '</a>';
+                $output .= '</div>';
+            }
+
+            if ($contact->linkedin_url) {
+                $output .= '<div class="pit-contact-item">';
+                $output .= '<a href="' . esc_url($contact->linkedin_url) . '" target="_blank">LinkedIn</a>';
+                $output .= '</div>';
+            }
+
+            if ($contact->twitter_url) {
+                $output .= '<div class="pit-contact-item">';
+                $output .= '<a href="' . esc_url($contact->twitter_url) . '" target="_blank">Twitter</a>';
+                $output .= '</div>';
+            }
+
+            $output .= '</div></div>';
+        }
+
+        $output .= '</div>';
+        return $output;
+    }
+
+    /**
+     * Render contacts as list
+     */
+    private static function render_contacts_list($contacts, $podcast) {
+        $output = '<ul class="pit-contacts-list">';
+
+        foreach ($contacts as $contact) {
+            $output .= '<li class="pit-contact-list-item">';
+            $output .= '<strong>' . esc_html($contact->full_name) . '</strong>';
+            if ($contact->role) {
+                $output .= ' <span class="pit-contact-role">(' . esc_html(ucfirst($contact->role)) . ')</span>';
+            }
+            if ($contact->email) {
+                $output .= ' - <a href="mailto:' . esc_attr($contact->email) . '">' . esc_html($contact->email) . '</a>';
+            }
+            $output .= '</li>';
+        }
+
+        $output .= '</ul>';
+        return $output;
+    }
+
+    /**
+     * Render contacts inline
+     */
+    private static function render_contacts_inline($contacts, $podcast) {
+        $names = array_map(function($contact) {
+            $name = esc_html($contact->full_name);
+            if ($contact->email) {
+                return '<a href="mailto:' . esc_attr($contact->email) . '">' . $name . '</a>';
+            }
+            return $name;
+        }, $contacts);
+
+        return '<span class="pit-contacts-inline">' . implode(', ', $names) . '</span>';
+    }
+
+    /**
+     * Get initials from name
+     */
+    private static function get_initials($name) {
+        $words = explode(' ', trim($name));
+        $initials = '';
+        foreach ($words as $word) {
+            if (!empty($word)) {
+                $initials .= strtoupper(substr($word, 0, 1));
+            }
+        }
+        return substr($initials, 0, 2);
     }
 }

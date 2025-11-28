@@ -20,7 +20,7 @@ class Database_Schema {
     /**
      * Database version for migrations
      */
-    const DB_VERSION = '3.1.0';
+    const DB_VERSION = '3.2.0';
 
     /**
      * Create all database tables
@@ -121,6 +121,37 @@ class Database_Schema {
 
         dbDelta($sql_user_podcasts);
 
+        // Formidable Forms Entry <-> Podcast Links (many-to-one)
+        // Multiple Formidable entries can reference the same podcast
+        // Example: Multiple users want to be guests on "The Tim Ferriss Show"
+        $table_formidable_links = $wpdb->prefix . 'pit_formidable_podcast_links';
+        $sql_formidable_links = "CREATE TABLE $table_formidable_links (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            formidable_entry_id bigint(20) UNSIGNED NOT NULL,
+            podcast_id bigint(20) UNSIGNED NOT NULL,
+            user_id bigint(20) UNSIGNED DEFAULT NULL,
+
+            -- Sync metadata
+            synced_at datetime DEFAULT CURRENT_TIMESTAMP,
+            sync_status enum('synced', 'pending', 'failed') DEFAULT 'synced',
+            sync_error text DEFAULT NULL,
+
+            -- Optional: RSS URL at time of sync (for debugging)
+            rss_url_at_sync text DEFAULT NULL,
+
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (id),
+            UNIQUE KEY entry_unique (formidable_entry_id),
+            KEY podcast_id_idx (podcast_id),
+            KEY user_id_idx (user_id),
+            KEY sync_status_idx (sync_status)
+        ) $charset_collate;";
+
+        dbDelta($sql_formidable_links);
+
         // API rate limiting
         $table_rate_limits = $wpdb->prefix . 'pit_rate_limits';
         $sql_rate_limits = "CREATE TABLE $table_rate_limits (
@@ -202,10 +233,6 @@ class Database_Schema {
             source varchar(50) DEFAULT NULL,
             feed_migration_history text DEFAULT NULL,
 
-            -- Formidable Forms Integration
-            formidable_entry_id bigint(20) UNSIGNED DEFAULT NULL,
-            last_synced_at datetime DEFAULT NULL,
-
             -- Status
             is_active tinyint(1) DEFAULT 1,
 
@@ -220,8 +247,7 @@ class Database_Schema {
             KEY title_idx (title(191)),
             KEY is_tracked_idx (is_tracked),
             KEY tracking_status_idx (tracking_status),
-            KEY source_idx (source),
-            KEY formidable_entry_idx (formidable_entry_id)
+            KEY source_idx (source)
         ) $charset_collate;";
 
         dbDelta($sql_podcasts);
@@ -763,6 +789,7 @@ class Database_Schema {
             // User tables
             'pit_user_limits',
             'pit_user_podcasts',
+            'pit_formidable_podcast_links',
             'pit_rate_limits',
             // Podcast tables
             'pit_podcasts',

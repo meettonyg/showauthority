@@ -76,12 +76,12 @@ class PIT_Formidable_Integration {
         $table = $wpdb->prefix . 'pit_podcasts';
 
         $existing = $wpdb->get_row($wpdb->prepare(
-            "SELECT id FROM $table WHERE rss_url = %s",
+            "SELECT id FROM $table WHERE rss_feed_url = %s",
             $rss_url
         ));
 
         if ($existing) {
-            // Update existing podcast
+            // Update existing podcast with Formidable entry link
             $wpdb->update(
                 $table,
                 [
@@ -93,17 +93,8 @@ class PIT_Formidable_Integration {
 
             $podcast_id = $existing->id;
         } else {
-            // Create new podcast
-            $podcast_data = [
-                'name' => $podcast_name ?: self::extract_podcast_name_from_url($rss_url),
-                'rss_url' => $rss_url,
-                'formidable_entry_id' => $entry_id,
-                'discovery_status' => 'pending',
-                'last_synced_at' => current_time('mysql'),
-                'created_at' => current_time('mysql'),
-            ];
-
-            $podcast_id = PIT_Podcast_Repository::create($podcast_data);
+            // Create new podcast using Discovery Engine for full parsing
+            $podcast_id = self::discover_and_create_podcast($rss_url, $podcast_name, $entry_id);
         }
 
         if ($podcast_id) {
@@ -139,16 +130,59 @@ class PIT_Formidable_Integration {
      * @param string $rss_url
      */
     private static function queue_discovery($podcast_id, $rss_url) {
-        // Create a discovery job
+        // Queue enrichment job (contacts, social links, etc.)
+        $user_id = get_current_user_id() ?: 1; // Default to admin if no user context
+
         PIT_Job_Queue::add([
-            'job_type' => 'discover_podcast',
-            'status' => 'pending',
-            'podcast_id' => $podcast_id,
-            'meta' => json_encode([
-                'rss_url' => $rss_url,
-                'source' => 'formidable',
-            ]),
+            'user_id'           => $user_id,
+            'podcast_id'        => $podcast_id,
+            'job_type'          => 'initial_tracking',
+            'platforms_to_fetch' => json_encode(['twitter', 'instagram', 'youtube', 'linkedin', 'facebook']),
+            'status'            => 'queued',
+            'priority'          => 50,
         ]);
+    }
+
+    /**
+     * Discover and create a new podcast from RSS feed
+     *
+     * Uses the Discovery Engine to parse RSS and extract metadata.
+     *
+     * @param string $rss_url RSS feed URL
+     * @param string $podcast_name Optional name override
+     * @param int $entry_id Formidable entry ID
+     * @return int|false Podcast ID or false on failure
+     */
+    private static function discover_and_create_podcast($rss_url, $podcast_name, $entry_id) {
+        // Use Discovery Engine if available
+        if (class_exists('PIT_Discovery_Engine')) {
+            try {
+                $result = PIT_Discovery_Engine::discover_from_rss($rss_url);
+
+                if ($result && !empty($result['podcast_id'])) {
+                    // Update with Formidable entry link
+                    PIT_Podcast_Repository::update($result['podcast_id'], [
+                        'formidable_entry_id' => $entry_id,
+                        'last_synced_at' => current_time('mysql'),
+                    ]);
+
+                    return $result['podcast_id'];
+                }
+            } catch (Exception $e) {
+                error_log('PIT Formidable Integration - Discovery failed: ' . $e->getMessage());
+            }
+        }
+
+        // Fallback: Create basic podcast entry and queue for discovery
+        $podcast_data = [
+            'title' => $podcast_name ?: self::extract_podcast_name_from_url($rss_url),
+            'rss_feed_url' => $rss_url,
+            'formidable_entry_id' => $entry_id,
+            'tracking_status' => 'queued',
+            'last_synced_at' => current_time('mysql'),
+        ];
+
+        return PIT_Podcast_Repository::create($podcast_data);
     }
 
     /**

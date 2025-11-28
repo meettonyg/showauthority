@@ -122,6 +122,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-guests.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-export.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-public.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-settings.php';
 
         // ===========================================
         // ADMIN
@@ -242,6 +243,7 @@ class Podcast_Influence_Tracker {
         PIT_REST_Guests::register_routes();
         PIT_REST_Export::register_routes();
         PIT_REST_Public::register_routes();
+        PIT_REST_Settings::register_routes();
     }
 
     /**
@@ -274,11 +276,20 @@ class Podcast_Influence_Tracker {
             false // Load in header
         );
 
-        // Pinia - depends on Vue being loaded first
+        // Vue Demi - required by Pinia for Vue 3 compatibility
+        wp_enqueue_script(
+            'pit-vue-demi',
+            'https://unpkg.com/vue-demi@0.14.6/lib/index.iife.js',
+            ['pit-vue'],
+            '0.14.6',
+            false // Load in header
+        );
+
+        // Pinia - depends on Vue and Vue Demi being loaded first
         wp_enqueue_script(
             'pit-pinia',
             'https://unpkg.com/pinia@2.1.7/dist/pinia.iife.js',
-            ['pit-vue'],
+            ['pit-vue', 'pit-vue-demi'],
             '2.1.7',
             false // Load in header
         );
