@@ -390,7 +390,11 @@ class PIT_Shortcodes {
 
         // Get contacts for this podcast
         $user_id = get_current_user_id();
-        $contacts = PIT_Contact_Repository::get_for_podcast($podcast->id, $user_id);
+        $contacts = [];
+        
+        if (class_exists('PIT_Contact_Repository')) {
+            $contacts = PIT_Contact_Repository::get_for_podcast($podcast->id, $user_id);
+        }
 
         if (empty($contacts)) {
             return '<div class="pit-no-contacts">No contacts found for this podcast.</div>';
@@ -502,24 +506,24 @@ class PIT_Shortcodes {
         }
 
         // Method 2: Fallback - Look up RSS from field and find podcast
-        $settings = PIT_Settings::get_all();
-        $rss_field_id = isset($settings['rss_field_id']) ? $settings['rss_field_id'] : '';
+        if (class_exists('PIT_Settings')) {
+            $settings = PIT_Settings::get_all();
+            $rss_field_id = isset($settings['rss_field_id']) ? $settings['rss_field_id'] : '';
 
-        if (empty($rss_field_id)) {
-            return null;
-        }
+            if (!empty($rss_field_id)) {
+                $rss_url = null;
 
-        $rss_url = null;
+                // Try to get RSS from Formidable entry
+                if (class_exists('FrmProEntryMetaHelper')) {
+                    $rss_url = FrmProEntryMetaHelper::get_post_or_meta_value($entry_id, $rss_field_id);
+                } elseif (class_exists('FrmEntryMeta')) {
+                    $rss_url = FrmEntryMeta::get_entry_meta_by_field($entry_id, $rss_field_id);
+                }
 
-        // Try to get RSS from Formidable entry
-        if (class_exists('FrmProEntryMetaHelper')) {
-            $rss_url = FrmProEntryMetaHelper::get_post_or_meta_value($entry_id, $rss_field_id);
-        } elseif (class_exists('FrmEntryMeta')) {
-            $rss_url = FrmEntryMeta::get_entry_meta_by_field($entry_id, $rss_field_id);
-        }
-
-        if ($rss_url) {
-            return self::get_podcast_by_rss($rss_url);
+                if ($rss_url) {
+                    return self::get_podcast_by_rss($rss_url);
+                }
+            }
         }
 
         return null;

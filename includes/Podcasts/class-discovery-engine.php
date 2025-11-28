@@ -55,7 +55,10 @@ class PIT_Discovery_Engine {
             return new WP_Error('db_insert_failed', 'Failed to save podcast to database');
         }
 
-        // Step 5: Scrape homepage for additional social links (2-3 seconds)
+        // Step 5: Create contact from RSS owner info
+        $contact_created = self::create_contact_from_rss($podcast_id, $rss_data);
+
+        // Step 6: Scrape homepage for additional social links (2-3 seconds)
         $homepage_url = isset($rss_data['homepage_url']) ? $rss_data['homepage_url'] : '';
         if (!empty($homepage_url)) {
             $homepage_links = PIT_Homepage_Scraper::scrape($homepage_url);
@@ -64,7 +67,7 @@ class PIT_Discovery_Engine {
             }
         }
 
-        // Step 6: Save social links to database
+        // Step 7: Save social links to database
         $saved_links = 0;
         foreach ($social_links as $link) {
             $link_data = [
@@ -95,8 +98,124 @@ class PIT_Discovery_Engine {
             'podcast_id'        => $podcast_id,
             'podcast_name'      => $podcast_data['title'],
             'social_links_found' => $saved_links,
+            'contact_created'   => $contact_created,
             'homepage_url'      => $homepage_url,
             'duration_seconds'  => round($duration, 2),
+        ];
+    }
+
+    /**
+     * Create contact from RSS owner/author info
+     *
+     * @param int $podcast_id Podcast ID
+     * @param array $rss_data Parsed RSS data
+     * @return bool Whether a contact was created
+     */
+    private static function create_contact_from_rss($podcast_id, $rss_data) {
+        // Check if Contact Repository exists
+        if (!class_exists('PIT_Contact_Repository')) {
+            return false;
+        }
+
+        // Extract author and email from RSS data
+        $author = isset($rss_data['author']) ? trim($rss_data['author']) : '';
+        $email = isset($rss_data['email']) ? trim($rss_data['email']) : '';
+
+        // Also check for owner_name if author is empty
+        if (empty($author) && isset($rss_data['owner_name'])) {
+            $author = trim($rss_data['owner_name']);
+        }
+
+        // Need at least a name or email to create a contact
+        if (empty($author) && empty($email)) {
+            return false;
+        }
+
+        // Check if contact with this email already exists for this podcast
+        if (!empty($email)) {
+            $existing = self::find_existing_contact_by_email($podcast_id, $email);
+            if ($existing) {
+                // Contact already exists, no need to create
+                return false;
+            }
+        }
+
+        // Parse name into first/last
+        $name_parts = self::parse_name($author);
+
+        // Create the contact
+        $contact_data = [
+            'full_name'    => $author ?: 'Podcast Owner',
+            'first_name'   => $name_parts['first_name'],
+            'last_name'    => $name_parts['last_name'],
+            'email'        => $email,
+            'role'         => 'host',
+            'source'       => 'rss_discovery',
+            'is_public'    => 1,
+            'visibility'   => 'public',
+        ];
+
+        $contact_id = PIT_Contact_Repository::create($contact_data);
+
+        if (!$contact_id) {
+            return false;
+        }
+
+        // Link contact to podcast as primary host
+        $linked = PIT_Contact_Repository::link_to_podcast($contact_id, $podcast_id, 'host', true);
+
+        return $linked ? true : false;
+    }
+
+    /**
+     * Find existing contact by email for a podcast
+     *
+     * @param int $podcast_id Podcast ID
+     * @param string $email Email address
+     * @return bool Whether contact exists
+     */
+    private static function find_existing_contact_by_email($podcast_id, $email) {
+        global $wpdb;
+        
+        $contacts_table = $wpdb->prefix . 'pit_podcast_contacts';
+        $relationships_table = $wpdb->prefix . 'pit_podcast_contact_relationships';
+
+        $result = $wpdb->get_var($wpdb->prepare(
+            "SELECT c.id FROM $contacts_table c
+             INNER JOIN $relationships_table r ON c.id = r.contact_id
+             WHERE r.podcast_id = %d AND c.email = %s AND r.active = 1
+             LIMIT 1",
+            $podcast_id,
+            $email
+        ));
+
+        return !empty($result);
+    }
+
+    /**
+     * Parse full name into first and last name
+     *
+     * @param string $full_name Full name
+     * @return array Array with 'first_name' and 'last_name'
+     */
+    private static function parse_name($full_name) {
+        $parts = preg_split('/\s+/', trim($full_name));
+        
+        if (count($parts) === 0) {
+            return ['first_name' => '', 'last_name' => ''];
+        }
+        
+        if (count($parts) === 1) {
+            return ['first_name' => $parts[0], 'last_name' => ''];
+        }
+        
+        // First word is first name, rest is last name
+        $first_name = array_shift($parts);
+        $last_name = implode(' ', $parts);
+        
+        return [
+            'first_name' => $first_name,
+            'last_name'  => $last_name,
         ];
     }
 
@@ -147,6 +266,9 @@ class PIT_Discovery_Engine {
             return $rss_data;
         }
 
+        // Try to create contact if none exists
+        $contact_created = self::create_contact_from_rss($podcast_id, $rss_data);
+
         // Extract social links from RSS
         $social_links = isset($rss_data['social_links']) ? $rss_data['social_links'] : [];
 
@@ -184,7 +306,61 @@ class PIT_Discovery_Engine {
             'success'           => true,
             'podcast_id'        => $podcast_id,
             'social_links_found' => $saved_links,
+            'contact_created'   => $contact_created,
         ];
+    }
+
+    /**
+     * Discover contacts for existing podcasts that don't have any
+     * 
+     * This can be run as a one-time migration or scheduled task
+     *
+     * @param int $limit Max podcasts to process
+     * @return array Results summary
+     */
+    public static function backfill_contacts($limit = 100) {
+        global $wpdb;
+        
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+        $relationships_table = $wpdb->prefix . 'pit_podcast_contact_relationships';
+
+        // Find podcasts without any contacts
+        $podcasts = $wpdb->get_results($wpdb->prepare(
+            "SELECT p.id, p.rss_feed_url, p.author, p.email, p.title
+             FROM $podcasts_table p
+             LEFT JOIN $relationships_table r ON p.id = r.podcast_id AND r.active = 1
+             WHERE r.id IS NULL
+             AND (p.author IS NOT NULL AND p.author != '' OR p.email IS NOT NULL AND p.email != '')
+             LIMIT %d",
+            $limit
+        ));
+
+        $results = [
+            'processed' => 0,
+            'contacts_created' => 0,
+            'skipped' => 0,
+            'errors' => [],
+        ];
+
+        foreach ($podcasts as $podcast) {
+            $results['processed']++;
+
+            // Create RSS data array from podcast record
+            $rss_data = [
+                'author' => $podcast->author,
+                'email'  => $podcast->email,
+            ];
+
+            $created = self::create_contact_from_rss($podcast->id, $rss_data);
+
+            if ($created) {
+                $results['contacts_created']++;
+            } else {
+                $results['skipped']++;
+            }
+        }
+
+        return $results;
     }
 
     /**
@@ -212,6 +388,13 @@ class PIT_Discovery_Engine {
             ];
         }
 
+        // Get contacts count
+        $contacts_count = 0;
+        if (class_exists('PIT_Contact_Repository')) {
+            $contacts = PIT_Contact_Repository::get_for_podcast($podcast_id, null);
+            $contacts_count = count($contacts);
+        }
+
         return [
             'podcast_id'          => $podcast->id,
             'podcast_name'        => $podcast->title,
@@ -220,6 +403,7 @@ class PIT_Discovery_Engine {
             'tracking_status'     => $podcast->tracking_status,
             'platforms_discovered' => count($platforms),
             'platforms'           => $platforms,
+            'contacts_count'      => $contacts_count,
             'discovered_at'       => $podcast->created_at,
         ];
     }
@@ -305,6 +489,8 @@ class PIT_Discovery_Engine {
         global $wpdb;
         $table_podcasts = $wpdb->prefix . 'pit_podcasts';
         $table_social = $wpdb->prefix . 'pit_social_links';
+        $table_contacts = $wpdb->prefix . 'pit_podcast_contacts';
+        $table_relationships = $wpdb->prefix . 'pit_podcast_contact_relationships';
 
         $stats = [
             'total_podcasts'     => (int) $wpdb->get_var("SELECT COUNT(*) FROM $table_podcasts"),
@@ -312,6 +498,10 @@ class PIT_Discovery_Engine {
                 "SELECT COUNT(DISTINCT podcast_id) FROM $table_social"
             ),
             'total_links'        => (int) $wpdb->get_var("SELECT COUNT(*) FROM $table_social"),
+            'total_contacts'     => (int) $wpdb->get_var("SELECT COUNT(*) FROM $table_contacts"),
+            'podcasts_with_contacts' => (int) $wpdb->get_var(
+                "SELECT COUNT(DISTINCT podcast_id) FROM $table_relationships WHERE active = 1"
+            ),
             'by_platform'        => [],
             'by_source'          => [],
         ];

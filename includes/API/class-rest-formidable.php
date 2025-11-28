@@ -94,6 +94,34 @@ class PIT_REST_Formidable {
                 ],
             ]
         );
+
+        // POST /contacts/backfill - Backfill contacts from RSS for existing podcasts
+        register_rest_route(
+            self::NAMESPACE,
+            '/contacts/backfill',
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [__CLASS__, 'backfill_contacts'],
+                'permission_callback' => [__CLASS__, 'check_admin_permission'],
+            ]
+        );
+
+        // POST /podcasts/(?P<podcast_id>\d+)/rediscover - Rediscover social links and contacts for a podcast
+        register_rest_route(
+            self::NAMESPACE,
+            '/podcasts/(?P<podcast_id>\d+)/rediscover',
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [__CLASS__, 'rediscover_podcast'],
+                'permission_callback' => [__CLASS__, 'check_admin_permission'],
+                'args'                => [
+                    'podcast_id' => [
+                        'required' => true,
+                        'type'     => 'integer',
+                    ],
+                ],
+            ]
+        );
     }
 
     /**
@@ -104,6 +132,66 @@ class PIT_REST_Formidable {
      */
     public static function check_admin_permission($request) {
         return current_user_can('manage_options');
+    }
+
+    /**
+     * Backfill contacts for existing podcasts that don't have any
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response|WP_Error
+     */
+    public static function backfill_contacts($request) {
+        if (!class_exists('PIT_Discovery_Engine')) {
+            return new WP_Error(
+                'discovery_engine_not_available',
+                'Discovery Engine is not available',
+                ['status' => 500]
+            );
+        }
+
+        $limit = $request->get_param('limit') ?: 100;
+        $results = PIT_Discovery_Engine::backfill_contacts($limit);
+
+        return rest_ensure_response([
+            'success' => true,
+            'message' => "{$results['contacts_created']} contacts created from {$results['processed']} podcasts processed",
+            'processed' => $results['processed'],
+            'contacts_created' => $results['contacts_created'],
+            'skipped' => $results['skipped'],
+            'errors' => $results['errors'],
+        ]);
+    }
+
+    /**
+     * Rediscover social links and contacts for a specific podcast
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response|WP_Error
+     */
+    public static function rediscover_podcast($request) {
+        $podcast_id = (int) $request->get_param('podcast_id');
+
+        if (!class_exists('PIT_Discovery_Engine')) {
+            return new WP_Error(
+                'discovery_engine_not_available',
+                'Discovery Engine is not available',
+                ['status' => 500]
+            );
+        }
+
+        $result = PIT_Discovery_Engine::rediscover($podcast_id);
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        return rest_ensure_response([
+            'success' => true,
+            'message' => "Rediscovered podcast {$podcast_id}",
+            'podcast_id' => $result['podcast_id'],
+            'social_links_found' => $result['social_links_found'],
+            'contact_created' => $result['contact_created'] ?? false,
+        ]);
     }
 
     /**
