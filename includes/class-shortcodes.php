@@ -654,49 +654,49 @@ class PIT_Shortcodes {
         return [
             'youtube' => [
                 'name' => 'YouTube',
-                'icon' => '📺',
+                'icon' => '',
                 'color' => '#FF0000',
                 'cta' => 'Subscribe',
             ],
             'twitter' => [
                 'name' => 'Twitter/X',
-                'icon' => '𝕏',
+                'icon' => '',
                 'color' => '#000000',
                 'cta' => 'Follow',
             ],
             'linkedin' => [
                 'name' => 'LinkedIn',
-                'icon' => '💼',
+                'icon' => '',
                 'color' => '#0077B5',
                 'cta' => 'Connect',
             ],
             'facebook' => [
                 'name' => 'Facebook',
-                'icon' => '📘',
+                'icon' => '',
                 'color' => '#1877F2',
                 'cta' => 'Like',
             ],
             'instagram' => [
                 'name' => 'Instagram',
-                'icon' => '📷',
+                'icon' => '',
                 'color' => '#E4405F',
                 'cta' => 'Follow',
             ],
             'tiktok' => [
                 'name' => 'TikTok',
-                'icon' => '🎵',
+                'icon' => '',
                 'color' => '#000000',
                 'cta' => 'Follow',
             ],
             'spotify' => [
                 'name' => 'Spotify',
-                'icon' => '🎧',
+                'icon' => '',
                 'color' => '#1DB954',
                 'cta' => 'Listen',
             ],
             'apple_podcasts' => [
                 'name' => 'Apple Podcasts',
-                'icon' => '🎙️',
+                'icon' => '',
                 'color' => '#9933CC',
                 'cta' => 'Listen',
             ],
@@ -712,10 +712,21 @@ class PIT_Shortcodes {
      */
     private static function get_social_link_by_platform($podcast_id, $platform) {
         global $wpdb;
-        $table = $wpdb->prefix . 'pit_social_links';
+        $social_table = $wpdb->prefix . 'pit_social_links';
+        $metrics_table = $wpdb->prefix . 'pit_metrics';
 
+        // Join with metrics table to get subscriber/follower count
         return $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table WHERE podcast_id = %d AND platform = %s AND active = 1 LIMIT 1",
+            "SELECT sl.*, 
+                    COALESCE(m.subscribers, m.followers, 0) as metric_count,
+                    m.subscribers as metric_subscribers,
+                    m.followers as metric_followers,
+                    m.views as metric_views
+             FROM $social_table sl
+             LEFT JOIN $metrics_table m ON sl.id = m.social_link_id
+             WHERE sl.podcast_id = %d AND sl.platform = %s AND sl.active = 1
+             ORDER BY m.fetched_at DESC
+             LIMIT 1",
             $podcast_id,
             $platform
         ));
@@ -746,13 +757,14 @@ class PIT_Shortcodes {
      */
     private static function platform_shortcode($atts, $platform) {
         $atts = shortcode_atts([
-            'podcast_id' => 0,
-            'rss'        => '',
-            'layout'     => 'button',  // button, link, icon, url_only
-            'class'      => '',
-            'target'     => '_blank',
+            'podcast_id'  => 0,
+            'rss'         => '',
+            'layout'      => 'button',  // button, link, icon, url_only, metrics
+            'class'       => '',
+            'target'      => '_blank',
             'show_handle' => 'yes',
-            'fallback'   => '',        // Text to show if not found
+            'show_count'  => 'yes',     // Show subscriber/follower count
+            'fallback'    => '',        // Text to show if not found
         ], $atts);
 
         // Get podcast
@@ -799,7 +811,18 @@ class PIT_Shortcodes {
         $cta = esc_html($config['cta']);
         $target = esc_attr($atts['target']);
         $class = esc_attr($atts['class']);
-        $show_handle = $atts['show_handle'] === 'yes';
+        $show_handle = isset($atts['show_handle']) && $atts['show_handle'] === 'yes';
+        $show_count = isset($atts['show_count']) && $atts['show_count'] === 'yes';
+
+        // Get follower/subscriber count from metrics
+        $count = 0;
+        if (isset($link->metric_subscribers) && $link->metric_subscribers > 0) {
+            $count = (int) $link->metric_subscribers;
+        } elseif (isset($link->metric_followers) && $link->metric_followers > 0) {
+            $count = (int) $link->metric_followers;
+        } elseif (isset($link->metric_count) && $link->metric_count > 0) {
+            $count = (int) $link->metric_count;
+        }
 
         // Don't show handle if it looks like a channel ID (starts with UC)
         // or if it's empty or too long (likely not a real handle)
@@ -815,6 +838,18 @@ class PIT_Shortcodes {
             }
             else {
                 $display_handle = esc_html($handle);
+            }
+        }
+
+        // Format count for display
+        $count_display = '';
+        if ($show_count && $count > 0) {
+            if ($count >= 1000000) {
+                $count_display = round($count / 1000000, 1) . 'M';
+            } elseif ($count >= 1000) {
+                $count_display = round($count / 1000, 1) . 'K';
+            } else {
+                $count_display = number_format($count);
             }
         }
 
@@ -834,6 +869,28 @@ class PIT_Shortcodes {
                     '<a href="%s" target="%s" class="pit-social-link pit-social-%s %s">%s</a>',
                     $url, $target, esc_attr($link->platform), $class, $text
                 );
+
+            case 'metrics':
+                // Simple link with subscriber count: "YouTube (58K subscribers)"
+                $text = $name;
+                if ($count_display) {
+                    $label = ($link->platform === 'youtube') ? 'subscribers' : 'followers';
+                    $text .= " ({$count_display} {$label})";
+                }
+                return sprintf(
+                    '<a href="%s" target="%s" class="pit-social-link pit-social-%s pit-social-metrics %s">%s %s</a>',
+                    $url, $target, esc_attr($link->platform), $class, $icon, $text
+                );
+
+            case 'count_only':
+                // Just the count: "58K"
+                if ($count_display) {
+                    return sprintf(
+                        '<span class="pit-social-count pit-social-%s %s">%s</span>',
+                        esc_attr($link->platform), $class, $count_display
+                    );
+                }
+                return '';
 
             case 'button':
             default:
