@@ -164,8 +164,8 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         // Debug: Log the full request
         error_log("ScrapingDog request - platform: $platform, param_name: $param_name, value: $profile_value");
 
-        // Add parsed=true to get JSON response
-        if (in_array($platform, ['twitter', 'linkedin'])) {
+        // Add parsed=true to get JSON response (only for LinkedIn)
+        if ($platform === 'linkedin') {
             $params['parsed'] = 'true';
         }
 
