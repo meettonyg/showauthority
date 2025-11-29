@@ -75,27 +75,78 @@ class PIT_YouTube_API {
      */
     private static function extract_channel_id($url, $handle, $api_key) {
         // Try to extract from URL first
-        // Format: youtube.com/channel/CHANNEL_ID
+        // Format: youtube.com/channel/CHANNEL_ID (direct channel ID)
         if (preg_match('/youtube\.com\/channel\/([a-zA-Z0-9_-]+)/', $url, $matches)) {
             return $matches[1];
         }
 
-        // Format: youtube.com/@username or youtube.com/c/username or youtube.com/user/username
-        if (preg_match('/youtube\.com\/(?:@|c\/|user\/)([a-zA-Z0-9_-]+)/', $url, $matches)) {
+        // Extract username from various URL formats
+        $username = '';
+        $url_type = '';
+        
+        if (preg_match('/youtube\.com\/@([a-zA-Z0-9_-]+)/', $url, $matches)) {
             $username = $matches[1];
+            $url_type = 'handle';
+        } elseif (preg_match('/youtube\.com\/c\/([a-zA-Z0-9_-]+)/', $url, $matches)) {
+            $username = $matches[1];
+            $url_type = 'custom';
+        } elseif (preg_match('/youtube\.com\/user\/([a-zA-Z0-9_-]+)/', $url, $matches)) {
+            $username = $matches[1];
+            $url_type = 'user';
         } else {
             $username = $handle;
+            $url_type = 'handle';
         }
 
         if (empty($username)) {
             return new WP_Error('invalid_url', 'Could not extract channel ID from URL');
         }
 
-        // Look up channel by username
+        // Strategy 1: Try forHandle (works for @ handles)
+        $channel_id = self::try_for_handle($username, $api_key);
+        if ($channel_id) {
+            return $channel_id;
+        }
+
+        // Strategy 2: Try forUsername (works for legacy /user/ URLs)
+        if ($url_type === 'user') {
+            $channel_id = self::try_for_username($username, $api_key);
+            if ($channel_id) {
+                return $channel_id;
+            }
+        }
+
+        // Strategy 3: Try with @ prefix (some /c/ URLs migrated to @ handles)
+        if ($url_type === 'custom') {
+            $channel_id = self::try_for_handle($username, $api_key);
+            if ($channel_id) {
+                return $channel_id;
+            }
+        }
+
+        // Strategy 4: Search by exact channel name
+        $channel_id = self::search_channel_exact($username, $api_key);
+        if ($channel_id) {
+            return $channel_id;
+        }
+
+        // Strategy 5: Search with quotes for exact match
+        $channel_id = self::search_channel_quoted($username, $api_key);
+        if ($channel_id) {
+            return $channel_id;
+        }
+
+        return new WP_Error('channel_not_found', 'Could not find YouTube channel');
+    }
+
+    /**
+     * Try to find channel by handle
+     */
+    private static function try_for_handle($handle, $api_key) {
         $endpoint = self::API_BASE_URL . '/channels';
         $params = [
             'part' => 'id',
-            'forHandle' => $username,
+            'forHandle' => $handle,
             'key' => $api_key,
         ];
 
@@ -104,20 +155,92 @@ class PIT_YouTube_API {
         ]);
 
         if (is_wp_error($response)) {
-            return $response;
+            return null;
         }
 
         $body = json_decode(wp_remote_retrieve_body($response), true);
 
-        if (isset($body['items'][0]['id'])) {
-            return $body['items'][0]['id'];
+        return $body['items'][0]['id'] ?? null;
+    }
+
+    /**
+     * Try to find channel by legacy username
+     */
+    private static function try_for_username($username, $api_key) {
+        $endpoint = self::API_BASE_URL . '/channels';
+        $params = [
+            'part' => 'id',
+            'forUsername' => $username,
+            'key' => $api_key,
+        ];
+
+        $response = wp_remote_get(add_query_arg($params, $endpoint), [
+            'timeout' => 10,
+        ]);
+
+        if (is_wp_error($response)) {
+            return null;
         }
 
-        // Try searching by username
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        return $body['items'][0]['id'] ?? null;
+    }
+
+    /**
+     * Search for channel by name
+     */
+    private static function search_channel_exact($name, $api_key) {
         $endpoint = self::API_BASE_URL . '/search';
         $params = [
             'part' => 'snippet',
-            'q' => $username,
+            'q' => $name,
+            'type' => 'channel',
+            'maxResults' => 5,
+            'key' => $api_key,
+        ];
+
+        $response = wp_remote_get(add_query_arg($params, $endpoint), [
+            'timeout' => 10,
+        ]);
+
+        if (is_wp_error($response)) {
+            return null;
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if (empty($body['items'])) {
+            return null;
+        }
+
+        // Look for exact or close match in results
+        $name_lower = strtolower($name);
+        foreach ($body['items'] as $item) {
+            $title = strtolower($item['snippet']['title'] ?? '');
+            $custom_url = strtolower($item['snippet']['customUrl'] ?? '');
+            
+            // Check if name matches title or custom URL
+            if ($title === $name_lower || 
+                $custom_url === '@' . $name_lower ||
+                $custom_url === $name_lower ||
+                strpos($title, $name_lower) !== false) {
+                return $item['snippet']['channelId'] ?? $item['id']['channelId'] ?? null;
+            }
+        }
+
+        // Return first result as fallback
+        return $body['items'][0]['snippet']['channelId'] ?? $body['items'][0]['id']['channelId'] ?? null;
+    }
+
+    /**
+     * Search for channel with quoted name
+     */
+    private static function search_channel_quoted($name, $api_key) {
+        $endpoint = self::API_BASE_URL . '/search';
+        $params = [
+            'part' => 'snippet',
+            'q' => '"' . $name . '"',
             'type' => 'channel',
             'maxResults' => 1,
             'key' => $api_key,
@@ -128,16 +251,12 @@ class PIT_YouTube_API {
         ]);
 
         if (is_wp_error($response)) {
-            return $response;
+            return null;
         }
 
         $body = json_decode(wp_remote_retrieve_body($response), true);
 
-        if (isset($body['items'][0]['snippet']['channelId'])) {
-            return $body['items'][0]['snippet']['channelId'];
-        }
-
-        return new WP_Error('channel_not_found', 'Could not find YouTube channel');
+        return $body['items'][0]['snippet']['channelId'] ?? $body['items'][0]['id']['channelId'] ?? null;
     }
 
     /**

@@ -792,7 +792,7 @@ class PIT_Shortcodes {
      */
     private static function render_social_link($link, $config, $atts) {
         $url = esc_url($link->profile_url);
-        $handle = esc_html($link->profile_handle);
+        $handle = $link->profile_handle;
         $name = esc_html($config['name']);
         $icon = $config['icon'];
         $color = esc_attr($config['color']);
@@ -800,6 +800,23 @@ class PIT_Shortcodes {
         $target = esc_attr($atts['target']);
         $class = esc_attr($atts['class']);
         $show_handle = $atts['show_handle'] === 'yes';
+
+        // Don't show handle if it looks like a channel ID (starts with UC)
+        // or if it's empty or too long (likely not a real handle)
+        $display_handle = '';
+        if ($show_handle && $handle) {
+            // Skip if it's a YouTube channel ID (starts with UC)
+            if (strpos($handle, 'UC') === 0 && strlen($handle) > 20) {
+                $display_handle = '';
+            }
+            // Skip if it's too long (probably not a handle)
+            elseif (strlen($handle) > 30) {
+                $display_handle = '';
+            }
+            else {
+                $display_handle = esc_html($handle);
+            }
+        }
 
         switch ($atts['layout']) {
             case 'url_only':
@@ -812,7 +829,7 @@ class PIT_Shortcodes {
                 );
 
             case 'link':
-                $text = $show_handle && $handle ? "@{$handle}" : $name;
+                $text = $display_handle ? "@{$display_handle}" : $name;
                 return sprintf(
                     '<a href="%s" target="%s" class="pit-social-link pit-social-%s %s">%s</a>',
                     $url, $target, esc_attr($link->platform), $class, $text
@@ -820,7 +837,7 @@ class PIT_Shortcodes {
 
             case 'button':
             default:
-                $text = $show_handle && $handle ? "{$cta} @{$handle}" : "{$cta} on {$name}";
+                $text = $display_handle ? "{$cta} @{$display_handle}" : "{$cta} on {$name}";
                 return sprintf(
                     '<a href="%s" target="%s" class="pit-social-button pit-social-%s %s" style="background-color: %s; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; display: inline-block;">%s %s</a>',
                     $url, $target, esc_attr($link->platform), $class, $color, $icon, $text

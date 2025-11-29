@@ -68,6 +68,27 @@ class PIT_REST_Metrics {
                 ],
             ],
         ]);
+
+        // Fix duplicate www in URLs
+        register_rest_route(self::NAMESPACE, '/fix-urls', [
+            'methods' => 'POST',
+            'callback' => [__CLASS__, 'fix_duplicate_www'],
+            'permission_callback' => [__CLASS__, 'check_admin_permission'],
+        ]);
+
+        // Resolve YouTube /c/ and /user/ URLs to channel IDs
+        register_rest_route(self::NAMESPACE, '/youtube/resolve-urls', [
+            'methods' => 'POST',
+            'callback' => [__CLASS__, 'resolve_youtube_urls'],
+            'permission_callback' => [__CLASS__, 'check_admin_permission'],
+        ]);
+
+        // List all non-enriched YouTube links
+        register_rest_route(self::NAMESPACE, '/youtube/not-enriched', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'list_not_enriched_youtube'],
+            'permission_callback' => [__CLASS__, 'check_admin_permission'],
+        ]);
     }
 
     /**
@@ -323,6 +344,13 @@ class PIT_REST_Metrics {
             $stats['quota_estimate'] = PIT_YouTube_API::estimate_quota_usage($stats['not_enriched']);
         }
 
+        // Fix any www.www. URLs in the top channels
+        foreach ($stats['top_channels'] as &$channel) {
+            if (isset($channel->profile_url)) {
+                $channel->profile_url = preg_replace('/www\.www\./', 'www.', $channel->profile_url);
+            }
+        }
+
         return rest_ensure_response($stats);
     }
 
@@ -416,5 +444,218 @@ class PIT_REST_Metrics {
 
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
+    }
+
+    /**
+     * Fix www.www. URLs in social_links table
+     */
+    public static function fix_duplicate_www($request) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_social_links';
+
+        // Find and fix URLs with www.www.
+        $affected = $wpdb->query(
+            "UPDATE $table SET profile_url = REPLACE(profile_url, 'www.www.', 'www.') WHERE profile_url LIKE '%www.www.%'"
+        );
+
+        return rest_ensure_response([
+            'success' => true,
+            'fixed' => $affected,
+            'message' => "{$affected} URLs fixed",
+        ]);
+    }
+
+    /**
+     * Resolve YouTube /c/ and /user/ URLs to channel IDs
+     * 
+     * This fixes existing URLs that couldn't be resolved via API
+     */
+    public static function resolve_youtube_urls($request) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_social_links';
+
+        $params = $request->get_json_params();
+        $limit = isset($params['limit']) ? min((int) $params['limit'], 50) : 20;
+
+        // Find YouTube URLs with /c/ or /user/ format
+        $links = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, podcast_id, profile_url, profile_handle 
+             FROM $table 
+             WHERE platform = 'youtube' 
+             AND (profile_url LIKE '%%/c/%%' OR profile_url LIKE '%%/user/%%')
+             LIMIT %d",
+            $limit
+        ));
+
+        if (empty($links)) {
+            return rest_ensure_response([
+                'success' => true,
+                'message' => 'No /c/ or /user/ YouTube URLs to resolve',
+                'processed' => 0,
+            ]);
+        }
+
+        $stats = [
+            'processed' => 0,
+            'resolved' => 0,
+            'failed' => 0,
+            'results' => [],
+        ];
+
+        foreach ($links as $link) {
+            $stats['processed']++;
+            
+            $resolved_url = self::resolve_youtube_url_standalone($link->profile_url);
+            
+            if ($resolved_url && $resolved_url !== $link->profile_url) {
+                // Extract new handle if it's a channel ID or @ handle
+                $new_handle = '';
+                if (preg_match('/\/channel\/(UC[a-zA-Z0-9_-]+)/', $resolved_url, $matches)) {
+                    $new_handle = $matches[1];
+                } elseif (preg_match('/@([a-zA-Z0-9_-]+)/', $resolved_url, $matches)) {
+                    $new_handle = $matches[1];
+                }
+
+                // Update database
+                $wpdb->update(
+                    $table,
+                    [
+                        'profile_url' => $resolved_url,
+                        'profile_handle' => $new_handle ?: $link->profile_handle,
+                    ],
+                    ['id' => $link->id]
+                );
+
+                $stats['resolved']++;
+                $stats['results'][] = [
+                    'podcast_id' => $link->podcast_id,
+                    'old_url' => $link->profile_url,
+                    'new_url' => $resolved_url,
+                ];
+            } else {
+                $stats['failed']++;
+            }
+
+            // Small delay to be nice to YouTube
+            usleep(500000); // 0.5 seconds
+        }
+
+        return rest_ensure_response([
+            'success' => true,
+            'message' => "{$stats['resolved']} URLs resolved from {$stats['processed']} processed",
+            'stats' => $stats,
+        ]);
+    }
+
+    /**
+     * Resolve a YouTube URL to its canonical form
+     */
+    private static function resolve_youtube_url_standalone($url) {
+        // Only resolve /c/ and /user/ URLs
+        if (!preg_match('/youtube\.com\/(c|user)\/([a-zA-Z0-9_-]+)/', $url)) {
+            return $url;
+        }
+
+        // Fetch the YouTube page
+        $response = wp_remote_get($url, [
+            'timeout' => 15,
+            'user-agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'headers' => [
+                'Accept-Language' => 'en-US,en;q=0.9',
+            ],
+        ]);
+
+        if (is_wp_error($response)) {
+            return null;
+        }
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        if ($status_code !== 200) {
+            return null; // Channel might not exist
+        }
+
+        $html = wp_remote_retrieve_body($response);
+
+        if (empty($html)) {
+            return null;
+        }
+
+        // Try to extract channel ID from page
+        // Pattern 1: "channelId":"UCxxxxxxxx"
+        if (preg_match('/"channelId"\s*:\s*"(UC[a-zA-Z0-9_-]+)"/', $html, $matches)) {
+            return 'https://www.youtube.com/channel/' . $matches[1];
+        }
+
+        // Pattern 2: "externalId":"UCxxxxxxxx"
+        if (preg_match('/"externalId"\s*:\s*"(UC[a-zA-Z0-9_-]+)"/', $html, $matches)) {
+            return 'https://www.youtube.com/channel/' . $matches[1];
+        }
+
+        // Pattern 3: canonical link with @handle
+        if (preg_match('/"canonicalBaseUrl"\s*:\s*"\/@([a-zA-Z0-9_-]+)"/', $html, $matches)) {
+            return 'https://www.youtube.com/@' . $matches[1];
+        }
+
+        // Pattern 4: browse_id in ytInitialData
+        if (preg_match('/"browseId"\s*:\s*"(UC[a-zA-Z0-9_-]+)"/', $html, $matches)) {
+            return 'https://www.youtube.com/channel/' . $matches[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * List all non-enriched YouTube links with details
+     */
+    public static function list_not_enriched_youtube($request) {
+        global $wpdb;
+        $social_table = $wpdb->prefix . 'pit_social_links';
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+
+        $links = $wpdb->get_results(
+            "SELECT sl.id, sl.podcast_id, sl.profile_url, sl.profile_handle, sl.metrics_enriched,
+                    p.title as podcast_title
+             FROM $social_table sl
+             LEFT JOIN $podcasts_table p ON sl.podcast_id = p.id
+             WHERE sl.platform = 'youtube' 
+             AND (sl.metrics_enriched = 0 OR sl.metrics_enriched IS NULL)
+             ORDER BY sl.podcast_id ASC"
+        );
+
+        $result = [
+            'total' => count($links),
+            'by_url_type' => [
+                'channel' => 0,
+                'handle' => 0,
+                'custom_c' => 0,
+                'user' => 0,
+                'other' => 0,
+            ],
+            'links' => [],
+        ];
+
+        foreach ($links as $link) {
+            $url_type = 'other';
+            if (strpos($link->profile_url, '/channel/') !== false) {
+                $url_type = 'channel';
+            } elseif (strpos($link->profile_url, '/@') !== false) {
+                $url_type = 'handle';
+            } elseif (strpos($link->profile_url, '/c/') !== false) {
+                $url_type = 'custom_c';
+            } elseif (strpos($link->profile_url, '/user/') !== false) {
+                $url_type = 'user';
+            }
+
+            $result['by_url_type'][$url_type]++;
+
+            $result['links'][] = [
+                'podcast_id' => $link->podcast_id,
+                'podcast_title' => $link->podcast_title,
+                'profile_url' => $link->profile_url,
+                'url_type' => $url_type,
+            ];
+        }
+
+        return rest_ensure_response($result);
     }
 }

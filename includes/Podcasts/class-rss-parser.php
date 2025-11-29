@@ -236,14 +236,88 @@ class PIT_RSS_Parser {
                 $url = str_replace('x.com', 'twitter.com', $url);
                 break;
             case 'youtube':
-                // Ensure www
-                $url = str_replace('youtube.com', 'www.youtube.com', $url);
+                // Ensure www (but don't duplicate if already present)
+                if (strpos($url, 'www.youtube.com') === false) {
+                    $url = str_replace('youtube.com', 'www.youtube.com', $url);
+                }
+                // Resolve /c/ and /user/ URLs to get actual channel ID
+                $url = self::resolve_youtube_url($url);
                 break;
         }
+
+        // Fix any duplicate www
+        $url = preg_replace('/www\.www\./', 'www.', $url);
 
         // Remove trailing slash
         $url = rtrim($url, '/');
 
+        return $url;
+    }
+
+    /**
+     * Resolve YouTube URL to canonical format
+     * 
+     * Fetches the YouTube page and extracts the actual channel ID or handle
+     * This handles /c/CustomName and /user/Username URLs that may have different handles
+     *
+     * @param string $url YouTube URL
+     * @return string Resolved URL (or original if resolution fails)
+     */
+    private static function resolve_youtube_url($url) {
+        // Only resolve /c/ and /user/ URLs - @handles and /channel/ are already correct
+        if (!preg_match('/youtube\.com\/(c|user)\/([a-zA-Z0-9_-]+)/', $url, $matches)) {
+            return $url;
+        }
+
+        // Fetch the YouTube page
+        $response = wp_remote_get($url, [
+            'timeout' => 10,
+            'user-agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'headers' => [
+                'Accept-Language' => 'en-US,en;q=0.9',
+            ],
+        ]);
+
+        if (is_wp_error($response)) {
+            return $url; // Return original on error
+        }
+
+        $html = wp_remote_retrieve_body($response);
+
+        if (empty($html)) {
+            return $url;
+        }
+
+        // Try to extract channel ID from page
+        // Pattern 1: "channelId":"UCxxxxxxxx"
+        if (preg_match('/"channelId"\s*:\s*"(UC[a-zA-Z0-9_-]+)"/', $html, $matches)) {
+            return 'https://www.youtube.com/channel/' . $matches[1];
+        }
+
+        // Pattern 2: "externalId":"UCxxxxxxxx"
+        if (preg_match('/"externalId"\s*:\s*"(UC[a-zA-Z0-9_-]+)"/', $html, $matches)) {
+            return 'https://www.youtube.com/channel/' . $matches[1];
+        }
+
+        // Pattern 3: canonical link with @handle
+        if (preg_match('/"canonicalBaseUrl"\s*:\s*"\/@([a-zA-Z0-9_-]+)"/', $html, $matches)) {
+            return 'https://www.youtube.com/@' . $matches[1];
+        }
+
+        // Pattern 4: <link rel="canonical" href="..."> 
+        if (preg_match('/<link[^>]+rel=["\']canonical["\'][^>]+href=["\']([^"\']+)["\']/', $html, $matches)) {
+            $canonical = $matches[1];
+            if (strpos($canonical, 'youtube.com') !== false) {
+                return $canonical;
+            }
+        }
+
+        // Pattern 5: browse_id in ytInitialData
+        if (preg_match('/"browseId"\s*:\s*"(UC[a-zA-Z0-9_-]+)"/', $html, $matches)) {
+            return 'https://www.youtube.com/channel/' . $matches[1];
+        }
+
+        // Could not resolve, return original
         return $url;
     }
 
