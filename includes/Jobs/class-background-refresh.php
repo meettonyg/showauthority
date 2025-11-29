@@ -22,13 +22,13 @@ class PIT_Background_Refresh {
      * Initialize background refresh
      */
     public static function init() {
-        // Weekly cron for checking expired metrics
+        // Daily cron for checking expired metrics
         add_action('pit_background_refresh', [__CLASS__, 'run_refresh']);
 
-        // Also process unenriched links (auto-fetch for empty data)
+        // Hourly cron for auto-enriching empty data
         add_action('pit_auto_enrich', [__CLASS__, 'run_auto_enrich']);
 
-        // Schedule weekly refresh check if not scheduled
+        // Schedule daily refresh check if not scheduled
         if (!wp_next_scheduled('pit_background_refresh')) {
             wp_schedule_event(time(), 'daily', 'pit_background_refresh');
         }
@@ -175,8 +175,8 @@ class PIT_Background_Refresh {
      */
     private static function estimate_cost($platforms) {
         $costs = [
-            'youtube' => 0,      // Free (YouTube Data API)
-            'twitter' => 0.003,  // Apify ~$3/1000
+            'youtube' => 0,       // Free (YouTube Data API)
+            'twitter' => 0.003,   // Apify ~$3/1000
             'instagram' => 0.005, // Apify ~$5/1000
             'facebook' => 0.005,  // Apify ~$5/1000
             'linkedin' => 0.004,  // Apify ~$4/1000

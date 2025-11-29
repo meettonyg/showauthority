@@ -268,9 +268,6 @@ class PIT_Metrics_Fetcher {
      * @return array Metrics data
      */
     private static function fetch_podcast_platform_metrics($platform, $url) {
-        // For now, return placeholder data
-        // In production, you would scrape public data or use APIs
-
         switch ($platform) {
             case 'spotify':
                 return self::scrape_spotify_data($url);
@@ -285,13 +282,8 @@ class PIT_Metrics_Fetcher {
 
     /**
      * Scrape Spotify public data
-     *
-     * Extracts available public data from Spotify podcast pages including
-     * show description metadata and episode counts. Note: Follower counts
-     * are not publicly exposed by Spotify.
      */
     private static function scrape_spotify_data($url) {
-        // Normalize URL to ensure we have the right format
         $url = self::normalize_spotify_url($url);
 
         $response = wp_remote_get($url, [
@@ -320,12 +312,10 @@ class PIT_Metrics_Fetcher {
             'raw_data' => [],
         ];
 
-        // Try to extract show ID from URL
         if (preg_match('/show\/([a-zA-Z0-9]+)/', $url, $matches)) {
             $data['raw_data']['show_id'] = $matches[1];
         }
 
-        // Try to find JSON-LD data embedded in page
         if (preg_match('/<script type="application\/ld\+json">(.*?)<\/script>/s', $html, $matches)) {
             $json_ld = json_decode($matches[1], true);
             if ($json_ld && isset($json_ld['@type']) && $json_ld['@type'] === 'PodcastSeries') {
@@ -333,14 +323,12 @@ class PIT_Metrics_Fetcher {
                 $data['raw_data']['description'] = $json_ld['description'] ?? '';
                 $data['raw_data']['publisher'] = $json_ld['publisher']['name'] ?? '';
 
-                // Count episodes if available
                 if (isset($json_ld['episode']) && is_array($json_ld['episode'])) {
                     $data['posts'] = count($json_ld['episode']);
                 }
             }
         }
 
-        // Try to extract episode count from meta or page content
         if (preg_match('/(\d+)\s*episodes?/i', $html, $matches)) {
             $episode_count = (int) $matches[1];
             if ($episode_count > $data['posts']) {
@@ -348,29 +336,25 @@ class PIT_Metrics_Fetcher {
             }
         }
 
-        // Extract show title from og:title
         if (preg_match('/<meta property="og:title" content="([^"]+)"/', $html, $matches)) {
             $data['raw_data']['title'] = html_entity_decode($matches[1]);
         }
 
-        // Note about limitations
-        $data['raw_data']['note'] = 'Spotify does not publicly expose follower counts. Episode count extracted where available.';
+        $data['raw_data']['note'] = 'Spotify does not publicly expose follower counts.';
         $data['raw_data']['scraped_at'] = current_time('mysql');
 
         return $data;
     }
 
     /**
-     * Normalize Spotify URL to the open.spotify.com format
+     * Normalize Spotify URL
      */
     private static function normalize_spotify_url($url) {
-        // Handle spotify: URI format
         if (strpos($url, 'spotify:show:') === 0) {
             $show_id = str_replace('spotify:show:', '', $url);
             return 'https://open.spotify.com/show/' . $show_id;
         }
 
-        // Ensure https
         if (strpos($url, 'http://') === 0) {
             $url = str_replace('http://', 'https://', $url);
         }
@@ -380,9 +364,6 @@ class PIT_Metrics_Fetcher {
 
     /**
      * Scrape Apple Podcasts public data
-     *
-     * Extracts ratings, reviews, episode counts and other metadata from
-     * Apple Podcasts pages. Uses ratings count as a proxy for popularity.
      */
     private static function scrape_apple_podcasts_data($url) {
         $response = wp_remote_get($url, [
@@ -411,18 +392,15 @@ class PIT_Metrics_Fetcher {
             'raw_data' => [],
         ];
 
-        // Extract podcast ID from URL
         if (preg_match('/id(\d+)/', $url, $matches)) {
             $data['raw_data']['podcast_id'] = $matches[1];
         }
 
-        // Extract ratings count (multiple patterns)
         $ratings = 0;
         $patterns = [
             '/(\d+(?:,\d+)*)\s+Ratings?/i',
             '/(\d+(?:,\d+)*)\s+reviews?/i',
             '/"ratingCount"[:\s]*(\d+)/i',
-            '/data-test-rating-count[^>]*>(\d+(?:,\d+)*)/i',
         ];
 
         foreach ($patterns as $pattern) {
@@ -433,19 +411,14 @@ class PIT_Metrics_Fetcher {
                 }
             }
         }
-        $data['followers'] = $ratings; // Use ratings as popularity proxy
+        $data['followers'] = $ratings;
         $data['raw_data']['ratings_count'] = $ratings;
 
-        // Extract average rating
         if (preg_match('/(\d+(?:\.\d+)?)\s*out of\s*5/i', $html, $matches)) {
-            $data['raw_data']['average_rating'] = floatval($matches[1]);
-            $data['engagement_rate'] = round(floatval($matches[1]) * 20, 2); // Convert 5-star to percentage
-        } elseif (preg_match('/"ratingValue"[:\s]*"?(\d+(?:\.\d+)?)"?/i', $html, $matches)) {
             $data['raw_data']['average_rating'] = floatval($matches[1]);
             $data['engagement_rate'] = round(floatval($matches[1]) * 20, 2);
         }
 
-        // Extract episode count
         $episode_patterns = [
             '/(\d+(?:,\d+)*)\s+episodes?/i',
             '/"numberOfEpisodes"[:\s]*(\d+)/i',
@@ -458,19 +431,8 @@ class PIT_Metrics_Fetcher {
             }
         }
 
-        // Extract show title from og:title or JSON-LD
         if (preg_match('/<meta property="og:title" content="([^"]+)"/', $html, $matches)) {
             $data['raw_data']['title'] = html_entity_decode($matches[1]);
-        }
-
-        // Try to get publisher/author
-        if (preg_match('/"author"[:\s]*\{[^}]*"name"[:\s]*"([^"]+)"/i', $html, $matches)) {
-            $data['raw_data']['publisher'] = $matches[1];
-        }
-
-        // Extract category
-        if (preg_match('/"genre"[:\s]*"([^"]+)"/i', $html, $matches)) {
-            $data['raw_data']['category'] = $matches[1];
         }
 
         $data['raw_data']['note'] = 'Apple Podcasts does not expose subscriber counts. Ratings used as popularity proxy.';
@@ -525,7 +487,6 @@ class PIT_Metrics_Fetcher {
             return false;
         }
 
-        // Use tiered expiry check
         $followers = (int) ($metrics->followers_count ?? $metrics->subscriber_count ?? 0);
         $refresh_days = self::get_refresh_days($followers);
         $expires_at = strtotime($metrics->fetched_at . " + {$refresh_days} days");
@@ -564,7 +525,6 @@ class PIT_Metrics_Fetcher {
             $where['platform'] = $platform;
         }
 
-        // Set expiry to past
         $wpdb->update(
             $table,
             ['expires_at' => date('Y-m-d H:i:s', strtotime('-1 day'))],
@@ -576,8 +536,6 @@ class PIT_Metrics_Fetcher {
 
     /**
      * Get metrics needing refresh across all platforms
-     * 
-     * Used by background refresh job to find expired metrics
      *
      * @param int $limit Max records to return
      * @return array Array of [podcast_id, platform, followers, fetched_at]
@@ -585,10 +543,8 @@ class PIT_Metrics_Fetcher {
     public static function get_metrics_needing_refresh($limit = 100) {
         global $wpdb;
         $metrics_table = $wpdb->prefix . 'pit_metrics';
-        $social_table = $wpdb->prefix . 'pit_social_links';
         $podcasts_table = $wpdb->prefix . 'pit_podcasts';
 
-        // Get latest metrics per podcast/platform that are expired
         $sql = "
             SELECT 
                 m.podcast_id,
