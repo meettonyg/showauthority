@@ -50,9 +50,10 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
                 ],
             ],
             'twitter' => [
-                'endpoint' => '/twitter',
+                'endpoint' => '/x/profile',
                 'credits_per_request' => 5,
                 'cost_per_1k' => 1.00,
+                'param_name' => 'profile', // ScrapingDog uses 'profile' param for X/Twitter
                 'response_map' => [
                     'followers' => ['followers_count', 'followersCount', 'followers'],
                     'following' => ['following_count', 'followingCount', 'friends_count'],
@@ -120,14 +121,34 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
             );
         }
 
+        // LinkedIn: ScrapingDog only supports personal profiles (/in/), not company pages (/company/)
+        if ($platform === 'linkedin' && strpos($profile_url, '/company/') !== false) {
+            return new WP_Error(
+                'unsupported_profile_type',
+                'ScrapingDog does not support LinkedIn company pages, only personal profiles (/in/).',
+                ['profile_type' => 'company']
+            );
+        }
+
         $config = $this->platform_config[$platform];
         $api_key = $this->get_api_key();
 
         // Build request URL
         $url = self::API_BASE_URL . $config['endpoint'];
+        
+        // Different platforms use different parameter names
+        $param_name = $config['param_name'] ?? 'link';
+        
+        // For Twitter/X, we need the handle/username, not the full URL
+        if ($platform === 'twitter') {
+            $profile_value = $handle ?: $this->extract_handle_from_url($profile_url, 'twitter');
+        } else {
+            $profile_value = $profile_url;
+        }
+        
         $params = [
             'api_key' => $api_key,
-            'link' => $profile_url,
+            $param_name => $profile_value,
         ];
 
         // Add parsed=true to get JSON response
