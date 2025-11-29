@@ -76,6 +76,13 @@ class PIT_REST_Metrics {
             'permission_callback' => [__CLASS__, 'check_admin_permission'],
         ]);
 
+        // Delete bogus/generic social links
+        register_rest_route(self::NAMESPACE, '/delete-bogus-links', [
+            'methods' => 'POST',
+            'callback' => [__CLASS__, 'delete_bogus_links'],
+            'permission_callback' => [__CLASS__, 'check_admin_permission'],
+        ]);
+
         // Resolve YouTube /c/ and /user/ URLs to channel IDs
         register_rest_route(self::NAMESPACE, '/youtube/resolve-urls', [
             'methods' => 'POST',
@@ -462,6 +469,59 @@ class PIT_REST_Metrics {
             'success' => true,
             'fixed' => $affected,
             'message' => "{$affected} URLs fixed",
+        ]);
+    }
+
+    /**
+     * Delete bogus/generic social links (like Spotify's YouTube channel)
+     */
+    public static function delete_bogus_links($request) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_social_links';
+
+        // List of known bogus/generic URLs that aren't actually podcast-specific
+        $bogus_patterns = [
+            '%youtube.com/c/spotifyforcreators%',
+            '%youtube.com/@spotifyforcreators%',
+            '%youtube.com/c/spotify%',
+            '%youtube.com/@spotify%',
+            '%youtube.com/c/applepodcasts%',
+            '%youtube.com/@applepodcasts%',
+            '%youtube.com/c/anchor%',
+            '%youtube.com/@anchor%',
+            '%youtube.com/c/buzzsprout%',
+            '%youtube.com/@buzzsprout%',
+        ];
+
+        $deleted = 0;
+        $details = [];
+
+        foreach ($bogus_patterns as $pattern) {
+            // Get links that match this pattern
+            $matches = $wpdb->get_results($wpdb->prepare(
+                "SELECT id, podcast_id, profile_url FROM $table WHERE profile_url LIKE %s",
+                $pattern
+            ));
+
+            if (!empty($matches)) {
+                $ids = array_column($matches, 'id');
+                $id_list = implode(',', array_map('intval', $ids));
+                
+                $count = $wpdb->query("DELETE FROM $table WHERE id IN ($id_list)");
+                $deleted += $count;
+                
+                $details[] = [
+                    'pattern' => $pattern,
+                    'deleted' => $count,
+                ];
+            }
+        }
+
+        return rest_ensure_response([
+            'success' => true,
+            'total_deleted' => $deleted,
+            'details' => $details,
+            'message' => "{$deleted} bogus social links deleted",
         ]);
     }
 

@@ -200,6 +200,11 @@ class PIT_RSS_Parser {
             foreach ($platform_patterns as $pattern) {
                 if (preg_match_all($pattern, $text, $matches)) {
                     foreach ($matches[0] as $index => $url) {
+                        // Skip bogus/generic platform URLs
+                        if (self::is_bogus_social_url($url, $platform)) {
+                            continue;
+                        }
+
                         // Normalize URL
                         $url = self::normalize_social_url($url, $platform);
 
@@ -218,6 +223,110 @@ class PIT_RSS_Parser {
         }
 
         return $links;
+    }
+
+    /**
+     * Check if a social URL is a bogus/generic platform URL
+     * 
+     * These are URLs belonging to podcast hosting platforms, not the actual podcasts
+     *
+     * @param string $url The URL to check
+     * @param string $platform The platform type
+     * @return bool True if bogus, false if legitimate
+     */
+    private static function is_bogus_social_url($url, $platform) {
+        $url_lower = strtolower($url);
+
+        // YouTube bogus accounts (hosting platforms, not podcasts)
+        $bogus_youtube = [
+            'spotifyforcreators',
+            'spotify',
+            'applepodcasts',
+            'apple',
+            'anchor',
+            'anchorfm',
+            'buzzsprout',
+            'libsyn',
+            'podbean',
+            'spreaker',
+            'soundcloud',
+            'stitcher',
+            'iheartradio',
+            'tunein',
+            'castbox',
+            'pocketcasts',
+            'overcast',
+            'googlepodcasts',
+            'amazonmusic',
+            'audible',
+            'deezer',
+            'pandora',
+            'rss',
+            'rssfeed',
+        ];
+
+        // Twitter bogus accounts
+        $bogus_twitter = [
+            'spotify',
+            'spotifypodcasts',
+            'applepodcasts',
+            'anchor',
+            'buzzsprout',
+        ];
+
+        // Facebook bogus accounts
+        $bogus_facebook = [
+            'spotify',
+            'applepodcasts',
+            'anchor',
+            'buzzsprout',
+        ];
+
+        // Instagram bogus accounts
+        $bogus_instagram = [
+            'spotify',
+            'applepodcasts',
+            'anchor',
+            'buzzsprout',
+        ];
+
+        switch ($platform) {
+            case 'youtube':
+                foreach ($bogus_youtube as $bogus) {
+                    if (strpos($url_lower, '/' . $bogus) !== false ||
+                        strpos($url_lower, '@' . $bogus) !== false) {
+                        return true;
+                    }
+                }
+                break;
+
+            case 'twitter':
+                foreach ($bogus_twitter as $bogus) {
+                    if (preg_match('/twitter\.com\/' . $bogus . '\/?$/i', $url_lower) ||
+                        preg_match('/x\.com\/' . $bogus . '\/?$/i', $url_lower)) {
+                        return true;
+                    }
+                }
+                break;
+
+            case 'facebook':
+                foreach ($bogus_facebook as $bogus) {
+                    if (preg_match('/facebook\.com\/' . $bogus . '\/?$/i', $url_lower)) {
+                        return true;
+                    }
+                }
+                break;
+
+            case 'instagram':
+                foreach ($bogus_instagram as $bogus) {
+                    if (preg_match('/instagram\.com\/' . $bogus . '\/?$/i', $url_lower)) {
+                        return true;
+                    }
+                }
+                break;
+        }
+
+        return false;
     }
 
     /**
