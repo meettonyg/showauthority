@@ -157,6 +157,10 @@ class Podcast_Influence_Tracker {
         add_action('rest_api_init', [$this, 'register_rest_routes']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
         add_action('wp_enqueue_scripts', [$this, 'enqueue_frontend_scripts']);
+
+        // AJAX handlers for admin diagnostics
+        add_action('wp_ajax_pit_enrichment_status', [$this, 'ajax_enrichment_status']);
+        add_action('wp_ajax_pit_test_single_enrichment', [$this, 'ajax_test_single_enrichment']);
     }
 
     /**
@@ -324,6 +328,7 @@ class Podcast_Influence_Tracker {
         wp_localize_script('pit-vue', 'pitData', [
             'apiUrl' => rest_url('podcast-influence/v1'),
             'nonce' => wp_create_nonce('wp_rest'),
+            'ajaxNonce' => wp_create_nonce('pit_ajax_nonce'),
             'settings' => PIT_Settings::get_all(),
             'version' => PIT_VERSION,
         ]);
@@ -334,6 +339,173 @@ class Podcast_Influence_Tracker {
      */
     public function enqueue_frontend_scripts() {
         // Frontend scripts if needed
+    }
+
+    /**
+     * AJAX: Get enrichment status for all platforms
+     * 
+     * Call from browser console:
+     * fetch(ajaxurl, {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'action=pit_enrichment_status&_ajax_nonce='+pitData.ajaxNonce}).then(r=>r.json()).then(console.table)
+     */
+    public function ajax_enrichment_status() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['_ajax_nonce'] ?? '', 'pit_ajax_nonce')) {
+            wp_send_json_error('Invalid nonce');
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permission denied');
+        }
+
+        global $wpdb;
+
+        $platforms = ['youtube', 'linkedin', 'twitter', 'instagram', 'facebook', 'tiktok', 'spotify', 'apple_podcasts'];
+        $results = [];
+
+        foreach ($platforms as $platform) {
+            // Total links for this platform
+            $total = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(*) FROM {$wpdb->prefix}pit_social_links WHERE platform = %s",
+                $platform
+            ));
+
+            // Already enriched (have metrics)
+            $enriched = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(DISTINCT s.id) 
+                 FROM {$wpdb->prefix}pit_social_links s
+                 INNER JOIN {$wpdb->prefix}pit_metrics m 
+                     ON s.podcast_id = m.podcast_id AND s.platform = m.platform
+                 WHERE s.platform = %s",
+                $platform
+            ));
+
+            // Cost per enrichment
+            $costs = [
+                'youtube' => 0,
+                'linkedin' => 0.004,
+                'twitter' => 0.003,
+                'instagram' => 0.005,
+                'facebook' => 0.005,
+                'tiktok' => 0.003,
+                'spotify' => 0,
+                'apple_podcasts' => 0,
+            ];
+
+            $remaining = $total - $enriched;
+            $cost = $remaining * ($costs[$platform] ?? 0);
+
+            $results[] = [
+                'platform' => $platform,
+                'total' => $total,
+                'enriched' => $enriched,
+                'remaining' => $remaining,
+                'cost_estimate' => '$' . number_format($cost, 2),
+            ];
+        }
+
+        // Add summary row
+        $total_remaining = array_sum(array_column($results, 'remaining'));
+        $total_cost = 0;
+        foreach ($results as $r) {
+            $total_cost += (float) str_replace(['$', ','], '', $r['cost_estimate']);
+        }
+
+        // Add pending jobs count
+        $pending_jobs = (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM {$wpdb->prefix}pit_jobs WHERE status IN ('queued', 'processing')"
+        );
+
+        // Add this week's spend
+        $weekly_spend = (float) $wpdb->get_var(
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM {$wpdb->prefix}pit_cost_log 
+             WHERE YEARWEEK(logged_at) = YEARWEEK(NOW())"
+        );
+
+        // Check Apify token
+        $settings = PIT_Settings::get_all();
+        $has_apify_token = !empty($settings['apify_api_token']);
+
+        wp_send_json_success([
+            'platforms' => $results,
+            'summary' => [
+                'total_remaining' => $total_remaining,
+                'total_cost_estimate' => '$' . number_format($total_cost, 2),
+                'pending_jobs' => $pending_jobs,
+                'weekly_spend' => '$' . number_format($weekly_spend, 2),
+                'apify_configured' => $has_apify_token,
+            ],
+        ]);
+    }
+
+    /**
+     * AJAX: Test single enrichment
+     * 
+     * Call from browser console:
+     * fetch(ajaxurl, {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'action=pit_test_single_enrichment&platform=linkedin&_ajax_nonce='+pitData.ajaxNonce}).then(r=>r.json()).then(console.log)
+     */
+    public function ajax_test_single_enrichment() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['_ajax_nonce'] ?? '', 'pit_ajax_nonce')) {
+            wp_send_json_error('Invalid nonce');
+        }
+
+        // Check permissions
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permission denied');
+        }
+
+        global $wpdb;
+
+        $platform = sanitize_text_field($_POST['platform'] ?? 'linkedin');
+
+        // Get first unenriched link for this platform
+        $link = $wpdb->get_row($wpdb->prepare(
+            "SELECT s.*, p.title as podcast_name
+             FROM {$wpdb->prefix}pit_social_links s
+             LEFT JOIN {$wpdb->prefix}pit_podcasts p ON s.podcast_id = p.id
+             LEFT JOIN {$wpdb->prefix}pit_metrics m 
+                 ON s.podcast_id = m.podcast_id AND s.platform = m.platform
+             WHERE s.platform = %s AND m.id IS NULL
+             LIMIT 1",
+            $platform
+        ));
+
+        if (!$link) {
+            wp_send_json_error("No unenriched {$platform} profiles found");
+        }
+
+        // Try to fetch metrics
+        $result = PIT_Apify_Client::fetch_metrics(
+            $platform,
+            $link->profile_url,
+            $link->profile_handle ?? ''
+        );
+
+        if (is_wp_error($result)) {
+            wp_send_json_error([
+                'message' => $result->get_error_message(),
+                'profile' => [
+                    'podcast' => $link->podcast_name,
+                    'url' => $link->profile_url,
+                    'handle' => $link->profile_handle,
+                ],
+            ]);
+        }
+
+        wp_send_json_success([
+            'profile' => [
+                'podcast' => $link->podcast_name,
+                'url' => $link->profile_url,
+                'handle' => $link->profile_handle,
+            ],
+            'metrics' => [
+                'followers' => $result['followers'] ?? 0,
+                'following' => $result['following'] ?? 0,
+                'posts' => $result['posts'] ?? 0,
+            ],
+            'cost' => '$' . number_format($result['cost'] ?? 0, 4),
+        ]);
     }
 }
 
