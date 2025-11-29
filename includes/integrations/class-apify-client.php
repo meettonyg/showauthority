@@ -6,7 +6,7 @@
  * Uses Apify platform actors for scraping (pay-per-result pricing)
  *
  * Pricing (per 1,000 profiles):
- * - LinkedIn: $4 (harvestapi/linkedin-profile-scraper)
+ * - LinkedIn: $10 (dev_fusion/linkedin-profile-scraper)
  * - Twitter: $3 (harvestapi/twitter-user-scraper)  
  * - Instagram: $5 (apify/instagram-profile-scraper)
  * - Facebook: $5 (apify/facebook-pages-scraper)
@@ -32,8 +32,8 @@ class PIT_Apify_Client {
      */
     private static $platform_config = [
         'linkedin' => [
-            'actor' => 'harvestapi/linkedin-profile-scraper',
-            'cost_per_1k' => 4.00,
+            'actor' => 'dev_fusion/linkedin-profile-scraper',
+            'cost_per_1k' => 10.00,
             'input_format' => 'urls_array',
             'response_map' => [
                 'followers' => ['followersCount', 'connectionsCount', 'followerCount'],
