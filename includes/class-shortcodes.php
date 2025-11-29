@@ -715,21 +715,35 @@ class PIT_Shortcodes {
         $social_table = $wpdb->prefix . 'pit_social_links';
         $metrics_table = $wpdb->prefix . 'pit_metrics';
 
-        // Join with metrics table to get subscriber/follower count
-        return $wpdb->get_row($wpdb->prepare(
-            "SELECT sl.*, 
-                    COALESCE(m.subscribers, m.followers, 0) as metric_count,
-                    m.subscribers as metric_subscribers,
-                    m.followers as metric_followers,
-                    m.views as metric_views
-             FROM $social_table sl
-             LEFT JOIN $metrics_table m ON sl.id = m.social_link_id
-             WHERE sl.podcast_id = %d AND sl.platform = %s AND sl.active = 1
-             ORDER BY m.fetched_at DESC
-             LIMIT 1",
+        // First get the social link
+        $link = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $social_table WHERE podcast_id = %d AND platform = %s AND active = 1 LIMIT 1",
             $podcast_id,
             $platform
         ));
+
+        if (!$link) {
+            return null;
+        }
+
+        // Then get the latest metrics for this link
+        $metrics = $wpdb->get_row($wpdb->prepare(
+            "SELECT subscriber_count, followers_count, total_views FROM $metrics_table WHERE social_link_id = %d ORDER BY fetched_at DESC LIMIT 1",
+            $link->id
+        ));
+
+        // Add metrics to link object
+        if ($metrics) {
+            $link->metric_subscribers = $metrics->subscriber_count;
+            $link->metric_followers = $metrics->followers_count;
+            $link->metric_views = $metrics->total_views;
+        } else {
+            $link->metric_subscribers = 0;
+            $link->metric_followers = 0;
+            $link->metric_views = 0;
+        }
+
+        return $link;
     }
 
     /**
@@ -858,6 +872,13 @@ class PIT_Shortcodes {
                 return $url;
 
             case 'icon':
+                // Icon layout only makes sense with actual icons - fallback to link
+                if (empty($icon)) {
+                    return sprintf(
+                        '<a href="%s" target="%s" class="pit-social-link pit-social-%s %s">%s</a>',
+                        $url, $target, esc_attr($link->platform), $class, $name
+                    );
+                }
                 return sprintf(
                     '<a href="%s" target="%s" class="pit-social-icon pit-social-%s %s" title="%s" style="color: %s;">%s</a>',
                     $url, $target, esc_attr($link->platform), $class, $name, $color, $icon
@@ -878,8 +899,8 @@ class PIT_Shortcodes {
                     $text .= " ({$count_display} {$label})";
                 }
                 return sprintf(
-                    '<a href="%s" target="%s" class="pit-social-link pit-social-%s pit-social-metrics %s">%s %s</a>',
-                    $url, $target, esc_attr($link->platform), $class, $icon, $text
+                    '<a href="%s" target="%s" class="pit-social-link pit-social-%s pit-social-metrics %s">%s</a>',
+                    $url, $target, esc_attr($link->platform), $class, $text
                 );
 
             case 'count_only':
@@ -896,8 +917,8 @@ class PIT_Shortcodes {
             default:
                 $text = $display_handle ? "{$cta} @{$display_handle}" : "{$cta} on {$name}";
                 return sprintf(
-                    '<a href="%s" target="%s" class="pit-social-button pit-social-%s %s" style="background-color: %s; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; display: inline-block;">%s %s</a>',
-                    $url, $target, esc_attr($link->platform), $class, $color, $icon, $text
+                    '<a href="%s" target="%s" class="pit-social-button pit-social-%s %s" style="background-color: %s; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; display: inline-block;">%s</a>',
+                    $url, $target, esc_attr($link->platform), $class, $color, $text
                 );
         }
     }

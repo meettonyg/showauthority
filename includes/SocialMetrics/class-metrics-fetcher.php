@@ -4,6 +4,11 @@
  *
  * Fetches social media metrics from various platforms
  * Routes to appropriate API integration based on platform
+ * 
+ * Features:
+ * - Auto-fetch when data is empty
+ * - Tiered refresh frequency based on follower count
+ * - Smart caching to minimize API costs
  */
 
 if (!defined('ABSPATH')) {
@@ -11,6 +16,131 @@ if (!defined('ABSPATH')) {
 }
 
 class PIT_Metrics_Fetcher {
+
+    /**
+     * Tiered refresh intervals based on follower count (in days)
+     * 
+     * < 1,000 followers     = 90 days (small channels grow slowly)
+     * 1,000 - 10,000        = 60 days (moderate growth)
+     * 10,000 - 100,000      = 30 days (active growth phase)
+     * 100,000 - 1,000,000   = 14 days (rapid changes possible)
+     * > 1,000,000           = 7 days  (high-profile, fast-moving)
+     */
+    const REFRESH_TIERS = [
+        1000      => 90,  // < 1K followers
+        10000     => 60,  // 1K - 10K followers
+        100000    => 30,  // 10K - 100K followers
+        1000000   => 14,  // 100K - 1M followers
+        PHP_INT_MAX => 7, // > 1M followers
+    ];
+
+    /**
+     * Default refresh interval for new/unknown accounts (in days)
+     */
+    const DEFAULT_REFRESH_DAYS = 30;
+
+    /**
+     * Get or fetch metrics for a platform (auto-fetch if empty)
+     * 
+     * This is the primary method to call when displaying metrics.
+     * It will automatically queue a fetch job if data is empty or expired.
+     *
+     * @param int $podcast_id Podcast ID
+     * @param string $platform Platform name
+     * @param bool $queue_if_empty Whether to queue fetch if empty (default: true)
+     * @return object|null Metrics object or null
+     */
+    public static function get_or_fetch($podcast_id, $platform, $queue_if_empty = true) {
+        // Check for existing valid metrics
+        $metrics = PIT_Database::get_latest_metrics($podcast_id, $platform);
+
+        if ($metrics) {
+            // Check if expired based on tiered refresh
+            $followers = (int) ($metrics->followers_count ?? $metrics->subscriber_count ?? 0);
+            $refresh_days = self::get_refresh_days($followers);
+            $expires_at = strtotime($metrics->fetched_at . " + {$refresh_days} days");
+
+            if (time() < $expires_at) {
+                // Still valid, return cached data
+                return $metrics;
+            }
+        }
+
+        // No metrics or expired - queue a fetch if requested
+        if ($queue_if_empty) {
+            self::queue_fetch_if_needed($podcast_id, $platform);
+        }
+
+        // Return whatever we have (might be stale but better than nothing)
+        return $metrics;
+    }
+
+    /**
+     * Queue a fetch job if not already queued
+     *
+     * @param int $podcast_id Podcast ID
+     * @param string $platform Platform name
+     * @return int|false Job ID or false if already queued/not needed
+     */
+    public static function queue_fetch_if_needed($podcast_id, $platform) {
+        // Check if there's already a pending job for this platform
+        global $wpdb;
+        $jobs_table = $wpdb->prefix . 'pit_jobs';
+
+        $pending_job = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM $jobs_table 
+             WHERE podcast_id = %d 
+             AND status IN ('queued', 'processing')
+             AND platforms_to_fetch LIKE %s
+             LIMIT 1",
+            $podcast_id,
+            '%"' . $platform . '"%'
+        ));
+
+        if ($pending_job) {
+            return false; // Already queued
+        }
+
+        // Queue the fetch job
+        if (class_exists('PIT_Job_Queue')) {
+            return PIT_Job_Queue::queue_job($podcast_id, 'auto_fetch', [$platform], 60);
+        }
+
+        return false;
+    }
+
+    /**
+     * Get refresh interval in days based on follower count
+     *
+     * @param int $followers Follower count
+     * @return int Days until refresh
+     */
+    public static function get_refresh_days($followers) {
+        foreach (self::REFRESH_TIERS as $threshold => $days) {
+            if ($followers < $threshold) {
+                return $days;
+            }
+        }
+        return self::DEFAULT_REFRESH_DAYS;
+    }
+
+    /**
+     * Get human-readable refresh tier description
+     *
+     * @param int $followers Follower count
+     * @return string Description
+     */
+    public static function get_refresh_tier_description($followers) {
+        $days = self::get_refresh_days($followers);
+        $tier_names = [
+            90 => 'Small (< 1K)',
+            60 => 'Growing (1K - 10K)',
+            30 => 'Active (10K - 100K)',
+            14 => 'Popular (100K - 1M)',
+            7  => 'High-profile (1M+)',
+        ];
+        return $tier_names[$days] ?? 'Standard';
+    }
 
     /**
      * Fetch metrics for a platform
@@ -72,6 +202,10 @@ class PIT_Metrics_Fetcher {
 
         $duration = microtime(true) - $start_time;
 
+        // Calculate tiered expiry based on follower count
+        $followers = (int) ($result['followers'] ?? $result['subscribers'] ?? 0);
+        $refresh_days = self::get_refresh_days($followers);
+
         // Save metrics to database
         $metrics_data = [
             'podcast_id' => $podcast_id,
@@ -90,7 +224,7 @@ class PIT_Metrics_Fetcher {
             'cost_usd' => $cost,
             'fetch_duration_seconds' => $duration,
             'fetched_at' => current_time('mysql'),
-            'expires_at' => self::calculate_expiry(),
+            'expires_at' => self::calculate_expiry($followers),
         ];
 
         $metrics_id = PIT_Database::insert_metrics($metrics_data);
@@ -107,7 +241,12 @@ class PIT_Metrics_Fetcher {
             'cost_usd' => $cost,
             'api_provider' => self::get_api_provider($platform),
             'success' => 1,
-            'metadata' => json_encode(['metrics_id' => $metrics_id]),
+            'metadata' => json_encode([
+                'metrics_id' => $metrics_id,
+                'refresh_days' => $refresh_days,
+                'followers' => $followers,
+                'tier' => self::get_refresh_tier_description($followers),
+            ]),
         ]);
 
         return [
@@ -115,6 +254,8 @@ class PIT_Metrics_Fetcher {
             'metrics_id' => $metrics_id,
             'cost' => $cost,
             'duration' => $duration,
+            'refresh_days' => $refresh_days,
+            'next_refresh' => date('Y-m-d', strtotime("+{$refresh_days} days")),
             'metrics' => $metrics_data,
         ];
     }
@@ -339,13 +480,14 @@ class PIT_Metrics_Fetcher {
     }
 
     /**
-     * Calculate cache expiry time
+     * Calculate cache expiry time based on follower count
      *
+     * @param int $followers Follower count (0 for unknown/new)
      * @return string MySQL datetime
      */
-    private static function calculate_expiry() {
-        // Metrics expire after 7 days
-        return date('Y-m-d H:i:s', strtotime('+7 days'));
+    private static function calculate_expiry($followers = 0) {
+        $refresh_days = self::get_refresh_days($followers);
+        return date('Y-m-d H:i:s', strtotime("+{$refresh_days} days"));
     }
 
     /**
@@ -370,7 +512,7 @@ class PIT_Metrics_Fetcher {
     }
 
     /**
-     * Check if metrics are cached and still valid
+     * Check if metrics are cached and still valid (using tiered expiry)
      *
      * @param int $podcast_id Podcast ID
      * @param string $platform Platform name
@@ -383,12 +525,12 @@ class PIT_Metrics_Fetcher {
             return false;
         }
 
-        // Check if expired
-        if (strtotime($metrics->expires_at) < time()) {
-            return false;
-        }
+        // Use tiered expiry check
+        $followers = (int) ($metrics->followers_count ?? $metrics->subscriber_count ?? 0);
+        $refresh_days = self::get_refresh_days($followers);
+        $expires_at = strtotime($metrics->fetched_at . " + {$refresh_days} days");
 
-        return true;
+        return time() < $expires_at;
     }
 
     /**
@@ -430,5 +572,85 @@ class PIT_Metrics_Fetcher {
             ['%s'],
             $platform ? ['%d', '%s'] : ['%d']
         );
+    }
+
+    /**
+     * Get metrics needing refresh across all platforms
+     * 
+     * Used by background refresh job to find expired metrics
+     *
+     * @param int $limit Max records to return
+     * @return array Array of [podcast_id, platform, followers, fetched_at]
+     */
+    public static function get_metrics_needing_refresh($limit = 100) {
+        global $wpdb;
+        $metrics_table = $wpdb->prefix . 'pit_metrics';
+        $social_table = $wpdb->prefix . 'pit_social_links';
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+
+        // Get latest metrics per podcast/platform that are expired
+        $sql = "
+            SELECT 
+                m.podcast_id,
+                m.platform,
+                COALESCE(m.followers_count, m.subscriber_count, 0) as followers,
+                m.fetched_at
+            FROM $metrics_table m
+            INNER JOIN (
+                SELECT podcast_id, platform, MAX(fetched_at) as max_fetch
+                FROM $metrics_table
+                GROUP BY podcast_id, platform
+            ) latest ON m.podcast_id = latest.podcast_id 
+                    AND m.platform = latest.platform 
+                    AND m.fetched_at = latest.max_fetch
+            INNER JOIN $podcasts_table p ON m.podcast_id = p.id
+            WHERE p.is_tracked = 1
+            AND (
+                (COALESCE(m.followers_count, m.subscriber_count, 0) < 1000 
+                    AND m.fetched_at < DATE_SUB(NOW(), INTERVAL 90 DAY))
+                OR (COALESCE(m.followers_count, m.subscriber_count, 0) >= 1000 
+                    AND COALESCE(m.followers_count, m.subscriber_count, 0) < 10000 
+                    AND m.fetched_at < DATE_SUB(NOW(), INTERVAL 60 DAY))
+                OR (COALESCE(m.followers_count, m.subscriber_count, 0) >= 10000 
+                    AND COALESCE(m.followers_count, m.subscriber_count, 0) < 100000 
+                    AND m.fetched_at < DATE_SUB(NOW(), INTERVAL 30 DAY))
+                OR (COALESCE(m.followers_count, m.subscriber_count, 0) >= 100000 
+                    AND COALESCE(m.followers_count, m.subscriber_count, 0) < 1000000 
+                    AND m.fetched_at < DATE_SUB(NOW(), INTERVAL 14 DAY))
+                OR (COALESCE(m.followers_count, m.subscriber_count, 0) >= 1000000 
+                    AND m.fetched_at < DATE_SUB(NOW(), INTERVAL 7 DAY))
+            )
+            ORDER BY m.fetched_at ASC
+            LIMIT %d
+        ";
+
+        return $wpdb->get_results($wpdb->prepare($sql, $limit));
+    }
+
+    /**
+     * Get social links with no metrics (never enriched)
+     *
+     * @param int $limit Max records to return
+     * @return array Array of [podcast_id, platform]
+     */
+    public static function get_unenriched_links($limit = 100) {
+        global $wpdb;
+        $metrics_table = $wpdb->prefix . 'pit_metrics';
+        $social_table = $wpdb->prefix . 'pit_social_links';
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+
+        $sql = "
+            SELECT s.podcast_id, s.platform
+            FROM $social_table s
+            INNER JOIN $podcasts_table p ON s.podcast_id = p.id
+            LEFT JOIN $metrics_table m ON s.podcast_id = m.podcast_id AND s.platform = m.platform
+            WHERE p.is_tracked = 1
+            AND s.active = 1
+            AND m.id IS NULL
+            ORDER BY s.created_at ASC
+            LIMIT %d
+        ";
+
+        return $wpdb->get_results($wpdb->prepare($sql, $limit));
     }
 }
