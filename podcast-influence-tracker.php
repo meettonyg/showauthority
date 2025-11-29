@@ -337,6 +337,7 @@ class Podcast_Influence_Tracker {
                 'profile_handle' => $test_handle ?: '',
                 'podcast_name' => 'Manual Test',
             ];
+            error_log("Manual test - URL: $test_url, Handle: $test_handle");
         } else {
             // Find an unenriched profile from database
             // Skip obviously bad URLs
@@ -362,6 +363,7 @@ class Podcast_Influence_Tracker {
         }
 
         // Use the Enrichment Manager
+        error_log("Calling fetch_metrics - platform: $platform, url: {$link->profile_url}, handle: " . ($link->profile_handle ?? 'NULL'));
         $result = PIT_Enrichment_Manager::fetch_metrics(
             $platform,
             $link->profile_url,

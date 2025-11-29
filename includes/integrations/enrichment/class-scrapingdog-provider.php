@@ -142,14 +142,27 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         // For Twitter/X, we need the handle/username, not the full URL
         if ($platform === 'twitter') {
             $profile_value = $handle ?: $this->extract_handle_from_url($profile_url, 'twitter');
+            // Debug: Log what we're sending
+            error_log("ScrapingDog Twitter - handle: '$handle', extracted: '" . $this->extract_handle_from_url($profile_url, 'twitter') . "', using: '$profile_value'");
         } else {
             $profile_value = $profile_url;
+        }
+        
+        // Ensure we have a valid profile value for Twitter
+        if ($platform === 'twitter' && empty($profile_value)) {
+            return new WP_Error(
+                'missing_handle',
+                'Could not extract Twitter handle from URL: ' . $profile_url
+            );
         }
         
         $params = [
             'api_key' => $api_key,
             $param_name => $profile_value,
         ];
+        
+        // Debug: Log the full request
+        error_log("ScrapingDog request - platform: $platform, param_name: $param_name, value: $profile_value");
 
         // Add parsed=true to get JSON response
         if (in_array($platform, ['twitter', 'linkedin'])) {
@@ -157,6 +170,10 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         }
 
         $request_url = $url . '?' . http_build_query($params);
+        
+        // Debug: Log the full request URL (hide API key)
+        $debug_url = preg_replace('/api_key=[^&]+/', 'api_key=***', $request_url);
+        error_log("ScrapingDog FULL REQUEST URL: $debug_url");
 
         // Make request
         $response = $this->http_get($request_url, ['timeout' => 60]);
