@@ -325,20 +325,40 @@ class Podcast_Influence_Tracker {
 
         $platform = sanitize_text_field($_POST['platform'] ?? 'linkedin');
         $provider = sanitize_text_field($_POST['provider'] ?? '');
-
-        $link = $wpdb->get_row($wpdb->prepare(
-            "SELECT s.*, p.title as podcast_name
-             FROM {$wpdb->prefix}pit_social_links s
-             LEFT JOIN {$wpdb->prefix}pit_podcasts p ON s.podcast_id = p.id
-             LEFT JOIN {$wpdb->prefix}pit_metrics m 
-                 ON s.podcast_id = m.podcast_id AND s.platform = m.platform
-             WHERE s.platform = %s AND m.id IS NULL
-             LIMIT 1",
-            $platform
-        ));
+        
+        // Allow custom URL/handle for testing
+        $test_url = sanitize_text_field($_POST['test_url'] ?? '');
+        $test_handle = sanitize_text_field($_POST['test_handle'] ?? '');
+        
+        if ($test_url) {
+            // Use custom test URL
+            $link = (object) [
+                'profile_url' => $test_url,
+                'profile_handle' => $test_handle ?: '',
+                'podcast_name' => 'Manual Test',
+            ];
+        } else {
+            // Find an unenriched profile from database
+            // Skip obviously bad URLs
+            $link = $wpdb->get_row($wpdb->prepare(
+                "SELECT s.*, p.title as podcast_name
+                 FROM {$wpdb->prefix}pit_social_links s
+                 LEFT JOIN {$wpdb->prefix}pit_podcasts p ON s.podcast_id = p.id
+                 LEFT JOIN {$wpdb->prefix}pit_metrics m 
+                     ON s.podcast_id = m.podcast_id AND s.platform = m.platform
+                 WHERE s.platform = %s 
+                   AND m.id IS NULL
+                   AND s.profile_url NOT LIKE '%%/intent%%'
+                   AND s.profile_handle != 'intent'
+                   AND s.profile_handle IS NOT NULL
+                   AND s.profile_handle != ''
+                 LIMIT 1",
+                $platform
+            ));
+        }
 
         if (!$link) {
-            wp_send_json_error("No unenriched {$platform} profiles found");
+            wp_send_json_error("No valid unenriched {$platform} profiles found");
         }
 
         // Use the Enrichment Manager
