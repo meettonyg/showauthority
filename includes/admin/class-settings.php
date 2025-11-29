@@ -19,6 +19,7 @@ class PIT_Settings {
     private static $defaults = [
         'youtube_api_key' => '',
         'apify_api_token' => '',
+        'scrapingdog_api_key' => '',
         'weekly_budget' => 50.00,
         'monthly_budget' => 200.00,
         'auto_track_on_import' => false,
@@ -135,6 +136,23 @@ class PIT_Settings {
             }
         }
 
+        // Validate ScrapingDog API key if provided
+        if (!empty($settings['scrapingdog_api_key'])) {
+            $provider = PIT_Enrichment_Manager::get_provider('scrapingdog');
+            if ($provider) {
+                // Temporarily set the key to validate
+                $old_settings = self::get_all();
+                self::set('scrapingdog_api_key', $settings['scrapingdog_api_key']);
+                $result = $provider->validate_credentials();
+                // Restore old settings
+                self::set('scrapingdog_api_key', $old_settings['scrapingdog_api_key'] ?? '');
+                
+                if (is_wp_error($result)) {
+                    $errors['scrapingdog_api_key'] = $result->get_error_message();
+                }
+            }
+        }
+
         // Validate budgets
         if (isset($settings['weekly_budget'])) {
             $settings['weekly_budget'] = (float) $settings['weekly_budget'];
@@ -180,7 +198,13 @@ class PIT_Settings {
             'apify_api_token' => [
                 'type' => 'string',
                 'label' => 'Apify API Token',
-                'description' => 'API token from Apify platform',
+                'description' => 'API token from Apify platform (fallback provider)',
+                'required' => false,
+            ],
+            'scrapingdog_api_key' => [
+                'type' => 'string',
+                'label' => 'ScrapingDog API Key',
+                'description' => 'API key from ScrapingDog (primary provider - get free trial at scrapingdog.com)',
                 'required' => false,
             ],
             'weekly_budget' => [

@@ -844,10 +844,17 @@ const Settings = {
                     </div>
 
                     <div class="setting-row">
-                        <label for="apify_api_token">Apify API Token</label>
+                        <label for="scrapingdog_api_key">ScrapingDog API Key (Primary)</label>
+                        <input type="text" id="scrapingdog_api_key" v-model="settings.scrapingdog_api_key"
+                            placeholder="Your ScrapingDog API key" class="regular-text">
+                        <span class="description">Primary provider for LinkedIn, Twitter, Instagram, Facebook, YouTube. <a href="https://www.scrapingdog.com/" target="_blank">Get free 1,000 credits</a></span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="apify_api_token">Apify API Token (Fallback)</label>
                         <input type="text" id="apify_api_token" v-model="settings.apify_api_token"
                             placeholder="apify_api_..." class="regular-text">
-                        <span class="description">Required for Twitter, Instagram, Facebook, LinkedIn, TikTok</span>
+                        <span class="description">Fallback provider + TikTok support</span>
                     </div>
                 </div>
 
@@ -992,6 +999,7 @@ const Settings = {
         return {
             settings: {
                 youtube_api_key: '',
+                scrapingdog_api_key: '',
                 apify_api_token: '',
                 weekly_budget: 50,
                 monthly_budget: 200,
