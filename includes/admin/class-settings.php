@@ -137,21 +137,8 @@ class PIT_Settings {
         }
 
         // Validate ScrapingDog API key if provided
-        if (!empty($settings['scrapingdog_api_key'])) {
-            $provider = PIT_Enrichment_Manager::get_provider('scrapingdog');
-            if ($provider) {
-                // Temporarily set the key to validate
-                $old_settings = self::get_all();
-                self::set('scrapingdog_api_key', $settings['scrapingdog_api_key']);
-                $result = $provider->validate_credentials();
-                // Restore old settings
-                self::set('scrapingdog_api_key', $old_settings['scrapingdog_api_key'] ?? '');
-                
-                if (is_wp_error($result)) {
-                    $errors['scrapingdog_api_key'] = $result->get_error_message();
-                }
-            }
-        }
+        // Skip validation during save - it will be validated on first use
+        // This avoids initialization order issues with PIT_Enrichment_Manager
 
         // Validate budgets
         if (isset($settings['weekly_budget'])) {

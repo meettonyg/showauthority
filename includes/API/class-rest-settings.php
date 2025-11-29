@@ -127,6 +127,10 @@ class PIT_REST_Settings {
             $sanitized['apify_api_token'] = sanitize_text_field($settings['apify_api_token']);
         }
 
+        if (isset($settings['scrapingdog_api_key'])) {
+            $sanitized['scrapingdog_api_key'] = sanitize_text_field($settings['scrapingdog_api_key']);
+        }
+
         // Budgets
         if (isset($settings['weekly_budget'])) {
             $sanitized['weekly_budget'] = floatval($settings['weekly_budget']);
