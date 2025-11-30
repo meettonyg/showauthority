@@ -39,6 +39,8 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
                 'endpoint' => '/linkedin',
                 'credits_per_request' => 50,
                 'cost_per_1k' => 10.00, // 50 credits × 1000 / 200000 credits × $40
+                'param_name' => 'linkId', // ScrapingDog uses linkId (profile username)
+                'extra_params' => ['type' => 'profile'], // type=profile for personal profiles
                 'response_map' => [
                     'followers' => ['followers', 'connections', 'follower_count'],
                     'name' => ['full_name', 'name', 'firstName'],
@@ -146,6 +148,9 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         if ($platform === 'twitter') {
             // For Twitter/X, ScrapingDog uses profileId which is the username/handle
             $profile_value = $handle ?: $this->extract_handle_from_url($profile_url, 'twitter');
+        } elseif ($platform === 'linkedin') {
+            // For LinkedIn, ScrapingDog uses linkId which is just the username part
+            $profile_value = $handle ?: $this->extract_handle_from_url($profile_url, 'linkedin');
         } else {
             $profile_value = $profile_url;
         }
@@ -166,6 +171,11 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         // Add parsed=true to get JSON response (only for LinkedIn)
         if ($platform === 'linkedin') {
             $params['parsed'] = 'true';
+        }
+        
+        // Add any extra params from config (e.g., type=profile for LinkedIn)
+        if (!empty($config['extra_params'])) {
+            $params = array_merge($params, $config['extra_params']);
         }
 
         $request_url = $url . '?' . http_build_query($params);
@@ -191,9 +201,6 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         // Map response to normalized metrics
         $data = $parsed['data'];
         
-        // Debug: Log raw API response structure
-        error_log('ScrapingDog raw response keys: ' . implode(', ', array_keys($data ?? [])));
-        
         // Handle array response (some endpoints return array)
         if (isset($data[0]) && is_array($data[0])) {
             $data = $data[0];
@@ -201,13 +208,12 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         
         // Handle nested data paths
         if (!empty($config['data_path'])) {
-            // Support dot notation for deeply nested paths like 'data.tweetResult.result.core.user_results.result'
+            // Support dot notation for deeply nested paths
             $paths = explode('.', $config['data_path']);
             foreach ($paths as $path) {
                 if (isset($data[$path])) {
                     $data = $data[$path];
                 } else {
-                    error_log("ScrapingDog: Could not find path '$path' in data");
                     break;
                 }
             }
@@ -216,7 +222,6 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         // Special handling for Twitter/X which has a complex nested structure
         if ($platform === 'twitter') {
             $data = $this->extract_twitter_user_data($parsed['data']);
-            error_log('ScrapingDog Twitter extracted data: ' . print_r($data, true));
         }
 
         $metrics = $this->map_response($data, $config['response_map']);
@@ -376,7 +381,6 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         }
         
         // Return original data if no known structure matched
-        error_log('ScrapingDog Twitter: Unknown response structure, keys: ' . implode(', ', array_keys($raw_data)));
         return $raw_data;
     }
 }
