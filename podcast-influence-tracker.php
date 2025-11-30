@@ -380,6 +380,7 @@ class Podcast_Influence_Tracker {
             ]);
         }
 
+        // Return full result for debugging
         wp_send_json_success([
             'profile' => [
                 'podcast' => $link->podcast_name,
@@ -391,7 +392,12 @@ class Podcast_Influence_Tracker {
                 'following' => $result['following'] ?? 0,
                 'posts' => $result['posts'] ?? 0,
                 'name' => $result['name'] ?? '',
+                'headline' => $result['headline'] ?? '',
+                'about' => $result['about'] ?? '',
+                'location' => $result['location'] ?? '',
+                'company' => $result['company'] ?? '',
             ],
+            'raw_result' => $result, // DEBUG: Full result from provider
             'provider' => $result['provider'] ?? 'unknown',
             'cost' => '$' . number_format($result['cost'] ?? 0, 4),
         ]);

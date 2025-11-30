@@ -6,7 +6,7 @@
  * Simple REST API with dedicated endpoints per platform.
  *
  * Pricing (per 1,000 profiles on LITE plan):
- * - LinkedIn: ~$10 (50 credits/request, 200K credits = 4K requests)
+ * - LinkedIn: ~$50 (250 credits/request per docs, 200K credits = 800 requests)
  * - Twitter/X: ~$1 (5 credits/request)
  * - Instagram: ~$3 (15 credits/request)
  * - Facebook: ~$1 (5 credits/request)
@@ -37,25 +37,37 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         $this->platform_config = [
             'linkedin' => [
                 'endpoint' => '/linkedin',
-                'credits_per_request' => 50,
-                'cost_per_1k' => 10.00, // 50 credits × 1000 / 200000 credits × $40
-                'param_name' => 'linkId', // ScrapingDog uses linkId (profile username)
-                'extra_params' => ['type' => 'profile'], // type=profile for personal profiles
+                'credits_per_request' => 250,
+                'cost_per_1k' => 50.00,
+                'param_name' => 'linkId',
+                'extra_params' => ['type' => 'profile'],
+                // Response mapping - ScrapingDog returns data in these keys
                 'response_map' => [
-                    'followers' => ['followers', 'connections', 'follower_count'],
-                    'name' => ['full_name', 'name', 'firstName'],
-                    'headline' => ['headline', 'title', 'occupation'],
-                    'location' => ['location', 'city'],
-                    'company' => ['company', 'current_company', 'company_name'],
-                    'about' => ['about', 'summary', 'bio'],
-                    'posts' => ['posts_count', 'activities'],
+                    // Profile identity - use fullName as primary
+                    'name' => ['fullName', 'full_name', 'name', 'first_name'],
+                    'first_name' => ['first_name', 'firstName'],
+                    'last_name' => ['last_name', 'lastName'],
+                    'headline' => ['headline', 'sub_title', 'title', 'occupation'],
+                    'about' => ['about', 'summary', 'bio', 'description'],
+                    'profile_picture' => ['profile_photo', 'profile_picture', 'avatar', 'profilePicture'],
+                    'background_image' => ['background_cover_image_url', 'backgroundImage'],
+                    'public_identifier' => ['public_identifier', 'publicIdentifier', 'username'],
+                    // Work info
+                    'company' => ['company_name', 'company', 'current_company'],
+                    // Experience and education (arrays)
+                    'experience' => ['experience', 'positions', 'work_experience'],
+                    'education' => ['education', 'schools'],
+                    // Articles
+                    'articles' => ['articles', 'posts'],
+                    // Internal IDs
+                    'linkedin_internal_id' => ['linkedin_internal_id', 'linkedinId'],
                 ],
             ],
             'twitter' => [
                 'endpoint' => '/x/profile',
                 'credits_per_request' => 5,
                 'cost_per_1k' => 1.00,
-                'param_name' => 'profileId', // ScrapingDog X API uses 'profileId' parameter
+                'param_name' => 'profileId',
                 'response_map' => [
                     'followers' => ['followers_count', 'followersCount', 'followers'],
                     'following' => ['friends_count', 'following_count', 'followingCount'],
@@ -146,10 +158,8 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         
         // Determine the profile value to send
         if ($platform === 'twitter') {
-            // For Twitter/X, ScrapingDog uses profileId which is the username/handle
             $profile_value = $handle ?: $this->extract_handle_from_url($profile_url, 'twitter');
         } elseif ($platform === 'linkedin') {
-            // For LinkedIn, ScrapingDog uses linkId which is just the username part
             $profile_value = $handle ?: $this->extract_handle_from_url($profile_url, 'linkedin');
         } else {
             $profile_value = $profile_url;
@@ -167,11 +177,6 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
             'api_key' => $api_key,
             $param_name => $profile_value,
         ];
-
-        // Add parsed=true to get JSON response (only for LinkedIn)
-        if ($platform === 'linkedin') {
-            $params['parsed'] = 'true';
-        }
         
         // Add any extra params from config (e.g., type=profile for LinkedIn)
         if (!empty($config['extra_params'])) {
@@ -198,38 +203,100 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
             );
         }
 
-        // Map response to normalized metrics
         $data = $parsed['data'];
         
         // Handle array response (some endpoints return array)
         if (isset($data[0]) && is_array($data[0])) {
             $data = $data[0];
         }
-        
-        // Handle nested data paths
-        if (!empty($config['data_path'])) {
-            // Support dot notation for deeply nested paths
-            $paths = explode('.', $config['data_path']);
-            foreach ($paths as $path) {
-                if (isset($data[$path])) {
-                    $data = $data[$path];
-                } else {
-                    break;
-                }
-            }
-        }
-        
-        // Special handling for Twitter/X which has a complex nested structure
-        if ($platform === 'twitter') {
-            $data = $this->extract_twitter_user_data($parsed['data']);
+
+        // Platform-specific data extraction
+        if ($platform === 'linkedin') {
+            $metrics = $this->extract_linkedin_data($data, $config['response_map']);
+        } elseif ($platform === 'twitter') {
+            $data = $this->extract_twitter_user_data($data);
+            $metrics = $this->map_response($data, $config['response_map']);
+        } else {
+            $metrics = $this->map_response($data, $config['response_map']);
         }
 
-        $metrics = $this->map_response($data, $config['response_map']);
         $metrics['cost'] = $this->get_cost_per_profile($platform);
         $metrics['provider'] = $this->name;
         $metrics['credits_used'] = $config['credits_per_request'];
 
         return $metrics;
+    }
+
+    /**
+     * Extract LinkedIn profile data from ScrapingDog response
+     * ScrapingDog returns profile data directly at root level
+     */
+    private function extract_linkedin_data(array $raw_data, array $response_map): array {
+        $metrics = $this->empty_metrics();
+        
+        // Map fields from raw data
+        foreach ($response_map as $our_field => $possible_keys) {
+            if (!is_array($possible_keys)) {
+                $possible_keys = [$possible_keys];
+            }
+
+            foreach ($possible_keys as $key) {
+                $value = $this->get_nested_value($raw_data, $key);
+                if ($value !== null && $value !== '') {
+                    $metrics[$our_field] = $value;
+                    break;
+                }
+            }
+        }
+        
+        // Extract follower count from location string if present (ScrapingDog quirk)
+        // The "location" field sometimes contains "19M followers" instead of actual location
+        if (!empty($raw_data['location']) && preg_match('/^([\d.]+[KMB]?)\s*followers?$/i', $raw_data['location'], $matches)) {
+            $metrics['followers'] = $this->parse_follower_count($matches[1]);
+            // Clear location since it's not actually a location
+            $metrics['location'] = '';
+        }
+        
+        // Extract company from first experience entry if not set
+        if (empty($metrics['company']) && !empty($raw_data['experience']) && is_array($raw_data['experience'])) {
+            $first_job = $raw_data['experience'][0] ?? null;
+            if ($first_job && !empty($first_job['company_name'])) {
+                $metrics['company'] = $first_job['company_name'];
+            }
+        }
+        
+        // Count articles as posts if available
+        if (!empty($raw_data['articles']) && is_array($raw_data['articles'])) {
+            $metrics['posts'] = count($raw_data['articles']);
+        }
+        
+        // Store the full raw data for reference
+        $metrics['raw_data'] = $raw_data;
+        
+        return $metrics;
+    }
+    
+    /**
+     * Parse follower count string to number
+     * Handles formats like "19M", "1.5K", "500"
+     */
+    private function parse_follower_count(string $count_str): int {
+        $count_str = strtoupper(trim($count_str));
+        
+        $multipliers = [
+            'K' => 1000,
+            'M' => 1000000,
+            'B' => 1000000000,
+        ];
+        
+        foreach ($multipliers as $suffix => $multiplier) {
+            if (strpos($count_str, $suffix) !== false) {
+                $number = (float) str_replace($suffix, '', $count_str);
+                return (int) ($number * $multiplier);
+            }
+        }
+        
+        return (int) $count_str;
     }
 
     /**
@@ -288,8 +355,7 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
             return new WP_Error('no_api_key', 'ScrapingDog API key is not set.');
         }
 
-        // Make a simple test request (Google Search uses 5 credits)
-        // We'll use the account info endpoint if available, or a minimal request
+        // Make a simple test request
         $test_url = self::API_BASE_URL . '/scrape?api_key=' . $api_key . '&url=https://httpbin.org/ip';
 
         $response = $this->http_get($test_url, ['timeout' => 15]);
@@ -321,8 +387,6 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
      * Get account credits info (if available)
      */
     public function get_credits_info(): array {
-        // ScrapingDog doesn't expose credits via API
-        // User needs to check dashboard
         return [
             'provider' => $this->name,
             'note' => 'Check credits at https://api.scrapingdog.com/dashboard',
@@ -331,14 +395,9 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
     
     /**
      * Extract user data from Twitter/X API response
-     * The response has a complex nested structure that varies
      */
     private function extract_twitter_user_data(array $raw_data): array {
-        $user_data = [];
-        
-        // Try different possible structures
-        
-        // Structure 1: Direct user object (as shown in docs)
+        // Structure 1: Direct user object
         if (isset($raw_data['user'])) {
             return $raw_data['user'];
         }
@@ -347,8 +406,7 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         if (isset($raw_data['data']['tweetResult']['result']['core']['user_results']['result'])) {
             $user = $raw_data['data']['tweetResult']['result']['core']['user_results']['result'];
             
-            // Flatten the nested structure
-            $user_data = [
+            return [
                 'name' => $user['core']['name'] ?? '',
                 'screen_name' => $user['core']['screen_name'] ?? '',
                 'description' => $user['legacy']['description'] ?? '',
@@ -363,24 +421,18 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
                 'profile_image_url' => $user['avatar']['image_url'] ?? '',
                 'created_at' => $user['core']['created_at'] ?? '',
             ];
-            
-            return $user_data;
         }
         
-        // Structure 3: Direct profile response with user key at root
+        // Structure 3: Direct profile response
         if (isset($raw_data['profile_name']) || isset($raw_data['followers_count'])) {
             return $raw_data;
         }
         
         // Structure 4: Nested in 'data' only
-        if (isset($raw_data['data']) && is_array($raw_data['data'])) {
-            // Check if data contains user info directly
-            if (isset($raw_data['data']['followers_count'])) {
-                return $raw_data['data'];
-            }
+        if (isset($raw_data['data']) && is_array($raw_data['data']) && isset($raw_data['data']['followers_count'])) {
+            return $raw_data['data'];
         }
         
-        // Return original data if no known structure matched
         return $raw_data;
     }
 }
