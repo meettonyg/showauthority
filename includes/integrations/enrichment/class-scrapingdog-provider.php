@@ -82,9 +82,10 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
                 ],
             ],
             'instagram' => [
-                'endpoint' => '/instagram',
+                'endpoint' => '/instagram/profile', // Per docs: https://api.scrapingdog.com/instagram/profile
                 'credits_per_request' => 15,
                 'cost_per_1k' => 3.00,
+                'param_name' => 'username', // Per docs: username parameter
                 'response_map' => [
                     'followers' => ['followers', 'follower_count', 'edge_followed_by.count'],
                     'following' => ['following', 'following_count', 'edge_follow.count'],
@@ -92,17 +93,20 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
                     'name' => ['full_name', 'name'],
                     'bio' => ['biography', 'bio'],
                     'verified' => ['is_verified', 'verified'],
+                    'profile_picture' => ['profile_pic_url', 'profile_picture', 'avatar'],
                 ],
             ],
             'facebook' => [
-                'endpoint' => '/facebook',
+                'endpoint' => '/facebook/profile', // Per docs: https://api.scrapingdog.com/facebook/profile
                 'credits_per_request' => 5,
                 'cost_per_1k' => 1.00,
+                'param_name' => 'username', // Per docs: username parameter
                 'response_map' => [
                     'followers' => ['followers', 'likes', 'follower_count'],
                     'name' => ['name', 'page_name'],
                     'about' => ['about', 'description'],
                     'category' => ['category', 'categories'],
+                    'profile_picture' => ['profile_pic_url', 'profile_picture', 'avatar'],
                 ],
             ],
             'youtube' => [
@@ -161,6 +165,12 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
             $profile_value = $handle ?: $this->extract_handle_from_url($profile_url, 'twitter');
         } elseif ($platform === 'linkedin') {
             $profile_value = $handle ?: $this->extract_handle_from_url($profile_url, 'linkedin');
+        } elseif ($platform === 'instagram') {
+            // Instagram uses username parameter
+            $profile_value = $handle ?: $this->extract_handle_from_url($profile_url, 'instagram');
+        } elseif ($platform === 'facebook') {
+            // Facebook uses username parameter
+            $profile_value = $handle ?: $this->extract_handle_from_url($profile_url, 'facebook');
         } else {
             $profile_value = $profile_url;
         }
