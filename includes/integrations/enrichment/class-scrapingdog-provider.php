@@ -87,13 +87,18 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
                 'cost_per_1k' => 3.00,
                 'param_name' => 'username', // Per docs: username parameter
                 'response_map' => [
-                    'followers' => ['followers', 'follower_count', 'edge_followed_by.count'],
-                    'following' => ['following', 'following_count', 'edge_follow.count'],
-                    'posts' => ['posts', 'media_count', 'edge_owner_to_timeline_media.count'],
-                    'name' => ['full_name', 'name'],
-                    'bio' => ['biography', 'bio'],
+                    'followers' => ['followers_count', 'followers', 'follower_count', 'edge_followed_by.count'],
+                    'following' => ['following_count', 'following', 'edge_follow.count'],
+                    'posts' => ['media_count', 'posts', 'edge_owner_to_timeline_media.count'],
+                    'name' => ['full_name', 'name', 'username'],
+                    'bio' => ['bio', 'biography'],
                     'verified' => ['is_verified', 'verified'],
-                    'profile_picture' => ['profile_pic_url', 'profile_picture', 'avatar'],
+                    'profile_picture' => ['profile_pic_url', 'profile_pic_url_hd', 'profile_picture', 'avatar'],
+                    'username' => ['username'],
+                    'profile_id' => ['profile_id', 'id'],
+                    'is_business' => ['is_business_account', 'is_professional_account'],
+                    'category' => ['category_enum', 'category_name', 'overall_category_name'],
+                    'external_url' => ['bio_links'],
                 ],
             ],
             'facebook' => [
@@ -102,11 +107,13 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
                 'cost_per_1k' => 1.00,
                 'param_name' => 'username', // Per docs: username parameter
                 'response_map' => [
-                    'followers' => ['followers', 'likes', 'follower_count'],
-                    'name' => ['name', 'page_name'],
+                    'followers' => ['likes', 'followers', 'follower_count'],  // FB uses 'likes' for page followers
+                    'name' => ['title', 'name', 'page_name'],  // FB returns 'title' not 'name'
                     'about' => ['about', 'description'],
-                    'category' => ['category', 'categories'],
+                    'category' => ['categories', 'category'],
                     'profile_picture' => ['profile_pic_url', 'profile_picture', 'avatar'],
+                    'page_id' => ['id', 'page_id'],
+                    'info' => ['info'],
                 ],
             ],
             'youtube' => [
@@ -226,6 +233,12 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         } elseif ($platform === 'twitter') {
             $data = $this->extract_twitter_user_data($data);
             $metrics = $this->map_response($data, $config['response_map']);
+        } elseif ($platform === 'facebook') {
+            // Facebook returns data directly at root level
+            $metrics = $this->extract_facebook_data($data, $config['response_map']);
+        } elseif ($platform === 'instagram') {
+            // Instagram returns data directly at root level
+            $metrics = $this->extract_instagram_data($data, $config['response_map']);
         } else {
             $metrics = $this->map_response($data, $config['response_map']);
         }
@@ -234,6 +247,60 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         $metrics['provider'] = $this->name;
         $metrics['credits_used'] = $config['credits_per_request'];
 
+        return $metrics;
+    }
+
+    /**
+     * Extract Facebook profile data from ScrapingDog response
+     */
+    private function extract_facebook_data(array $raw_data, array $response_map): array {
+        $metrics = $this->empty_metrics();
+        
+        // Map fields from raw data
+        foreach ($response_map as $our_field => $possible_keys) {
+            if (!is_array($possible_keys)) {
+                $possible_keys = [$possible_keys];
+            }
+
+            foreach ($possible_keys as $key) {
+                $value = $this->get_nested_value($raw_data, $key);
+                if ($value !== null && $value !== '') {
+                    $metrics[$our_field] = $value;
+                    break;
+                }
+            }
+        }
+        
+        // Store the full raw data for reference
+        $metrics['raw_data'] = $raw_data;
+        
+        return $metrics;
+    }
+    
+    /**
+     * Extract Instagram profile data from ScrapingDog response
+     */
+    private function extract_instagram_data(array $raw_data, array $response_map): array {
+        $metrics = $this->empty_metrics();
+        
+        // Map fields from raw data
+        foreach ($response_map as $our_field => $possible_keys) {
+            if (!is_array($possible_keys)) {
+                $possible_keys = [$possible_keys];
+            }
+
+            foreach ($possible_keys as $key) {
+                $value = $this->get_nested_value($raw_data, $key);
+                if ($value !== null && $value !== '') {
+                    $metrics[$our_field] = $value;
+                    break;
+                }
+            }
+        }
+        
+        // Store the full raw data for reference
+        $metrics['raw_data'] = $raw_data;
+        
         return $metrics;
     }
 
