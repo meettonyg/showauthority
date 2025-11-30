@@ -5,9 +5,11 @@
  * Central manager for social media profile enrichment.
  * Handles provider selection, fallback logic, and cost tracking.
  *
- * Provider Priority (configurable):
- * 1. ScrapingDog - Primary for LinkedIn (reliable dedicated API)
- * 2. Apify - Fallback for all platforms (marketplace actors)
+ * Provider Priority (configurable per platform):
+ * - LinkedIn: Apify (primary, ~$1-5/1k), ScrapingDog (backup, $50/1k)
+ * - Twitter/Instagram/Facebook: ScrapingDog (primary), Apify (backup)
+ * - YouTube: ScrapingDog only
+ * - TikTok: Apify only
  *
  * @package PodcastInfluenceTracker
  * @since 1.0.0
@@ -27,10 +29,11 @@ class PIT_Enrichment_Manager {
 
     /**
      * Provider priority by platform
+     * Lower cost providers listed first, with fallbacks
      * @var array
      */
     private static $platform_priorities = [
-        'linkedin' => ['scrapingdog', 'apify'],
+        'linkedin' => ['apify', 'scrapingdog'],  // Apify ~$1-5/1k, ScrapingDog $50/1k
         'twitter' => ['scrapingdog', 'apify'],
         'instagram' => ['scrapingdog', 'apify'],
         'facebook' => ['scrapingdog', 'apify'],
