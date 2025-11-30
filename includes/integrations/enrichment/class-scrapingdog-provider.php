@@ -53,15 +53,18 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
                 'endpoint' => '/x/profile',
                 'credits_per_request' => 5,
                 'cost_per_1k' => 1.00,
-                'param_name' => 'profile', // ScrapingDog uses 'profile' param for X/Twitter
+                'param_name' => 'profileId', // ScrapingDog X API uses 'profileId' parameter
                 'response_map' => [
                     'followers' => ['followers_count', 'followersCount', 'followers'],
-                    'following' => ['following_count', 'followingCount', 'friends_count'],
-                    'posts' => ['tweets_count', 'tweetsCount', 'statuses_count'],
-                    'name' => ['name', 'displayName', 'full_name'],
+                    'following' => ['friends_count', 'following_count', 'followingCount'],
+                    'posts' => ['statuses_count', 'tweets_count', 'tweetsCount'],
+                    'name' => ['name', 'profile_name', 'displayName', 'full_name'],
                     'bio' => ['description', 'bio'],
                     'location' => ['location'],
-                    'verified' => ['verified', 'is_verified'],
+                    'verified' => ['is_blue_verified', 'verified', 'is_verified'],
+                    'likes' => ['favourites_count', 'likes_count'],
+                    'media_count' => ['media_count'],
+                    'handle' => ['screen_name', 'profile_handle'],
                 ],
             ],
             'instagram' => [
@@ -139,11 +142,10 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         // Different platforms use different parameter names
         $param_name = $config['param_name'] ?? 'link';
         
-        // For Twitter/X, we need the handle/username, not the full URL
+        // Determine the profile value to send
         if ($platform === 'twitter') {
+            // For Twitter/X, ScrapingDog uses profileId which is the username/handle
             $profile_value = $handle ?: $this->extract_handle_from_url($profile_url, 'twitter');
-            // Debug: Log what we're sending
-            error_log("ScrapingDog Twitter - handle: '$handle', extracted: '" . $this->extract_handle_from_url($profile_url, 'twitter') . "', using: '$profile_value'");
         } else {
             $profile_value = $profile_url;
         }
@@ -160,9 +162,6 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
             'api_key' => $api_key,
             $param_name => $profile_value,
         ];
-        
-        // Debug: Log the full request
-        error_log("ScrapingDog request - platform: $platform, param_name: $param_name, value: $profile_value");
 
         // Add parsed=true to get JSON response (only for LinkedIn)
         if ($platform === 'linkedin') {
@@ -170,10 +169,6 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         }
 
         $request_url = $url . '?' . http_build_query($params);
-        
-        // Debug: Log the full request URL (hide API key)
-        $debug_url = preg_replace('/api_key=[^&]+/', 'api_key=***', $request_url);
-        error_log("ScrapingDog FULL REQUEST URL: $debug_url");
 
         // Make request
         $response = $this->http_get($request_url, ['timeout' => 60]);
@@ -196,9 +191,32 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
         // Map response to normalized metrics
         $data = $parsed['data'];
         
+        // Debug: Log raw API response structure
+        error_log('ScrapingDog raw response keys: ' . implode(', ', array_keys($data ?? [])));
+        
         // Handle array response (some endpoints return array)
         if (isset($data[0]) && is_array($data[0])) {
             $data = $data[0];
+        }
+        
+        // Handle nested data paths
+        if (!empty($config['data_path'])) {
+            // Support dot notation for deeply nested paths like 'data.tweetResult.result.core.user_results.result'
+            $paths = explode('.', $config['data_path']);
+            foreach ($paths as $path) {
+                if (isset($data[$path])) {
+                    $data = $data[$path];
+                } else {
+                    error_log("ScrapingDog: Could not find path '$path' in data");
+                    break;
+                }
+            }
+        }
+        
+        // Special handling for Twitter/X which has a complex nested structure
+        if ($platform === 'twitter') {
+            $data = $this->extract_twitter_user_data($parsed['data']);
+            error_log('ScrapingDog Twitter extracted data: ' . print_r($data, true));
         }
 
         $metrics = $this->map_response($data, $config['response_map']);
@@ -304,5 +322,61 @@ class PIT_ScrapingDog_Provider extends PIT_Enrichment_Provider_Base {
             'provider' => $this->name,
             'note' => 'Check credits at https://api.scrapingdog.com/dashboard',
         ];
+    }
+    
+    /**
+     * Extract user data from Twitter/X API response
+     * The response has a complex nested structure that varies
+     */
+    private function extract_twitter_user_data(array $raw_data): array {
+        $user_data = [];
+        
+        // Try different possible structures
+        
+        // Structure 1: Direct user object (as shown in docs)
+        if (isset($raw_data['user'])) {
+            return $raw_data['user'];
+        }
+        
+        // Structure 2: Nested in data.tweetResult.result.core.user_results.result
+        if (isset($raw_data['data']['tweetResult']['result']['core']['user_results']['result'])) {
+            $user = $raw_data['data']['tweetResult']['result']['core']['user_results']['result'];
+            
+            // Flatten the nested structure
+            $user_data = [
+                'name' => $user['core']['name'] ?? '',
+                'screen_name' => $user['core']['screen_name'] ?? '',
+                'description' => $user['legacy']['description'] ?? '',
+                'followers_count' => $user['legacy']['followers_count'] ?? 0,
+                'friends_count' => $user['legacy']['friends_count'] ?? 0,
+                'statuses_count' => $user['legacy']['statuses_count'] ?? 0,
+                'favourites_count' => $user['legacy']['favourites_count'] ?? 0,
+                'media_count' => $user['legacy']['media_count'] ?? 0,
+                'listed_count' => $user['legacy']['listed_count'] ?? 0,
+                'is_blue_verified' => $user['is_blue_verified'] ?? false,
+                'location' => $user['location']['location'] ?? '',
+                'profile_image_url' => $user['avatar']['image_url'] ?? '',
+                'created_at' => $user['core']['created_at'] ?? '',
+            ];
+            
+            return $user_data;
+        }
+        
+        // Structure 3: Direct profile response with user key at root
+        if (isset($raw_data['profile_name']) || isset($raw_data['followers_count'])) {
+            return $raw_data;
+        }
+        
+        // Structure 4: Nested in 'data' only
+        if (isset($raw_data['data']) && is_array($raw_data['data'])) {
+            // Check if data contains user info directly
+            if (isset($raw_data['data']['followers_count'])) {
+                return $raw_data['data'];
+            }
+        }
+        
+        // Return original data if no known structure matched
+        error_log('ScrapingDog Twitter: Unknown response structure, keys: ' . implode(', ', array_keys($raw_data)));
+        return $raw_data;
     }
 }
