@@ -515,87 +515,111 @@
     const TasksTab = {
         template: `
             <div class="pit-tab-content" :class="{ active: isActive }">
-                <div class="pit-card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                        <h3 style="margin: 0;">Tasks</h3>
-                        <button class="pit-btn pit-btn-primary pit-btn-sm" @click="showAddForm = true">
-                            + Add Task
-                        </button>
-                    </div>
-                    
-                    <!-- Add Task Form -->
-                    <div v-if="showAddForm" class="pit-card" style="background: #f9fafb; margin-bottom: 16px;">
-                        <div class="pit-form-group">
-                            <label>Task Title</label>
-                            <input v-model="newTask.title" type="text" class="pit-input" placeholder="What needs to be done?">
-                        </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                            <div class="pit-form-group">
-                                <label>Type</label>
-                                <select v-model="newTask.task_type" class="pit-select">
-                                    <option value="todo">To-do</option>
-                                    <option value="email">Email</option>
-                                    <option value="message">Message</option>
-                                    <option value="research">Research</option>
-                                    <option value="follow_up">Follow Up</option>
-                                </select>
-                            </div>
-                            <div class="pit-form-group">
-                                <label>Priority</label>
-                                <select v-model="newTask.priority" class="pit-select">
-                                    <option value="low">Low</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="high">High</option>
-                                    <option value="urgent">Urgent</option>
-                                </select>
+                <div class="tab-content tasks">
+                    <div class="tab-content-full">
+                        <!-- Empty State -->
+                        <div v-if="tasks.length === 0" class="frm_no_entries">
+                            <div class="notes-empty">
+                                <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                                    <polyline points="10 9 9 9 8 9"></polyline>
+                                </svg>
+                                <h3 class="notes-empty-title">No Tasks Yet</h3>
+                                <p class="notes-empty-text">Add and manage tasks like research, outreach, scheduling, and follow-up for this interview here.</p>
+                                <button class="button add-button" data-modal-target="taskModal" @click="openTaskModal">
+                                    <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i> 
+                                    Add Task
+                                </button>
                             </div>
                         </div>
-                        <div class="pit-form-group">
-                            <label>Due Date</label>
-                            <input v-model="newTask.due_date" type="date" class="pit-input">
-                        </div>
-                        <div style="display: flex; gap: 8px;">
-                            <button class="pit-btn pit-btn-primary" @click="createTask" :disabled="!newTask.title">
-                                Add Task
-                            </button>
-                            <button class="pit-btn pit-btn-secondary" @click="showAddForm = false">
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Task List -->
-                    <div v-if="tasks.length === 0 && !showAddForm" class="pit-empty-state">
-                        <p>No tasks yet. Add one to get started!</p>
-                    </div>
-                    
-                    <div v-for="task in tasks" :key="task.id" 
-                         class="pit-task-item"
-                         :class="{ completed: task.is_done, overdue: task.is_overdue }">
-                        <input type="checkbox" 
-                               class="pit-task-checkbox"
-                               :checked="task.is_done"
-                               @change="toggleTask(task.id)">
-                        <div class="pit-task-content">
-                            <div class="pit-task-title">{{ task.title }}</div>
-                            <div class="pit-task-meta">
-                                <span class="pit-priority-badge" :class="task.priority">{{ task.priority }}</span>
-                                <span v-if="task.due_date" :class="{ overdue: task.is_overdue }">
-                                    📅 {{ task.due_date }}
-                                </span>
-                                <span>{{ task.task_type }}</span>
+                        
+                        <!-- Task List with Header -->
+                        <div v-if="tasks.length > 0" class="pit-card">
+                            <div class="tasks-header">
+                                <h3 class="section-heading">Tasks</h3>
+                                <button class="button add-button" data-modal-target="taskModal" @click="openTaskModal">
+                                    <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i> 
+                                    Add Task
+                                </button>
+                            </div>
+                            
+                            <div v-for="task in tasks" :key="task.id" 
+                                 class="pit-task-item"
+                                 :class="{ completed: task.is_done, overdue: task.is_overdue }">
+                                <input type="checkbox" 
+                                       class="pit-task-checkbox"
+                                       :checked="task.is_done"
+                                       @change="toggleTask(task.id)">
+                                <div class="pit-task-content">
+                                    <div class="pit-task-title">{{ task.title }}</div>
+                                    <div class="pit-task-meta">
+                                        <span class="pit-priority-badge" :class="task.priority">{{ task.priority }}</span>
+                                        <span v-if="task.due_date" :class="{ overdue: task.is_overdue }">
+                                            📅 {{ task.due_date }}
+                                        </span>
+                                        <span>{{ task.task_type }}</span>
+                                    </div>
+                                </div>
+                                <button class="pit-icon-btn" @click="deleteTask(task.id)" title="Delete">
+                                    🗑️
+                                </button>
                             </div>
                         </div>
-                        <button class="pit-icon-btn" @click="deleteTask(task.id)" title="Delete">
-                            🗑️
-                        </button>
+                    </div>
+                </div>
+                
+                <!-- Task Modal -->
+                <div id="taskModal" class="custom-modal" :class="{ active: showTaskModal }">
+                    <div class="custom-modal-content">
+                        <div class="custom-modal-header">
+                            <span class="custom-modal-close" data-modal-close="taskModal" @click="closeTaskModal">&times;</span>
+                            <h2 id="modal-title">Add Task</h2>
+                        </div>
+                        <div class="custom-modal-body">
+                            <div class="pit-form-group" style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500;">Task Title</label>
+                                <input v-model="newTask.title" type="text" class="field-input" placeholder="What needs to be done?">
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                                <div class="pit-form-group">
+                                    <label style="display: block; margin-bottom: 6px; font-weight: 500;">Type</label>
+                                    <select v-model="newTask.task_type" class="field-input">
+                                        <option value="todo">To-do</option>
+                                        <option value="email">Email</option>
+                                        <option value="message">Message</option>
+                                        <option value="research">Research</option>
+                                        <option value="follow_up">Follow Up</option>
+                                    </select>
+                                </div>
+                                <div class="pit-form-group">
+                                    <label style="display: block; margin-bottom: 6px; font-weight: 500;">Priority</label>
+                                    <select v-model="newTask.priority" class="field-input">
+                                        <option value="low">Low</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="high">High</option>
+                                        <option value="urgent">Urgent</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="pit-form-group" style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500;">Due Date</label>
+                                <input v-model="newTask.due_date" type="date" class="field-input">
+                            </div>
+                            <div class="custom-modal-actions">
+                                <button class="cancel-button custom-modal-close" data-modal-close="taskModal" @click="closeTaskModal">Cancel</button>
+                                <button class="confirm-button" @click="createTask" :disabled="!newTask.title">Add Task</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         `,
         setup() {
             const store = useDetailStore();
-            const showAddForm = ref(false);
+            const showTaskModal = ref(false);
             const newTask = reactive({
                 title: '',
                 task_type: 'todo',
@@ -603,14 +627,23 @@
                 due_date: ''
             });
             
-            const createTask = async () => {
-                if (!newTask.title) return;
-                await store.createTask({ ...newTask });
+            const openTaskModal = () => {
+                showTaskModal.value = true;
+            };
+            
+            const closeTaskModal = () => {
+                showTaskModal.value = false;
+                // Reset form
                 newTask.title = '';
                 newTask.task_type = 'todo';
                 newTask.priority = 'medium';
                 newTask.due_date = '';
-                showAddForm.value = false;
+            };
+            
+            const createTask = async () => {
+                if (!newTask.title) return;
+                await store.createTask({ ...newTask });
+                closeTaskModal();
             };
             
             const toggleTask = async (taskId) => {
@@ -626,8 +659,10 @@
             return {
                 isActive: computed(() => store.activeTab === 'tasks'),
                 tasks: computed(() => store.tasks),
-                showAddForm,
+                showTaskModal,
                 newTask,
+                openTaskModal,
+                closeTaskModal,
                 createTask,
                 toggleTask,
                 deleteTask
@@ -639,72 +674,96 @@
     const NotesTab = {
         template: `
             <div class="pit-tab-content" :class="{ active: isActive }">
-                <div class="pit-card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                        <h3 style="margin: 0;">Notes</h3>
-                        <button class="pit-btn pit-btn-primary pit-btn-sm" @click="showAddForm = true">
-                            + Add Note
-                        </button>
-                    </div>
-                    
-                    <!-- Add Note Form -->
-                    <div v-if="showAddForm" class="pit-card" style="background: #f9fafb; margin-bottom: 16px;">
-                        <div class="pit-form-group">
-                            <label>Title (optional)</label>
-                            <input v-model="newNote.title" type="text" class="pit-input" placeholder="Note title">
-                        </div>
-                        <div class="pit-form-group">
-                            <label>Content</label>
-                            <textarea v-model="newNote.content" class="pit-textarea" placeholder="Write your note..."></textarea>
-                        </div>
-                        <div class="pit-form-group">
-                            <label>Type</label>
-                            <select v-model="newNote.note_type" class="pit-select">
-                                <option value="general">General</option>
-                                <option value="contact">Contact</option>
-                                <option value="research">Research</option>
-                                <option value="meeting">Meeting</option>
-                                <option value="follow_up">Follow Up</option>
-                                <option value="pitch">Pitch</option>
-                                <option value="feedback">Feedback</option>
-                            </select>
-                        </div>
-                        <div style="display: flex; gap: 8px;">
-                            <button class="pit-btn pit-btn-primary" @click="createNote" :disabled="!newNote.content">
-                                Add Note
-                            </button>
-                            <button class="pit-btn pit-btn-secondary" @click="showAddForm = false">
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Notes List -->
-                    <div v-if="notes.length === 0 && !showAddForm" class="pit-empty-state">
-                        <p>No notes yet. Add one to keep track of important information!</p>
-                    </div>
-                    
-                    <div v-for="note in notes" :key="note.id" 
-                         class="pit-note-item"
-                         :class="{ pinned: note.is_pinned }">
-                        <div class="pit-note-header">
-                            <div class="pit-note-title">{{ note.title || 'Untitled Note' }}</div>
-                            <div class="pit-note-actions">
-                                <button class="pit-icon-btn" 
-                                        :class="{ pinned: note.is_pinned }"
-                                        @click="togglePin(note.id)" 
-                                        :title="note.is_pinned ? 'Unpin' : 'Pin'">
-                                    {{ note.is_pinned ? '⭐' : '☆' }}
-                                </button>
-                                <button class="pit-icon-btn" @click="deleteNote(note.id)" title="Delete">
-                                    🗑️
+                <div class="tab-content notes">
+                    <div class="tab-content-full">
+                        <!-- Empty State -->
+                        <div v-if="notes.length === 0" class="frm_no_entries">
+                            <div class="notes-empty">
+                                <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                                    <polyline points="10 9 9 9 8 9"></polyline>
+                                </svg>
+                                <h3 class="notes-empty-title">No Notes Yet</h3>
+                                <p class="notes-empty-text">Keep track of conversations, research, or any other details related to this interview prospect here.</p>
+                                <button class="button add-button" data-modal-target="noteModal" @click="openNoteModal">
+                                    <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i> 
+                                    Add Note
                                 </button>
                             </div>
                         </div>
-                        <div class="pit-note-content" v-html="note.content"></div>
-                        <div class="pit-note-footer">
-                            <span class="pit-note-type-badge">{{ note.note_type }}</span>
-                            <span>{{ note.time_ago }}</span>
+                        
+                        <!-- Notes List with Header -->
+                        <div v-if="notes.length > 0" class="pit-card">
+                            <div class="notes-header">
+                                <h3 class="section-heading">Notes</h3>
+                                <button class="button add-button" data-modal-target="noteModal" @click="openNoteModal">
+                                    <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i> 
+                                    Add Note
+                                </button>
+                            </div>
+                            
+                            <div v-for="note in notes" :key="note.id" 
+                                 class="pit-note-item"
+                                 :class="{ pinned: note.is_pinned }">
+                                <div class="pit-note-header">
+                                    <div class="pit-note-title">{{ note.title || 'Untitled Note' }}</div>
+                                    <div class="pit-note-actions">
+                                        <button class="pit-icon-btn" 
+                                                :class="{ pinned: note.is_pinned }"
+                                                @click="togglePin(note.id)" 
+                                                :title="note.is_pinned ? 'Unpin' : 'Pin'">
+                                            {{ note.is_pinned ? '⭐' : '☆' }}
+                                        </button>
+                                        <button class="pit-icon-btn" @click="deleteNote(note.id)" title="Delete">
+                                            🗑️
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="pit-note-content" v-html="note.content"></div>
+                                <div class="pit-note-footer">
+                                    <span class="pit-note-type-badge">{{ note.note_type }}</span>
+                                    <span>{{ note.time_ago }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Note Modal -->
+                <div id="noteModal" class="custom-modal" :class="{ active: showNoteModal }">
+                    <div class="custom-modal-content">
+                        <div class="custom-modal-header">
+                            <span class="custom-modal-close" data-modal-close="noteModal" @click="closeNoteModal">&times;</span>
+                            <h2 id="modal-title">Add Note</h2>
+                        </div>
+                        <div class="custom-modal-body">
+                            <div class="pit-form-group" style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500;">Title (optional)</label>
+                                <input v-model="newNote.title" type="text" class="field-input" placeholder="Note title">
+                            </div>
+                            <div class="pit-form-group" style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500;">Content</label>
+                                <textarea v-model="newNote.content" class="field-input" rows="4" placeholder="Write your note..."></textarea>
+                            </div>
+                            <div class="pit-form-group" style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500;">Type</label>
+                                <select v-model="newNote.note_type" class="field-input">
+                                    <option value="general">General</option>
+                                    <option value="contact">Contact</option>
+                                    <option value="research">Research</option>
+                                    <option value="meeting">Meeting</option>
+                                    <option value="follow_up">Follow Up</option>
+                                    <option value="pitch">Pitch</option>
+                                    <option value="feedback">Feedback</option>
+                                </select>
+                            </div>
+                            <div class="custom-modal-actions">
+                                <button class="cancel-button custom-modal-close" data-modal-close="noteModal" @click="closeNoteModal">Cancel</button>
+                                <button class="confirm-button" @click="createNote" :disabled="!newNote.content">Add Note</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -712,20 +771,29 @@
         `,
         setup() {
             const store = useDetailStore();
-            const showAddForm = ref(false);
+            const showNoteModal = ref(false);
             const newNote = reactive({
                 title: '',
                 content: '',
                 note_type: 'general'
             });
             
-            const createNote = async () => {
-                if (!newNote.content) return;
-                await store.createNote({ ...newNote });
+            const openNoteModal = () => {
+                showNoteModal.value = true;
+            };
+            
+            const closeNoteModal = () => {
+                showNoteModal.value = false;
+                // Reset form
                 newNote.title = '';
                 newNote.content = '';
                 newNote.note_type = 'general';
-                showAddForm.value = false;
+            };
+            
+            const createNote = async () => {
+                if (!newNote.content) return;
+                await store.createNote({ ...newNote });
+                closeNoteModal();
             };
             
             const togglePin = async (noteId) => {
@@ -741,8 +809,10 @@
             return {
                 isActive: computed(() => store.activeTab === 'notes'),
                 notes: computed(() => store.notes),
-                showAddForm,
+                showNoteModal,
                 newNote,
+                openNoteModal,
+                closeNoteModal,
                 createNote,
                 togglePin,
                 deleteNote

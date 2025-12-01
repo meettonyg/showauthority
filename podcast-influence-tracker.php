@@ -228,7 +228,27 @@ class Podcast_Influence_Tracker {
     }
 
     public function enqueue_frontend_scripts() {
-        // Frontend scripts if needed
+        // Enqueue frontend CSS
+        wp_enqueue_style(
+            'pit-frontend',
+            PIT_PLUGIN_URL . 'assets/css/frontend.css',
+            [],
+            PIT_VERSION
+        );
+
+        wp_enqueue_style(
+            'pit-interview-detail',
+            PIT_PLUGIN_URL . 'assets/css/interview-detail.css',
+            [],
+            PIT_VERSION
+        );
+
+        wp_enqueue_style(
+            'pit-interview-detail-modals',
+            PIT_PLUGIN_URL . 'assets/css/interview-detail-modals.css',
+            [],
+            PIT_VERSION
+        );
     }
 
     /**
