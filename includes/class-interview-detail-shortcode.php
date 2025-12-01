@@ -1,0 +1,656 @@
+<?php
+/**
+ * Interview Detail Page Shortcode
+ * 
+ * Renders the Vue.js Interview Detail Page for viewing/editing a single appearance.
+ * URL: /app/interview/detail/?id={appearance_id}
+ * 
+ * @package Podcast_Influence_Tracker
+ * @since 3.1.0
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class PIT_Interview_Detail_Shortcode {
+
+    /**
+     * Initialize the shortcode
+     */
+    public static function init() {
+        add_shortcode('guestify_interview_detail', [__CLASS__, 'render']);
+    }
+
+    /**
+     * Render the interview detail page
+     *
+     * @param array $atts Shortcode attributes
+     * @return string HTML output
+     */
+    public static function render($atts) {
+        if (!is_user_logged_in()) {
+            return '<div class="pit-error"><p>Please log in to access interview details.</p></div>';
+        }
+
+        // Get interview ID from URL parameter
+        $interview_id = isset($_GET['id']) ? absint($_GET['id']) : 0;
+        
+        if (!$interview_id) {
+            return '<div class="pit-error"><p>No interview specified. <a href="/app/interview/board/">Return to Interview Tracker</a></p></div>';
+        }
+
+        // Verify access
+        $access = self::verify_access($interview_id);
+        if (!$access) {
+            return '<div class="pit-error"><p>Interview not found or you don\'t have permission to view it. <a href="/app/interview/board/">Return to Interview Tracker</a></p></div>';
+        }
+
+        // Enqueue scripts
+        self::enqueue_scripts($interview_id);
+
+        ob_start();
+        ?>
+        <div id="interview-detail-app" data-interview-id="<?php echo esc_attr($interview_id); ?>">
+            <div class="pit-loading">
+                <div class="pit-loading-spinner"></div>
+                <p>Loading interview details...</p>
+            </div>
+        </div>
+        
+        <style>
+            /* Loading State */
+            .pit-loading {
+                text-align: center;
+                padding: 60px 20px;
+                color: #6b7280;
+            }
+            .pit-loading-spinner {
+                width: 40px;
+                height: 40px;
+                border: 3px solid #e5e7eb;
+                border-top-color: #3b82f6;
+                border-radius: 50%;
+                animation: pit-spin 1s linear infinite;
+                margin: 0 auto 16px;
+            }
+            @keyframes pit-spin {
+                to { transform: rotate(360deg); }
+            }
+            
+            /* Error State */
+            .pit-error {
+                background: #fef2f2;
+                border: 1px solid #fecaca;
+                color: #991b1b;
+                padding: 20px;
+                border-radius: 8px;
+                text-align: center;
+            }
+            .pit-error a {
+                color: #1d4ed8;
+                text-decoration: underline;
+            }
+            
+            /* Back Button */
+            .pit-back-button {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                color: #6b7280;
+                text-decoration: none;
+                font-size: 14px;
+                margin-bottom: 16px;
+                padding: 8px 12px;
+                border-radius: 6px;
+                transition: all 0.2s;
+            }
+            .pit-back-button:hover {
+                background: #f3f4f6;
+                color: #374151;
+            }
+            
+            /* Header */
+            .pit-detail-header {
+                display: flex;
+                gap: 20px;
+                margin-bottom: 24px;
+                padding: 20px;
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }
+            .pit-podcast-artwork {
+                width: 120px;
+                height: 120px;
+                border-radius: 12px;
+                object-fit: cover;
+                flex-shrink: 0;
+            }
+            .pit-podcast-artwork-placeholder {
+                width: 120px;
+                height: 120px;
+                border-radius: 12px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+                font-size: 36px;
+                font-weight: bold;
+                flex-shrink: 0;
+            }
+            .pit-header-info {
+                flex: 1;
+            }
+            .pit-header-info h1 {
+                margin: 0 0 8px;
+                font-size: 24px;
+                color: #111827;
+            }
+            .pit-header-meta {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 16px;
+                color: #6b7280;
+                font-size: 14px;
+            }
+            .pit-header-meta span {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }
+            
+            /* Priority Badge */
+            .pit-priority-badge {
+                display: inline-flex;
+                align-items: center;
+                padding: 4px 10px;
+                border-radius: 9999px;
+                font-size: 12px;
+                font-weight: 500;
+                cursor: pointer;
+            }
+            .pit-priority-badge.low { background: #d1fae5; color: #065f46; }
+            .pit-priority-badge.medium { background: #fef3c7; color: #92400e; }
+            .pit-priority-badge.high { background: #fee2e2; color: #991b1b; }
+            .pit-priority-badge.urgent { background: #fecaca; color: #7f1d1d; }
+            
+            /* Status Badge */
+            .pit-status-badge {
+                display: inline-flex;
+                align-items: center;
+                padding: 4px 10px;
+                border-radius: 9999px;
+                font-size: 12px;
+                font-weight: 500;
+            }
+            .pit-status-badge.potential { background: #e0e7ff; color: #3730a3; }
+            .pit-status-badge.pitched { background: #dbeafe; color: #1e40af; }
+            .pit-status-badge.negotiating { background: #fef3c7; color: #92400e; }
+            .pit-status-badge.scheduled { background: #d1fae5; color: #065f46; }
+            .pit-status-badge.recorded { background: #cffafe; color: #0e7490; }
+            .pit-status-badge.aired { background: #dcfce7; color: #166534; }
+            .pit-status-badge.promoted { background: #f3e8ff; color: #6b21a8; }
+            .pit-status-badge.rejected { background: #fee2e2; color: #991b1b; }
+            
+            /* Tabs */
+            .pit-tabs {
+                display: flex;
+                gap: 4px;
+                border-bottom: 1px solid #e5e7eb;
+                margin-bottom: 24px;
+                overflow-x: auto;
+            }
+            .pit-tab {
+                padding: 12px 20px;
+                border: none;
+                background: transparent;
+                color: #6b7280;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                border-bottom: 2px solid transparent;
+                white-space: nowrap;
+                transition: all 0.2s;
+            }
+            .pit-tab:hover {
+                color: #374151;
+            }
+            .pit-tab.active {
+                color: #3b82f6;
+                border-bottom-color: #3b82f6;
+            }
+            .pit-tab-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 20px;
+                height: 20px;
+                padding: 0 6px;
+                margin-left: 6px;
+                background: #e5e7eb;
+                color: #374151;
+                font-size: 11px;
+                font-weight: 600;
+                border-radius: 9999px;
+            }
+            .pit-tab.active .pit-tab-badge {
+                background: #dbeafe;
+                color: #1e40af;
+            }
+            
+            /* Tab Content */
+            .pit-tab-content {
+                display: none;
+            }
+            .pit-tab-content.active {
+                display: block;
+            }
+            
+            /* Cards */
+            .pit-card {
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 16px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }
+            .pit-card h3 {
+                margin: 0 0 16px;
+                font-size: 16px;
+                color: #111827;
+            }
+            
+            /* Tasks */
+            .pit-task-item {
+                display: flex;
+                align-items: flex-start;
+                gap: 12px;
+                padding: 12px;
+                border: 1px solid #e5e7eb;
+                border-radius: 8px;
+                margin-bottom: 8px;
+                transition: all 0.2s;
+            }
+            .pit-task-item:hover {
+                border-color: #d1d5db;
+                background: #f9fafb;
+            }
+            .pit-task-item.completed {
+                opacity: 0.6;
+            }
+            .pit-task-item.completed .pit-task-title {
+                text-decoration: line-through;
+            }
+            .pit-task-item.overdue {
+                border-left: 3px solid #ef4444;
+            }
+            .pit-task-checkbox {
+                width: 20px;
+                height: 20px;
+                border-radius: 4px;
+                cursor: pointer;
+                flex-shrink: 0;
+                margin-top: 2px;
+            }
+            .pit-task-content {
+                flex: 1;
+                min-width: 0;
+            }
+            .pit-task-title {
+                font-weight: 500;
+                color: #111827;
+                margin-bottom: 4px;
+            }
+            .pit-task-meta {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+                font-size: 12px;
+                color: #6b7280;
+            }
+            .pit-task-meta .overdue {
+                color: #ef4444;
+                font-weight: 500;
+            }
+            
+            /* Notes */
+            .pit-note-item {
+                padding: 16px;
+                border: 1px solid #e5e7eb;
+                border-radius: 8px;
+                margin-bottom: 12px;
+            }
+            .pit-note-item.pinned {
+                border-color: #fbbf24;
+                background: #fffbeb;
+            }
+            .pit-note-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                margin-bottom: 8px;
+            }
+            .pit-note-title {
+                font-weight: 500;
+                color: #111827;
+            }
+            .pit-note-actions {
+                display: flex;
+                gap: 8px;
+            }
+            .pit-note-content {
+                color: #374151;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+            .pit-note-footer {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-top: 12px;
+                padding-top: 12px;
+                border-top: 1px solid #e5e7eb;
+                font-size: 12px;
+                color: #6b7280;
+            }
+            .pit-note-type-badge {
+                display: inline-flex;
+                padding: 2px 8px;
+                background: #f3f4f6;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 500;
+                text-transform: uppercase;
+            }
+            
+            /* Form Elements */
+            .pit-form-group {
+                margin-bottom: 16px;
+            }
+            .pit-form-group label {
+                display: block;
+                margin-bottom: 4px;
+                font-size: 14px;
+                font-weight: 500;
+                color: #374151;
+            }
+            .pit-input,
+            .pit-select,
+            .pit-textarea {
+                width: 100%;
+                padding: 10px 12px;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                font-size: 14px;
+                transition: border-color 0.2s;
+            }
+            .pit-input:focus,
+            .pit-select:focus,
+            .pit-textarea:focus {
+                outline: none;
+                border-color: #3b82f6;
+                box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            }
+            .pit-textarea {
+                min-height: 100px;
+                resize: vertical;
+            }
+            
+            /* Buttons */
+            .pit-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                padding: 10px 16px;
+                border: none;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .pit-btn-primary {
+                background: #3b82f6;
+                color: white;
+            }
+            .pit-btn-primary:hover {
+                background: #2563eb;
+            }
+            .pit-btn-secondary {
+                background: #f3f4f6;
+                color: #374151;
+            }
+            .pit-btn-secondary:hover {
+                background: #e5e7eb;
+            }
+            .pit-btn-ghost {
+                background: transparent;
+                color: #6b7280;
+                padding: 6px 10px;
+            }
+            .pit-btn-ghost:hover {
+                background: #f3f4f6;
+                color: #374151;
+            }
+            .pit-btn-danger {
+                background: #fee2e2;
+                color: #991b1b;
+            }
+            .pit-btn-danger:hover {
+                background: #fecaca;
+            }
+            .pit-btn-sm {
+                padding: 6px 10px;
+                font-size: 12px;
+            }
+            
+            /* Icon Button */
+            .pit-icon-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 32px;
+                height: 32px;
+                border: none;
+                background: transparent;
+                color: #6b7280;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .pit-icon-btn:hover {
+                background: #f3f4f6;
+                color: #374151;
+            }
+            .pit-icon-btn.pinned {
+                color: #f59e0b;
+            }
+            
+            /* Empty State */
+            .pit-empty-state {
+                text-align: center;
+                padding: 40px 20px;
+                color: #6b7280;
+            }
+            .pit-empty-state svg {
+                width: 48px;
+                height: 48px;
+                margin-bottom: 12px;
+                opacity: 0.5;
+            }
+            .pit-empty-state p {
+                margin: 0 0 16px;
+            }
+            
+            /* Layout */
+            .pit-detail-layout {
+                display: grid;
+                grid-template-columns: 1fr 320px;
+                gap: 24px;
+            }
+            @media (max-width: 1024px) {
+                .pit-detail-layout {
+                    grid-template-columns: 1fr;
+                }
+            }
+            
+            /* Sidebar */
+            .pit-sidebar .pit-card {
+                padding: 16px;
+            }
+            .pit-sidebar .pit-card h4 {
+                margin: 0 0 12px;
+                font-size: 13px;
+                font-weight: 600;
+                color: #6b7280;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+            .pit-sidebar-field {
+                margin-bottom: 12px;
+            }
+            .pit-sidebar-field:last-child {
+                margin-bottom: 0;
+            }
+            .pit-sidebar-label {
+                font-size: 12px;
+                color: #6b7280;
+                margin-bottom: 4px;
+            }
+            .pit-sidebar-value {
+                font-size: 14px;
+                color: #111827;
+            }
+            
+            /* Milestone Tracker */
+            .pit-milestone-tracker {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .pit-milestone-step {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .pit-milestone-step:hover {
+                background: #f3f4f6;
+            }
+            .pit-milestone-step.active {
+                background: #dbeafe;
+            }
+            .pit-milestone-step.completed {
+                opacity: 0.5;
+            }
+            .pit-milestone-dot {
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                border: 2px solid #d1d5db;
+                flex-shrink: 0;
+            }
+            .pit-milestone-step.active .pit-milestone-dot {
+                border-color: #3b82f6;
+                background: #3b82f6;
+            }
+            .pit-milestone-step.completed .pit-milestone-dot {
+                border-color: #10b981;
+                background: #10b981;
+            }
+            .pit-milestone-label {
+                font-size: 13px;
+                color: #374151;
+            }
+            .pit-milestone-step.active .pit-milestone-label {
+                font-weight: 500;
+                color: #1e40af;
+            }
+        </style>
+        <?php
+        return ob_get_clean();
+    }
+
+    /**
+     * Verify user has access to this appearance
+     */
+    private static function verify_access($interview_id) {
+        global $wpdb;
+        
+        $user_id = get_current_user_id();
+        $table = $wpdb->prefix . 'pit_guest_appearances';
+        
+        // Admins can access all
+        if (current_user_can('manage_options')) {
+            return $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM {$table} WHERE id = %d",
+                $interview_id
+            ));
+        }
+        
+        // Regular users can only access their own
+        return $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$table} WHERE id = %d AND user_id = %d",
+            $interview_id,
+            $user_id
+        ));
+    }
+
+    /**
+     * Enqueue required scripts
+     */
+    private static function enqueue_scripts($interview_id) {
+        // Vue 3
+        wp_enqueue_script(
+            'vue',
+            'https://unpkg.com/vue@3.3.4/dist/vue.global.prod.js',
+            [],
+            '3.3.4',
+            true
+        );
+
+        // Vue Demi (required for Pinia)
+        wp_enqueue_script(
+            'vue-demi',
+            'https://unpkg.com/vue-demi@0.14.6/lib/index.iife.js',
+            ['vue'],
+            '0.14.6',
+            true
+        );
+
+        // Pinia
+        wp_enqueue_script(
+            'pinia',
+            'https://unpkg.com/pinia@2.1.7/dist/pinia.iife.js',
+            ['vue', 'vue-demi'],
+            '2.1.7',
+            true
+        );
+
+        // Interview Detail App
+        wp_enqueue_script(
+            'pit-interview-detail',
+            PIT_PLUGIN_URL . 'assets/js/interview-detail-vue.js',
+            ['vue', 'pinia'],
+            PIT_VERSION,
+            true
+        );
+
+        // Localize script data
+        wp_localize_script('pit-interview-detail', 'guestifyDetailData', [
+            'restUrl' => rest_url('guestify/v1/'),
+            'nonce' => wp_create_nonce('wp_rest'),
+            'userId' => get_current_user_id(),
+            'interviewId' => $interview_id,
+            'boardUrl' => '/app/interview/board/',
+            'listUrl' => '/app/interview/list/',
+            'isAdmin' => current_user_can('manage_options'),
+        ]);
+    }
+}
