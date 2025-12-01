@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('PIT_VERSION', '2.0.3');
+define('PIT_VERSION', '3.1.0');
 define('PIT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PIT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('PIT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -111,6 +111,13 @@ class Podcast_Influence_Tracker {
 
         // FRONTEND / SHORTCODES
         require_once PIT_PLUGIN_DIR . 'includes/class-shortcodes.php';
+
+        // INTERVIEW TRACKER CRM (v3.0 + v3.1)
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-appearances.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-appearance-tasks.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-appearance-notes.php';
+        require_once PIT_PLUGIN_DIR . 'includes/class-interview-tracker-shortcode.php';
+        require_once PIT_PLUGIN_DIR . 'includes/class-interview-detail-shortcode.php';
     }
 
     private function init_hooks() {
@@ -169,6 +176,8 @@ class Podcast_Influence_Tracker {
         PIT_Shortcodes::init();
         PIT_Background_Refresh::init();
         PIT_Formidable_Integration::init();
+        PIT_Interview_Tracker_Shortcode::init();
+        PIT_Interview_Detail_Shortcode::init();
 
         add_action('pit_process_jobs', ['PIT_Job_Queue', 'process_next_job']);
         add_action('pit_rate_limit_cleanup', ['PIT_Rate_Limiter', 'cleanup']);
@@ -183,6 +192,9 @@ class Podcast_Influence_Tracker {
         PIT_REST_Settings::register_routes();
         PIT_REST_Formidable::register_routes();
         PIT_REST_Metrics::register_routes();
+        PIT_REST_Appearances::register_routes();
+        PIT_REST_Appearance_Tasks::register_routes();
+        PIT_REST_Appearance_Notes::register_routes();
     }
 
     public function add_cron_schedules($schedules) {
