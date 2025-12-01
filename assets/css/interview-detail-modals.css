@@ -1,7 +1,12 @@
 /**
  * Interview Detail Modal Styles
  * 
- * Custom modal styles for Tasks, Notes, and other Interview Detail modals
+ * Styles for modals used in the Interview Detail page
+ * These styles are also included in interview-detail.css but
+ * kept here for modularity
+ * 
+ * @package Podcast_Influence_Tracker
+ * @since 3.2.0
  */
 
 /* Modal Overlay */
@@ -14,8 +19,7 @@
     width: 100%;
     height: 100%;
     overflow: auto;
-    background-color: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(2px);
+    background-color: rgba(0, 0, 0, 0.5);
 }
 
 .custom-modal.active {
@@ -30,47 +34,42 @@
     margin: auto;
     padding: 0;
     border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     width: 90%;
     max-width: 500px;
     max-height: 90vh;
     overflow-y: auto;
-    animation: modalSlideIn 0.3s ease-out;
+    overflow: hidden;
+    transform: scale(0.95);
+    transition: transform 0.3s ease;
+}
+
+.custom-modal.active .custom-modal-content {
+    transform: scale(1);
 }
 
 .custom-modal-content.small {
     max-width: 400px;
 }
 
-@keyframes modalSlideIn {
-    from {
-        transform: translateY(-50px);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
-}
-
 /* Modal Header */
 .custom-modal-header {
-    padding: 20px 24px;
-    background-color: #f8f9fa;
-    border-bottom: 1px solid #dee2e6;
-    border-radius: 8px 8px 0 0;
+    padding: 16px;
+    border-bottom: 1px solid #e2e8f0;
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
-.custom-modal-header h2 {
-    margin: 0;
+.custom-modal-header h2,
+.custom-modal-header #modal-title {
     font-size: 18px;
     font-weight: 600;
-    color: #1d2327;
+    color: #1e293b;
+    margin: 0;
 }
 
+/* Close X Button */
 .custom-modal-close {
     color: #646970;
     font-size: 28px;
@@ -96,133 +95,121 @@
 
 /* Modal Body */
 .custom-modal-body {
-    padding: 24px;
+    padding: 16px;
+    min-height: 100px;
 }
 
-/* Modal Actions */
+.custom-modal-body p {
+    font-size: 14px;
+    color: #475569;
+    margin-bottom: 16px;
+    margin-top: 0;
+    line-height: 1.5;
+}
+
+/* Modal Actions (Footer) */
 .custom-modal-actions {
     display: flex;
-    gap: 12px;
+    gap: 8px;
+    padding: 16px;
+    border-top: 1px solid #e2e8f0;
     justify-content: flex-end;
-    padding-top: 20px;
-    border-top: 1px solid #f0f0f1;
-    margin-top: 20px;
+    margin-top: 16px;
 }
 
-/* Form Elements */
+/* Modal Buttons */
+.cancel-button,
+.confirm-button {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+}
+
+.cancel-button {
+    background-color: #f1f5f9;
+    color: #64748b;
+}
+
+.cancel-button:hover {
+    background-color: #e2e8f0;
+}
+
+.confirm-button {
+    background-color: #ef4444;
+    color: white;
+}
+
+.confirm-button:hover {
+    background-color: #dc2626;
+}
+
+/* Primary confirm button (non-delete actions) */
+.confirm-button.primary,
+.custom-modal-actions .confirm-button[style*="background-color: #0ea5e9"] {
+    background-color: #0ea5e9;
+}
+
+.confirm-button.primary:hover {
+    background-color: #0284c7;
+}
+
+/* Override for cancel button with custom-modal-close class */
+button.cancel-button.custom-modal-close,
+.custom-modal-actions .cancel-button.custom-modal-close,
+.custom-modal-actions button.cancel-button {
+    font-size: 14px;
+    font-weight: 500;
+    width: auto;
+    height: auto;
+    padding: 8px 16px;
+    background-color: #f1f5f9;
+    color: #64748b;
+    border-radius: 6px;
+    line-height: normal;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+button.cancel-button.custom-modal-close:hover,
+.custom-modal-actions .cancel-button.custom-modal-close:hover {
+    background-color: #e2e8f0;
+}
+
+/* Delete Modal Specific */
+.delete-modal .confirm-button {
+    background-color: #ef4444;
+    color: white;
+}
+
+.delete-modal .confirm-button:hover {
+    background-color: #dc2626;
+}
+
+/* Form field styling */
 .field-input {
     width: 100%;
     padding: 10px 12px;
-    border: 1px solid #dcdcde;
-    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
     font-size: 14px;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    color: #334155;
+    background-color: #fff;
 }
 
 .field-input:focus {
-    outline: none;
-    border-color: #0073aa;
-    box-shadow: 0 0 0 2px rgba(0, 115, 170, 0.1);
+    border-color: #0ea5e9;
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.3);
 }
 
 textarea.field-input {
     resize: vertical;
     font-family: inherit;
-}
-
-/* Buttons */
-.button {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 4px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 0.2s ease, transform 0.1s ease;
-}
-
-.button:active {
-    transform: scale(0.98);
-}
-
-.button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.add-button {
-    background-color: #0073aa;
-    color: #fff;
-    border: none;
-}
-
-.add-button:hover:not(:disabled) {
-    background-color: #005a87;
-}
-
-.cancel-button {
-    background-color: #f0f0f1;
-    color: #646970;
-    border: none;
-}
-
-.cancel-button:hover {
-    background-color: #dcdcde;
-    color: #1d2327;
-}
-
-.confirm-button,
-.primary-button {
-    background-color: #0073aa;
-    color: #fff;
-    border: none;
-}
-
-.confirm-button:hover:not(:disabled),
-.primary-button:hover:not(:disabled) {
-    background-color: #005a87;
-}
-
-/* Empty State */
-.notes-empty {
-    text-align: center;
-    padding: 60px 30px;
-    max-width: 500px;
-    margin: 0 auto;
-}
-
-.notes-empty-icon {
-    color: #b8bbc0;
-    margin-bottom: 20px;
-}
-
-.notes-empty-title {
-    font-size: 20px;
-    font-weight: 600;
-    color: #1d2327;
-    margin: 0 0 12px 0;
-}
-
-.notes-empty-text {
-    font-size: 14px;
-    color: #646970;
-    line-height: 1.6;
-    margin: 0 0 24px 0;
-}
-
-.frm_no_entries {
-    background: #f8f9fa;
-    border-radius: 8px;
-    margin: 20px 0;
-}
-
-/* Tab Content */
-.tab-content {
-    display: block;
-}
-
-.tab-content-full {
-    padding: 20px;
 }
 
 /* Responsive */
@@ -233,71 +220,14 @@ textarea.field-input {
         margin: 10px;
     }
     
-    .custom-modal-header {
-        padding: 16px 20px;
-    }
-    
-    .custom-modal-body {
-        padding: 20px;
-    }
-    
     .custom-modal-actions {
         flex-direction: column-reverse;
     }
     
-    .custom-modal-actions .button {
+    .custom-modal-actions .cancel-button,
+    .custom-modal-actions .confirm-button,
+    .custom-modal-actions button {
         width: 100%;
-    }
-}
-
-/* Dark mode support (optional) */
-@media (prefers-color-scheme: dark) {
-    .custom-modal {
-        background-color: rgba(0, 0, 0, 0.8);
-    }
-    
-    .custom-modal-content {
-        background-color: #1e1e1e;
-    }
-    
-    .custom-modal-header {
-        background-color: #2a2a2a;
-        border-bottom-color: #3a3a3a;
-    }
-    
-    .custom-modal-header h2 {
-        color: #e0e0e0;
-    }
-    
-    .custom-modal-close {
-        color: #a0a0a0;
-    }
-    
-    .custom-modal-close:hover {
-        color: #e0e0e0;
-        background-color: rgba(255, 255, 255, 0.1);
-    }
-    
-    .field-input {
-        background-color: #2a2a2a;
-        border-color: #3a3a3a;
-        color: #e0e0e0;
-    }
-    
-    .field-input:focus {
-        border-color: #0073aa;
-        box-shadow: 0 0 0 2px rgba(0, 115, 170, 0.2);
-    }
-    
-    .frm_no_entries {
-        background: #2a2a2a;
-    }
-    
-    .notes-empty-title {
-        color: #e0e0e0;
-    }
-    
-    .notes-empty-text {
-        color: #a0a0a0;
+        justify-content: center;
     }
 }

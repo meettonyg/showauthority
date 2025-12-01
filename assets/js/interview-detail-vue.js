@@ -9,8 +9,10 @@
  * - Tasks: Task management
  * - Notes: Notes management
  * 
+ * Refactored to match provided design specifications
+ * 
  * @package Podcast_Influence_Tracker
- * @since 3.1.0
+ * @since 3.2.0
  */
 
 (function() {
@@ -63,12 +65,10 @@
         },
 
         actions: {
-            // Initialize config from WordPress
             initConfig(data) {
                 this.config = { ...this.config, ...data };
             },
 
-            // API helper
             async api(endpoint, options = {}) {
                 const url = this.config.restUrl + endpoint;
                 const response = await fetch(url, {
@@ -88,7 +88,6 @@
                 return response.json();
             },
 
-            // Load interview data
             async loadInterview() {
                 this.loading = true;
                 this.error = null;
@@ -97,7 +96,6 @@
                     const response = await this.api(`appearances/${this.config.interviewId}`);
                     this.interview = response;
                     
-                    // Load tasks and notes in parallel
                     await Promise.all([
                         this.loadTasks(),
                         this.loadNotes(),
@@ -110,7 +108,6 @@
                 }
             },
 
-            // Update interview field
             async updateInterview(field, value) {
                 this.saving = true;
                 try {
@@ -127,7 +124,6 @@
                 }
             },
 
-            // Tasks
             async loadTasks() {
                 try {
                     const response = await this.api(`appearances/${this.config.interviewId}/tasks`);
@@ -202,7 +198,6 @@
                 }
             },
 
-            // Notes
             async loadNotes() {
                 try {
                     const response = await this.api(`appearances/${this.config.interviewId}/notes`);
@@ -258,7 +253,6 @@
                     if (index !== -1) {
                         this.notes[index] = response.data;
                     }
-                    // Re-sort notes (pinned first)
                     this.notes.sort((a, b) => {
                         if (a.is_pinned && !b.is_pinned) return -1;
                         if (!a.is_pinned && b.is_pinned) return 1;
@@ -290,301 +284,530 @@
     });
 
     // ==========================================================================
-    // COMPONENTS
+    // MAIN APP COMPONENT
     // ==========================================================================
-
-    // Back Button
-    const BackButton = {
+    const InterviewDetailApp = {
         template: `
-            <a :href="boardUrl" class="pit-back-button">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M19 12H5M12 19l-7-7 7-7"/>
-                </svg>
-                Back to Interview Tracker
-            </a>
-        `,
-        setup() {
-            const store = useDetailStore();
-            return {
-                boardUrl: computed(() => store.config.boardUrl)
-            };
-        }
-    };
+            <div class="container">
+                <!-- Back Button -->
+                <a :href="boardUrl" class="back-button">
+                    <svg class="back-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M19 12H5"></path>
+                        <path d="M12 19l-7-7 7-7"></path>
+                    </svg>
+                    Back to Interviews
+                </a>
 
-    // Podcast Header
-    const PodcastHeader = {
-        template: `
-            <div class="pit-detail-header">
-                <img v-if="interview?.podcast_image" 
-                     :src="interview.podcast_image" 
-                     :alt="interview.podcast_name"
-                     class="pit-podcast-artwork">
-                <div v-else class="pit-podcast-artwork-placeholder">
-                    {{ initials }}
+                <!-- Loading State -->
+                <div v-if="loading" class="pit-loading">
+                    <div class="pit-loading-spinner"></div>
+                    <p>Loading interview details...</p>
                 </div>
-                <div class="pit-header-info">
-                    <h1>{{ interview?.podcast_name || 'Loading...' }}</h1>
-                    <div class="pit-header-meta">
-                        <span class="pit-status-badge" :class="interview?.status">
-                            {{ formatStatus(interview?.status) }}
-                        </span>
-                        <span class="pit-priority-badge" :class="interview?.priority" @click="cyclePriority">
-                            {{ interview?.priority || 'medium' }} priority
-                        </span>
-                        <span v-if="interview?.source">
-                            📍 {{ interview.source }}
-                        </span>
-                        <span v-if="interview?.episode_title">
-                            🎙️ {{ interview.episode_title }}
-                        </span>
-                    </div>
+
+                <!-- Error State -->
+                <div v-else-if="error" class="pit-error">
+                    <p>{{ error }}</p>
+                    <a :href="boardUrl">Return to Interview Tracker</a>
                 </div>
-            </div>
-        `,
-        setup() {
-            const store = useDetailStore();
-            
-            const initials = computed(() => {
-                const name = store.interview?.podcast_name || '';
-                return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
-            });
-            
-            const formatStatus = (status) => {
-                const labels = {
-                    potential: 'Potential',
-                    pitched: 'Pitched',
-                    negotiating: 'Negotiating',
-                    scheduled: 'Scheduled',
-                    recorded: 'Recorded',
-                    aired: 'Aired',
-                    promoted: 'Promoted',
-                    rejected: 'Rejected'
-                };
-                return labels[status] || status;
-            };
-            
-            const cyclePriority = async () => {
-                const priorities = ['low', 'medium', 'high', 'urgent'];
-                const current = store.interview?.priority || 'medium';
-                const index = priorities.indexOf(current);
-                const next = priorities[(index + 1) % priorities.length];
-                await store.updateInterview('priority', next);
-            };
-            
-            return {
-                interview: computed(() => store.interview),
-                initials,
-                formatStatus,
-                cyclePriority
-            };
-        }
-    };
 
-    // Tab Navigation
-    const TabNavigation = {
-        template: `
-            <div class="pit-tabs">
-                <button v-for="tab in tabs" 
-                        :key="tab.id"
-                        class="pit-tab"
-                        :class="{ active: activeTab === tab.id }"
-                        @click="setTab(tab.id)">
-                    {{ tab.label }}
-                    <span v-if="tab.count !== undefined" class="pit-tab-badge">{{ tab.count }}</span>
-                </button>
-            </div>
-        `,
-        setup() {
-            const store = useDetailStore();
-            
-            const tabs = computed(() => [
-                { id: 'about', label: 'About' },
-                { id: 'listen', label: 'Listen' },
-                { id: 'contact', label: 'Contact' },
-                { id: 'message', label: 'Message' },
-                { id: 'tasks', label: 'Tasks', count: store.pendingTasks.length },
-                { id: 'notes', label: 'Notes', count: store.notes.length },
-            ]);
-            
-            return {
-                tabs,
-                activeTab: computed(() => store.activeTab),
-                setTab: (tab) => store.setActiveTab(tab)
-            };
-        }
-    };
-
-    // About Tab
-    const AboutTab = {
-        template: `
-            <div class="pit-tab-content" :class="{ active: isActive }">
-                <div class="pit-detail-layout">
-                    <div class="pit-main-content">
-                        <div class="pit-card">
-                            <h3>About This Podcast</h3>
-                            <p v-if="interview?.rss_url">
-                                <strong>RSS Feed:</strong> 
-                                <a :href="interview.rss_url" target="_blank">{{ interview.rss_url }}</a>
-                            </p>
-                            <p v-if="interview?.episode_title">
-                                <strong>Episode:</strong> {{ interview.episode_title }}
-                            </p>
-                            <p v-if="interview?.episode_date">
-                                <strong>Air Date:</strong> {{ interview.episode_date }}
-                            </p>
+                <!-- Main Content -->
+                <template v-else>
+                    <!-- Podcast Header -->
+                    <div class="podcast-header">
+                        <img v-if="interview?.podcast_image"
+                             :alt="interview.podcast_name"
+                             class="podcast-artwork"
+                             :src="interview.podcast_image"
+                             @error="handleImageError">
+                        <div v-else class="podcast-artwork" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 36px; font-weight: bold;">
+                            {{ initials }}
                         </div>
-                    </div>
-                    <div class="pit-sidebar">
-                        <div class="pit-card">
-                            <h4>Status</h4>
-                            <div class="pit-milestone-tracker">
-                                <div v-for="step in milestones" 
-                                     :key="step.id"
-                                     class="pit-milestone-step"
-                                     :class="{ 
-                                         active: interview?.status === step.id,
-                                         completed: isCompleted(step.id)
-                                     }"
-                                     @click="setStatus(step.id)">
-                                    <div class="pit-milestone-dot"></div>
-                                    <span class="pit-milestone-label">{{ step.label }}</span>
+                        
+                        <div class="podcast-info">
+                            <div class="podcast-title-row">
+                                <h1 class="podcast-title">{{ interview?.podcast_name || 'Unknown Podcast' }}</h1>
+                                <div class="priority-badge" :class="interview?.priority || 'medium'">
+                                    <span class="priority-indicator"></span>
                                 </div>
                             </div>
-                        </div>
-                        <div class="pit-card">
-                            <h4>Details</h4>
-                            <div class="pit-sidebar-field">
-                                <div class="pit-sidebar-label">Source</div>
-                                <div class="pit-sidebar-value">{{ interview?.source || 'Not set' }}</div>
+                            
+                            <div class="podcast-meta">
+                                <span>{{ interview?.host_name || 'Unknown Host' }}</span> •
+                                <span>Last release: {{ formatDate(interview?.last_episode_date) }}</span> •
+                                <span>{{ interview?.language || 'English' }}</span>
                             </div>
-                            <div class="pit-sidebar-field">
-                                <div class="pit-sidebar-label">Created</div>
-                                <div class="pit-sidebar-value">{{ formatDate(interview?.created_at) }}</div>
-                            </div>
-                            <div class="pit-sidebar-field">
-                                <div class="pit-sidebar-label">Last Updated</div>
-                                <div class="pit-sidebar-value">{{ formatDate(interview?.updated_at) }}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `,
-        setup() {
-            const store = useDetailStore();
-            
-            const milestones = [
-                { id: 'potential', label: 'Potential' },
-                { id: 'pitched', label: 'Pitched' },
-                { id: 'negotiating', label: 'Negotiating' },
-                { id: 'scheduled', label: 'Scheduled' },
-                { id: 'recorded', label: 'Recorded' },
-                { id: 'aired', label: 'Aired' },
-                { id: 'promoted', label: 'Promoted' },
-            ];
-            
-            const statusOrder = milestones.map(m => m.id);
-            
-            const isCompleted = (stepId) => {
-                const currentIndex = statusOrder.indexOf(store.interview?.status);
-                const stepIndex = statusOrder.indexOf(stepId);
-                return stepIndex < currentIndex;
-            };
-            
-            const setStatus = async (status) => {
-                await store.updateInterview('status', status);
-            };
-            
-            const formatDate = (dateStr) => {
-                if (!dateStr) return 'N/A';
-                return new Date(dateStr).toLocaleDateString();
-            };
-            
-            return {
-                isActive: computed(() => store.activeTab === 'about'),
-                interview: computed(() => store.interview),
-                milestones,
-                isCompleted,
-                setStatus,
-                formatDate
-            };
-        }
-    };
-
-    // Tasks Tab
-    const TasksTab = {
-        template: `
-            <div class="pit-tab-content" :class="{ active: isActive }">
-                <div class="tab-content tasks">
-                    <div class="tab-content-full">
-                        <!-- Empty State -->
-                        <div v-if="tasks.length === 0" class="frm_no_entries">
-                            <div class="notes-empty">
-                                <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                    <polyline points="14 2 14 8 20 8"></polyline>
-                                    <line x1="16" y1="13" x2="8" y2="13"></line>
-                                    <line x1="16" y1="17" x2="8" y2="17"></line>
-                                    <polyline points="10 9 9 9 8 9"></polyline>
-                                </svg>
-                                <h3 class="notes-empty-title">No Tasks Yet</h3>
-                                <p class="notes-empty-text">Add and manage tasks like research, outreach, scheduling, and follow-up for this interview here.</p>
-                                <button class="button add-button" data-modal-target="taskModal" @click="openTaskModal">
-                                    <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i> 
-                                    Add Task
-                                </button>
+                            
+                            <div class="tag-container">
+                                <span v-for="tag in (interview?.categories || [])" :key="tag" class="tag">{{ tag }}</span>
                             </div>
                         </div>
                         
-                        <!-- Task List with Header -->
-                        <div v-if="tasks.length > 0" class="pit-card">
-                            <div class="tasks-header">
-                                <h3 class="section-heading">Tasks</h3>
-                                <button class="button add-button" data-modal-target="taskModal" @click="openTaskModal">
-                                    <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i> 
-                                    Add Task
-                                </button>
-                            </div>
-                            
-                            <div v-for="task in tasks" :key="task.id" 
-                                 class="pit-task-item"
-                                 :class="{ completed: task.is_done, overdue: task.is_overdue }">
-                                <input type="checkbox" 
-                                       class="pit-task-checkbox"
-                                       :checked="task.is_done"
-                                       @change="toggleTask(task.id)">
-                                <div class="pit-task-content">
-                                    <div class="pit-task-title">{{ task.title }}</div>
-                                    <div class="pit-task-meta">
-                                        <span class="pit-priority-badge" :class="task.priority">{{ task.priority }}</span>
-                                        <span v-if="task.due_date" :class="{ overdue: task.is_overdue }">
-                                            📅 {{ task.due_date }}
-                                        </span>
-                                        <span>{{ task.task_type }}</span>
-                                    </div>
-                                </div>
-                                <button class="pit-icon-btn" @click="deleteTask(task.id)" title="Delete">
-                                    🗑️
-                                </button>
+                        <!-- Profile Section -->
+                        <div class="profile-section">
+                            <div class="profile-label">Connected Profile</div>
+                            <div class="profile-name">{{ interview?.guest_name || 'Not Connected' }}</div>
+                            <div class="profile-actions">
+                                <a v-if="interview?.guest_id" :href="'/app/profiles/guest/profile/?id=' + interview.guest_id" target="_blank" class="button primary-button">
+                                    View
+                                </a>
+                                <button class="button secondary-button">Edit Profile</button>
                             </div>
                         </div>
                     </div>
-                </div>
-                
+
+                    <!-- Tabs -->
+                    <div class="tabs">
+                        <input type="radio" name="tabs" id="tab-about" data-tab="about" :checked="activeTab === 'about'" @change="setTab('about')">
+                        <input type="radio" name="tabs" id="tab-listen" data-tab="listen" :checked="activeTab === 'listen'" @change="setTab('listen')">
+                        <input type="radio" name="tabs" id="tab-contact" data-tab="contact" :checked="activeTab === 'contact'" @change="setTab('contact')">
+                        <input type="radio" name="tabs" id="tab-message" data-tab="message" :checked="activeTab === 'message'" @change="setTab('message')">
+                        <input type="radio" name="tabs" id="tab-tasks" data-tab="tasks" :checked="activeTab === 'tasks'" @change="setTab('tasks')">
+                        <input type="radio" name="tabs" id="tab-notes" data-tab="notes" :checked="activeTab === 'notes'" @change="setTab('notes')">
+
+                        <div class="tabs-header">
+                            <label for="tab-about">About</label>
+                            <label for="tab-listen">Listen</label>
+                            <label for="tab-contact">Contact</label>
+                            <label for="tab-message">Message</label>
+                            <label for="tab-tasks">Tasks</label>
+                            <label for="tab-notes">Notes</label>
+                        </div>
+
+                        <!-- About Tab -->
+                        <div class="tab-content about" :style="{ display: activeTab === 'about' ? 'block' : 'none' }">
+                            <div class="about-layout">
+                                <div class="about-main">
+                                    <!-- Description Section -->
+                                    <div class="content-section">
+                                        <h2 class="section-heading">About the Show</h2>
+                                        <div class="description-text" v-html="interview?.description || 'No description available.'"></div>
+                                        
+                                        <div class="show-quick-info">
+                                            <div class="quick-info-item">
+                                                <div class="quick-info-label">Episodes</div>
+                                                <div class="quick-info-value">{{ interview?.episode_count || 'N/A' }}</div>
+                                            </div>
+                                            <div class="quick-info-item">
+                                                <div class="quick-info-label">Founded</div>
+                                                <div class="quick-info-value">{{ formatDate(interview?.founded_date) }}</div>
+                                            </div>
+                                            <div class="quick-info-item">
+                                                <div class="quick-info-label">Content Rating</div>
+                                                <div class="quick-info-value">{{ interview?.content_rating || 'N/A' }}</div>
+                                            </div>
+                                            <div class="quick-info-item">
+                                                <div class="quick-info-label">Frequency</div>
+                                                <div class="quick-info-value">{{ interview?.frequency || 'N/A' }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Collaboration Section -->
+                                    <div class="panel">
+                                        <div class="panel-header">
+                                            <h3 class="panel-title">Collaboration Details</h3>
+                                        </div>
+                                        <div class="panel-content">
+                                            <ul class="collab-list">
+                                                <li class="collab-item">
+                                                    <svg class="collab-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                                        <circle cx="9" cy="7" r="4"></circle>
+                                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                                    </svg>
+                                                    <div class="collab-content">
+                                                        <div class="collab-label">Audience</div>
+                                                        <div class="collab-value">{{ interview?.audience || 'Not specified' }}</div>
+                                                    </div>
+                                                </li>
+                                                <li class="collab-item">
+                                                    <svg class="collab-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                                                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                                    </svg>
+                                                    <div class="collab-content">
+                                                        <div class="collab-label">Commission</div>
+                                                        <div class="collab-value">{{ interview?.commission || 'Not specified' }}</div>
+                                                    </div>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Sidebar -->
+                                <div class="about-sidebar">
+                                    <!-- Milestones Card -->
+                                    <div class="sidebar-card">
+                                        <div class="sidebar-header">
+                                            <h3 class="sidebar-title">Milestones</h3>
+                                        </div>
+                                        <div class="sidebar-content">
+                                            <div class="milestone-track">
+                                                <div v-for="step in milestones" 
+                                                     :key="step.id"
+                                                     class="milestone"
+                                                     :class="{ current: interview?.status === step.id }"
+                                                     @click="setStatus(step.id)">
+                                                    {{ step.label }}
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="divider"></div>
+                                            
+                                            <div class="view-actions">
+                                                <button class="archive-btn action-btn">
+                                                    <svg class="action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <polyline points="21 8 21 21 3 21 3 8"></polyline>
+                                                        <rect x="1" y="3" width="22" height="5"></rect>
+                                                        <line x1="10" y1="12" x2="14" y2="12"></line>
+                                                    </svg>
+                                                    Archive
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Important Dates Card -->
+                                    <div class="sidebar-card">
+                                        <div class="sidebar-header">
+                                            <h3 class="sidebar-title">Important Dates</h3>
+                                        </div>
+                                        <div class="sidebar-content">
+                                            <div class="date-item">
+                                                <div class="frm_no_entries">
+                                                    <div class="date-item">
+                                                        <i class="fas fa-calendar-plus"></i>
+                                                        <span class="custom-modal-button" @click="openDateModal('record')">
+                                                            {{ interview?.record_date ? formatDate(interview.record_date) : 'Add Record Date' }}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="date-item">
+                                                <div class="frm_no_entries">
+                                                    <div class="date-item">
+                                                        <i class="fas fa-calendar-check"></i>
+                                                        <span class="custom-modal-button" @click="openDateModal('air')">
+                                                            {{ interview?.air_date ? formatDate(interview.air_date) : 'Add Air Date' }}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Interview Details Card -->
+                                    <div class="sidebar-card">
+                                        <div class="sidebar-header">
+                                            <h3 class="sidebar-title">Interview Details</h3>
+                                        </div>
+                                        <div class="sidebar-content marketing-section">
+                                            <h4>Episode Title</h4>
+                                            <div class="tag-content">
+                                                <p>{{ interview?.episode_title || 'Not set' }}</p>
+                                            </div>
+                                            <h4>Episode Number</h4>
+                                            <div class="tag-content">
+                                                <p>{{ interview?.episode_number || 'Not set' }}</p>
+                                            </div>
+                                            <h4>Interview Topic</h4>
+                                            <div class="tag-content">
+                                                <p>{{ interview?.interview_topic || 'Not set' }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Interview Source Card -->
+                                    <div class="sidebar-card">
+                                        <div class="sidebar-header">
+                                            <h3 class="sidebar-title">Interview Source</h3>
+                                        </div>
+                                        <div class="sidebar-content marketing-section">
+                                            <h4>Source</h4>
+                                            <div class="tag-content">
+                                                <p>{{ interview?.source || 'Not specified' }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Listen Tab -->
+                        <div class="tab-content listen" :style="{ display: activeTab === 'listen' ? 'block' : 'none' }">
+                            <div class="listen-layout">
+                                <div class="listen-main">
+                                    <h2 class="section-heading">Recent Episodes</h2>
+                                    <div class="notes-empty" v-if="!interview?.episodes || interview.episodes.length === 0">
+                                        <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <polygon points="10 8 16 12 10 16 10 8"></polygon>
+                                        </svg>
+                                        <h3 class="notes-empty-title">No Episodes Found</h3>
+                                        <p class="notes-empty-text">Episodes from the RSS feed will appear here once the podcast data is refreshed.</p>
+                                    </div>
+                                </div>
+                                <div class="listen-sidebar">
+                                    <div class="sidebar-card">
+                                        <div class="sidebar-header">
+                                            <h3 class="sidebar-title">Websites</h3>
+                                        </div>
+                                        <div class="sidebar-content">
+                                            <div class="social-links-list">
+                                                <a v-if="interview?.website" :href="interview.website" target="_blank" class="social-link-item">
+                                                    <svg class="social-icon website" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <circle cx="12" cy="12" r="10"></circle>
+                                                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                                                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                                                    </svg>
+                                                    <span class="social-link-text">{{ interview.website }}</span>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Contact Tab -->
+                        <div class="tab-content contact" :style="{ display: activeTab === 'contact' ? 'block' : 'none' }">
+                            <div class="contact-layout">
+                                <div class="contact-main">
+                                    <div class="section-header">
+                                        <h2 class="section-heading">Contact Information</h2>
+                                        <button class="button outline-button small">
+                                            <svg class="button-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                            </svg>
+                                            Add Contact
+                                        </button>
+                                    </div>
+                                    <div class="contacts-grid">
+                                        <div v-if="interview?.host_name" class="contact-card">
+                                            <div class="contact-card-header">
+                                                <div class="contact-avatar">{{ getInitials(interview.host_name) }}</div>
+                                                <div>
+                                                    <h3 class="contact-name">{{ interview.host_name }}</h3>
+                                                    <span class="contact-role">Host</span>
+                                                </div>
+                                            </div>
+                                            <div class="contact-details">
+                                                <div v-if="interview.host_email" class="contact-detail-item">
+                                                    <svg class="contact-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                                        <polyline points="22,6 12,13 2,6"></polyline>
+                                                    </svg>
+                                                    <a :href="'mailto:' + interview.host_email" class="contact-detail-text">{{ interview.host_email }}</a>
+                                                </div>
+                                                <div class="contact-actions">
+                                                    <button class="contact-action-button">
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                                            <polyline points="22,6 12,13 2,6"></polyline>
+                                                        </svg>
+                                                        Email
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="contact-sidebar">
+                                    <div class="sidebar-card">
+                                        <div class="sidebar-header">
+                                            <h3 class="sidebar-title">Quick Actions</h3>
+                                        </div>
+                                        <div class="sidebar-content">
+                                            <div class="quick-action-buttons">
+                                                <button class="quick-action-button">
+                                                    <svg class="quick-action-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                                        <polyline points="22,6 12,13 2,6"></polyline>
+                                                    </svg>
+                                                    <span>Send Email</span>
+                                                </button>
+                                                <button class="quick-action-button">
+                                                    <svg class="quick-action-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                                                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                                                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                                                    </svg>
+                                                    <span>Schedule</span>
+                                                </button>
+                                                <button class="quick-action-button" @click="setTab('notes')">
+                                                    <svg class="quick-action-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                                                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                                                    </svg>
+                                                    <span>Add Note</span>
+                                                </button>
+                                                <button class="quick-action-button">
+                                                    <svg class="quick-action-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                    </svg>
+                                                    <span>Edit</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Message Tab -->
+                        <div class="tab-content message" :style="{ display: activeTab === 'message' ? 'block' : 'none' }">
+                            <div class="tab-content-full">
+                                <div class="notes-empty">
+                                    <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                        <polyline points="22,6 12,13 2,6"></polyline>
+                                    </svg>
+                                    <h3 class="notes-empty-title">Pitch Templates Coming Soon</h3>
+                                    <p class="notes-empty-text">Email templates and pitch generation will be available in a future update.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tasks Tab -->
+                        <div class="tab-content tasks" :style="{ display: activeTab === 'tasks' ? 'block' : 'none' }">
+                            <div class="tab-content-full">
+                                <!-- Empty State -->
+                                <div v-if="tasks.length === 0" class="frm_no_entries">
+                                    <div class="notes-empty">
+                                        <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                            <polyline points="14 2 14 8 20 8"></polyline>
+                                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                                            <polyline points="10 9 9 9 8 9"></polyline>
+                                        </svg>
+                                        <h3 class="notes-empty-title">No Tasks Yet</h3>
+                                        <p class="notes-empty-text">Add and manage tasks like research, outreach, scheduling, and follow-up for this interview here.</p>
+                                        <button class="button add-button" @click="showTaskModal = true">
+                                            <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i> 
+                                            Add Task
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Task List -->
+                                <div v-else>
+                                    <div class="tasks-header">
+                                        <h2 class="section-heading">Tasks</h2>
+                                        <button class="button add-button" @click="showTaskModal = true">
+                                            <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i> 
+                                            Add Task
+                                        </button>
+                                    </div>
+                                    
+                                    <div v-for="task in tasks" :key="task.id" class="note-card">
+                                        <div class="note-header">
+                                            <h3>
+                                                <input type="checkbox" 
+                                                       :checked="task.is_done"
+                                                       @change="toggleTask(task.id)"
+                                                       style="margin-right: 8px;">
+                                                {{ task.title }}
+                                            </h3>
+                                            <div class="note-meta">
+                                                <span class="priority-badge" :class="task.priority">
+                                                    <span class="priority-indicator" :class="task.priority"></span>
+                                                    {{ task.priority }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="note-content" v-if="task.description">
+                                            {{ task.description }}
+                                        </div>
+                                        <div class="note-actions">
+                                            <button class="note-action" v-if="task.due_date">
+                                                📅 {{ task.due_date }}
+                                            </button>
+                                            <button class="note-action">{{ task.task_type }}</button>
+                                            <button class="note-action" @click="deleteTask(task.id)">🗑️ Delete</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Notes Tab -->
+                        <div class="tab-content notes" :style="{ display: activeTab === 'notes' ? 'block' : 'none' }">
+                            <div class="tab-content-full">
+                                <!-- Empty State -->
+                                <div v-if="notes.length === 0" class="frm_no_entries">
+                                    <div class="notes-empty">
+                                        <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                            <polyline points="14 2 14 8 20 8"></polyline>
+                                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                                            <polyline points="10 9 9 9 8 9"></polyline>
+                                        </svg>
+                                        <h3 class="notes-empty-title">No Notes Yet</h3>
+                                        <p class="notes-empty-text">Keep track of conversations, research, or any other details related to this interview prospect here.</p>
+                                        <button class="button add-button" @click="showNoteModal = true">
+                                            <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i> 
+                                            Add Note
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Notes List -->
+                                <div v-else>
+                                    <div class="notes-header">
+                                        <h2 class="section-heading">Notes</h2>
+                                        <button class="button add-button" @click="showNoteModal = true">
+                                            <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i> 
+                                            Add Note
+                                        </button>
+                                    </div>
+                                    
+                                    <div v-for="note in notes" :key="note.id" class="note-card">
+                                        <div class="note-header">
+                                            <h3>{{ note.title || 'Untitled Note' }}</h3>
+                                            <div class="note-meta">
+                                                <span class="note-date">{{ note.time_ago }}</span>
+                                            </div>
+                                        </div>
+                                        <div class="note-content" v-html="note.content"></div>
+                                        <div class="note-tags" v-if="note.note_type">
+                                            <span class="tag">{{ note.note_type }}</span>
+                                        </div>
+                                        <div class="note-actions">
+                                            <button class="note-action" @click="toggleNotePin(note.id)">
+                                                {{ note.is_pinned ? '⭐ Unpin' : '☆ Pin' }}
+                                            </button>
+                                            <button class="note-action" @click="deleteNote(note.id)">🗑️ Delete</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
                 <!-- Task Modal -->
                 <div id="taskModal" class="custom-modal" :class="{ active: showTaskModal }">
                     <div class="custom-modal-content">
                         <div class="custom-modal-header">
-                            <span class="custom-modal-close" data-modal-close="taskModal" @click="closeTaskModal">&times;</span>
                             <h2 id="modal-title">Add Task</h2>
+                            <span class="custom-modal-close" @click="showTaskModal = false">&times;</span>
                         </div>
                         <div class="custom-modal-body">
-                            <div class="pit-form-group" style="margin-bottom: 16px;">
+                            <div style="margin-bottom: 16px;">
                                 <label style="display: block; margin-bottom: 6px; font-weight: 500;">Task Title</label>
                                 <input v-model="newTask.title" type="text" class="field-input" placeholder="What needs to be done?">
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
-                                <div class="pit-form-group">
+                                <div>
                                     <label style="display: block; margin-bottom: 6px; font-weight: 500;">Type</label>
                                     <select v-model="newTask.task_type" class="field-input">
                                         <option value="todo">To-do</option>
@@ -594,161 +817,44 @@
                                         <option value="follow_up">Follow Up</option>
                                     </select>
                                 </div>
-                                <div class="pit-form-group">
+                                <div>
                                     <label style="display: block; margin-bottom: 6px; font-weight: 500;">Priority</label>
                                     <select v-model="newTask.priority" class="field-input">
                                         <option value="low">Low</option>
                                         <option value="medium">Medium</option>
                                         <option value="high">High</option>
-                                        <option value="urgent">Urgent</option>
                                     </select>
                                 </div>
                             </div>
-                            <div class="pit-form-group" style="margin-bottom: 16px;">
+                            <div style="margin-bottom: 16px;">
                                 <label style="display: block; margin-bottom: 6px; font-weight: 500;">Due Date</label>
                                 <input v-model="newTask.due_date" type="date" class="field-input">
                             </div>
                             <div class="custom-modal-actions">
-                                <button class="cancel-button custom-modal-close" data-modal-close="taskModal" @click="closeTaskModal">Cancel</button>
-                                <button class="confirm-button" @click="createTask" :disabled="!newTask.title">Add Task</button>
+                                <button type="button" class="cancel-button" @click="showTaskModal = false">Cancel</button>
+                                <button type="button" class="confirm-button" style="background-color: #0ea5e9;" @click="createTask" :disabled="!newTask.title">Add Task</button>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        `,
-        setup() {
-            const store = useDetailStore();
-            const showTaskModal = ref(false);
-            const newTask = reactive({
-                title: '',
-                task_type: 'todo',
-                priority: 'medium',
-                due_date: ''
-            });
-            
-            const openTaskModal = () => {
-                showTaskModal.value = true;
-            };
-            
-            const closeTaskModal = () => {
-                showTaskModal.value = false;
-                // Reset form
-                newTask.title = '';
-                newTask.task_type = 'todo';
-                newTask.priority = 'medium';
-                newTask.due_date = '';
-            };
-            
-            const createTask = async () => {
-                if (!newTask.title) return;
-                await store.createTask({ ...newTask });
-                closeTaskModal();
-            };
-            
-            const toggleTask = async (taskId) => {
-                await store.toggleTask(taskId);
-            };
-            
-            const deleteTask = async (taskId) => {
-                if (confirm('Delete this task?')) {
-                    await store.deleteTask(taskId);
-                }
-            };
-            
-            return {
-                isActive: computed(() => store.activeTab === 'tasks'),
-                tasks: computed(() => store.tasks),
-                showTaskModal,
-                newTask,
-                openTaskModal,
-                closeTaskModal,
-                createTask,
-                toggleTask,
-                deleteTask
-            };
-        }
-    };
 
-    // Notes Tab
-    const NotesTab = {
-        template: `
-            <div class="pit-tab-content" :class="{ active: isActive }">
-                <div class="tab-content notes">
-                    <div class="tab-content-full">
-                        <!-- Empty State -->
-                        <div v-if="notes.length === 0" class="frm_no_entries">
-                            <div class="notes-empty">
-                                <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                    <polyline points="14 2 14 8 20 8"></polyline>
-                                    <line x1="16" y1="13" x2="8" y2="13"></line>
-                                    <line x1="16" y1="17" x2="8" y2="17"></line>
-                                    <polyline points="10 9 9 9 8 9"></polyline>
-                                </svg>
-                                <h3 class="notes-empty-title">No Notes Yet</h3>
-                                <p class="notes-empty-text">Keep track of conversations, research, or any other details related to this interview prospect here.</p>
-                                <button class="button add-button" data-modal-target="noteModal" @click="openNoteModal">
-                                    <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i> 
-                                    Add Note
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <!-- Notes List with Header -->
-                        <div v-if="notes.length > 0" class="pit-card">
-                            <div class="notes-header">
-                                <h3 class="section-heading">Notes</h3>
-                                <button class="button add-button" data-modal-target="noteModal" @click="openNoteModal">
-                                    <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i> 
-                                    Add Note
-                                </button>
-                            </div>
-                            
-                            <div v-for="note in notes" :key="note.id" 
-                                 class="pit-note-item"
-                                 :class="{ pinned: note.is_pinned }">
-                                <div class="pit-note-header">
-                                    <div class="pit-note-title">{{ note.title || 'Untitled Note' }}</div>
-                                    <div class="pit-note-actions">
-                                        <button class="pit-icon-btn" 
-                                                :class="{ pinned: note.is_pinned }"
-                                                @click="togglePin(note.id)" 
-                                                :title="note.is_pinned ? 'Unpin' : 'Pin'">
-                                            {{ note.is_pinned ? '⭐' : '☆' }}
-                                        </button>
-                                        <button class="pit-icon-btn" @click="deleteNote(note.id)" title="Delete">
-                                            🗑️
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="pit-note-content" v-html="note.content"></div>
-                                <div class="pit-note-footer">
-                                    <span class="pit-note-type-badge">{{ note.note_type }}</span>
-                                    <span>{{ note.time_ago }}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
                 <!-- Note Modal -->
                 <div id="noteModal" class="custom-modal" :class="{ active: showNoteModal }">
                     <div class="custom-modal-content">
                         <div class="custom-modal-header">
-                            <span class="custom-modal-close" data-modal-close="noteModal" @click="closeNoteModal">&times;</span>
                             <h2 id="modal-title">Add Note</h2>
+                            <span class="custom-modal-close" @click="showNoteModal = false">&times;</span>
                         </div>
                         <div class="custom-modal-body">
-                            <div class="pit-form-group" style="margin-bottom: 16px;">
+                            <div style="margin-bottom: 16px;">
                                 <label style="display: block; margin-bottom: 6px; font-weight: 500;">Title (optional)</label>
                                 <input v-model="newNote.title" type="text" class="field-input" placeholder="Note title">
                             </div>
-                            <div class="pit-form-group" style="margin-bottom: 16px;">
+                            <div style="margin-bottom: 16px;">
                                 <label style="display: block; margin-bottom: 6px; font-weight: 500;">Content</label>
-                                <textarea v-model="newNote.content" class="field-input" rows="4" placeholder="Write your note..."></textarea>
+                                <textarea v-model="newNote.content" class="field-input" rows="4" placeholder="Write your note..." style="resize: vertical;"></textarea>
                             </div>
-                            <div class="pit-form-group" style="margin-bottom: 16px;">
+                            <div style="margin-bottom: 16px;">
                                 <label style="display: block; margin-bottom: 6px; font-weight: 500;">Type</label>
                                 <select v-model="newNote.note_type" class="field-input">
                                     <option value="general">General</option>
@@ -761,28 +867,127 @@
                                 </select>
                             </div>
                             <div class="custom-modal-actions">
-                                <button class="cancel-button custom-modal-close" data-modal-close="noteModal" @click="closeNoteModal">Cancel</button>
-                                <button class="confirm-button" @click="createNote" :disabled="!newNote.content">Add Note</button>
+                                <button type="button" class="cancel-button" @click="showNoteModal = false">Cancel</button>
+                                <button type="button" class="confirm-button" style="background-color: #0ea5e9;" @click="createNote" :disabled="!newNote.content">Add Note</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Delete Modal -->
+                <div id="deleteModal" class="custom-modal delete-modal" :class="{ active: showDeleteModal }">
+                    <div class="custom-modal-content small">
+                        <div class="custom-modal-header">
+                            <h2 id="modal-title">Delete Interview</h2>
+                            <span class="custom-modal-close" @click="showDeleteModal = false">&times;</span>
+                        </div>
+                        <div class="custom-modal-body">
+                            <p>Are you sure you want to delete this interview? This action cannot be undone.</p>
+                            <div class="custom-modal-actions">
+                                <button class="cancel-button" @click="showDeleteModal = false">Cancel</button>
+                                <button class="confirm-button" @click="confirmDelete">Delete</button>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
         `,
+        
         setup() {
             const store = useDetailStore();
+            
+            // Modal states
+            const showTaskModal = ref(false);
             const showNoteModal = ref(false);
+            const showDeleteModal = ref(false);
+            
+            // Form data
+            const newTask = reactive({
+                title: '',
+                task_type: 'todo',
+                priority: 'medium',
+                due_date: ''
+            });
+            
             const newNote = reactive({
                 title: '',
                 content: '',
                 note_type: 'general'
             });
             
-            const openNoteModal = () => {
-                showNoteModal.value = true;
+            // Milestones configuration
+            const milestones = [
+                { id: 'potential', label: 'Potential' },
+                { id: 'active', label: 'Active' },
+                { id: 'aired', label: 'Aired' },
+            ];
+            
+            // Computed
+            const initials = computed(() => {
+                const name = store.interview?.podcast_name || '';
+                return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+            });
+            
+            // Methods
+            const formatDate = (dateStr) => {
+                if (!dateStr) return 'N/A';
+                try {
+                    return new Date(dateStr).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                    });
+                } catch {
+                    return dateStr;
+                }
             };
             
-            const closeNoteModal = () => {
+            const getInitials = (name) => {
+                if (!name) return '?';
+                return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+            };
+            
+            const handleImageError = (e) => {
+                e.target.style.display = 'none';
+            };
+            
+            const setTab = (tab) => {
+                store.setActiveTab(tab);
+            };
+            
+            const setStatus = async (status) => {
+                await store.updateInterview('status', status);
+            };
+            
+            const openDateModal = (type) => {
+                // TODO: Implement date modal
+                console.log('Open date modal:', type);
+            };
+            
+            const createTask = async () => {
+                if (!newTask.title) return;
+                await store.createTask({ ...newTask });
+                showTaskModal.value = false;
+                // Reset form
+                newTask.title = '';
+                newTask.task_type = 'todo';
+                newTask.priority = 'medium';
+                newTask.due_date = '';
+            };
+            
+            const toggleTask = async (taskId) => {
+                await store.toggleTask(taskId);
+            };
+            
+            const deleteTask = async (taskId) => {
+                if (confirm('Delete this task?')) {
+                    await store.deleteTask(taskId);
+                }
+            };
+            
+            const createNote = async () => {
+                if (!newNote.content) return;
+                await store.createNote({ ...newNote });
                 showNoteModal.value = false;
                 // Reset form
                 newNote.title = '';
@@ -790,13 +995,7 @@
                 newNote.note_type = 'general';
             };
             
-            const createNote = async () => {
-                if (!newNote.content) return;
-                await store.createNote({ ...newNote });
-                closeNoteModal();
-            };
-            
-            const togglePin = async (noteId) => {
+            const toggleNotePin = async (noteId) => {
                 await store.toggleNotePin(noteId);
             };
             
@@ -806,86 +1005,13 @@
                 }
             };
             
-            return {
-                isActive: computed(() => store.activeTab === 'notes'),
-                notes: computed(() => store.notes),
-                showNoteModal,
-                newNote,
-                openNoteModal,
-                closeNoteModal,
-                createNote,
-                togglePin,
-                deleteNote
+            const confirmDelete = async () => {
+                // TODO: Implement delete
+                showDeleteModal.value = false;
             };
-        }
-    };
-
-    // Placeholder tabs
-    const PlaceholderTab = {
-        props: ['tabId', 'title'],
-        template: `
-            <div class="pit-tab-content" :class="{ active: isActive }">
-                <div class="pit-card">
-                    <div class="pit-empty-state">
-                        <h3>{{ title }}</h3>
-                        <p>Coming soon...</p>
-                    </div>
-                </div>
-            </div>
-        `,
-        setup(props) {
-            const store = useDetailStore();
-            return {
-                isActive: computed(() => store.activeTab === props.tabId)
-            };
-        }
-    };
-
-    // ==========================================================================
-    // MAIN APP
-    // ==========================================================================
-    const InterviewDetailApp = {
-        components: {
-            BackButton,
-            PodcastHeader,
-            TabNavigation,
-            AboutTab,
-            TasksTab,
-            NotesTab,
-            PlaceholderTab
-        },
-        template: `
-            <div class="pit-interview-detail">
-                <BackButton />
-                
-                <div v-if="loading" class="pit-loading">
-                    <div class="pit-loading-spinner"></div>
-                    <p>Loading interview details...</p>
-                </div>
-                
-                <div v-else-if="error" class="pit-error">
-                    <p>{{ error }}</p>
-                    <button class="pit-btn pit-btn-primary" @click="reload">Try Again</button>
-                </div>
-                
-                <template v-else>
-                    <PodcastHeader />
-                    <TabNavigation />
-                    
-                    <AboutTab />
-                    <PlaceholderTab tabId="listen" title="Listen" />
-                    <PlaceholderTab tabId="contact" title="Contact" />
-                    <PlaceholderTab tabId="message" title="Message" />
-                    <TasksTab />
-                    <NotesTab />
-                </template>
-            </div>
-        `,
-        setup() {
-            const store = useDetailStore();
             
+            // Lifecycle
             onMounted(() => {
-                // Get config from WordPress
                 if (typeof guestifyDetailData !== 'undefined') {
                     store.initConfig(guestifyDetailData);
                 }
@@ -893,9 +1019,38 @@
             });
             
             return {
+                // Store state
                 loading: computed(() => store.loading),
                 error: computed(() => store.error),
-                reload: () => store.loadInterview()
+                interview: computed(() => store.interview),
+                tasks: computed(() => store.tasks),
+                notes: computed(() => store.notes),
+                activeTab: computed(() => store.activeTab),
+                boardUrl: computed(() => store.config.boardUrl),
+                
+                // Local state
+                showTaskModal,
+                showNoteModal,
+                showDeleteModal,
+                newTask,
+                newNote,
+                milestones,
+                initials,
+                
+                // Methods
+                formatDate,
+                getInitials,
+                handleImageError,
+                setTab,
+                setStatus,
+                openDateModal,
+                createTask,
+                toggleTask,
+                deleteTask,
+                createNote,
+                toggleNotePin,
+                deleteNote,
+                confirmDelete
             };
         }
     };
