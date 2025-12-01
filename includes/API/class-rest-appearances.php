@@ -408,7 +408,7 @@ class PIT_REST_Appearances {
         }
 
         // Build update data
-        $allowed_fields = ['status', 'priority', 'source', 'is_archived'];
+        $allowed_fields = ['status', 'priority', 'source', 'is_archived', 'guest_profile_id'];
         $data = [];
 
         foreach ($allowed_fields as $field) {

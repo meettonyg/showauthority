@@ -116,6 +116,8 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-appearances.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-appearance-tasks.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-appearance-notes.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-guest-profiles.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-calendar-events.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-tracker-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-detail-shortcode.php';
     }

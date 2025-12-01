@@ -31,15 +31,15 @@
                 source: '',
                 showArchived: false,
             },
+            // Status columns matching Formidable field 8113 (Interview Status)
             statusColumns: [
                 { key: 'potential', label: 'Potential', color: '#6b7280' },
-                { key: 'pitched', label: 'Pitched', color: '#3b82f6' },
-                { key: 'negotiating', label: 'Negotiating', color: '#8b5cf6' },
-                { key: 'scheduled', label: 'Scheduled', color: '#f59e0b' },
-                { key: 'recorded', label: 'Recorded', color: '#10b981' },
-                { key: 'aired', label: 'Aired', color: '#059669' },
-                { key: 'promoted', label: 'Promoted', color: '#14b8a6' },
-                { key: 'rejected', label: 'Rejected', color: '#ef4444' },
+                { key: 'active', label: 'Active', color: '#3b82f6' },
+                { key: 'aired', label: 'Aired', color: '#10b981' },
+                { key: 'convert', label: 'Convert', color: '#059669' },
+                { key: 'on_hold', label: 'On Hold', color: '#f59e0b' },
+                { key: 'cancelled', label: 'Cancelled', color: '#ef4444' },
+                { key: 'unqualified', label: 'Unqualified', color: '#9ca3af' },
             ],
         }),
 
@@ -91,15 +91,17 @@
                 return grouped;
             },
 
+            // Row 1: Pre-interview stages
             row1Columns: (state) => {
                 return state.statusColumns.filter(c => 
-                    ['potential', 'pitched', 'negotiating', 'scheduled'].includes(c.key)
+                    ['potential', 'active', 'aired', 'convert'].includes(c.key)
                 );
             },
 
+            // Row 2: Terminal/hold statuses
             row2Columns: (state) => {
                 return state.statusColumns.filter(c => 
-                    ['recorded', 'aired', 'promoted', 'rejected'].includes(c.key)
+                    ['on_hold', 'cancelled', 'unqualified'].includes(c.key)
                 );
             },
 
@@ -342,13 +344,13 @@
                     :class="{ active: store.currentView === 'kanban' }"
                     @click="store.setView('kanban')"
                 >
-                    📋 Board
+                    Kanban
                 </button>
                 <button 
                     :class="{ active: store.currentView === 'table' }"
                     @click="store.setView('table')"
                 >
-                    📊 List
+                    Table
                 </button>
             </div>
         `,
@@ -428,19 +430,18 @@
                 @dragover.prevent="onDragOver"
                 @dragleave="onDragLeave"
                 @drop="onDrop"
-                style="background: #f3f4f6; border-radius: 8px; padding: 12px; min-height: 200px; flex: 1;"
             >
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <span style="font-weight: 600; font-size: 14px;">{{ column.label }}</span>
-                    <span style="background: #e5e7eb; padding: 2px 8px; border-radius: 10px; font-size: 12px;">
-                        {{ interviews.length }}
-                    </span>
+                <div class="pit-column-header">
+                    <span class="pit-column-title">{{ column.label }}</span>
+                    <span class="pit-column-count">Total: {{ interviews.length }}</span>
                 </div>
-                <KanbanCard 
-                    v-for="interview in interviews" 
-                    :key="interview.id" 
-                    :interview="interview"
-                />
+                <div class="pit-column-cards">
+                    <KanbanCard 
+                        v-for="interview in interviews" 
+                        :key="interview.id" 
+                        :interview="interview"
+                    />
+                </div>
             </div>
         `,
         setup(props) {
@@ -507,25 +508,29 @@
                         @change="toggleSelect"
                     >
                 </td>
+                <td style="padding: 12px; text-align: center;">
+                    <span :style="{ color: '#f59e0b', fontSize: '18px' }" :title="interview.priority || 'No priority'">{{ priorityStar }}</span>
+                </td>
                 <td style="padding: 12px;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <img 
-                            v-if="interview.podcast_image" 
-                            :src="interview.podcast_image" 
-                            style="width: 32px; height: 32px; border-radius: 4px;"
-                        >
-                        <span>{{ interview.podcast_name || 'Unknown' }}</span>
+                    <div style="display: flex; flex-direction: column;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <img 
+                                v-if="interview.podcast_image" 
+                                :src="interview.podcast_image" 
+                                style="width: 32px; height: 32px; border-radius: 4px;"
+                            >
+                            <span style="font-weight: 500;">{{ interview.podcast_name || 'Unknown' }}</span>
+                        </div>
+                        <span v-if="interview.episode_title" style="font-size: 12px; color: #6b7280; margin-left: 40px;">{{ interview.episode_title }}</span>
                     </div>
                 </td>
-                <td style="padding: 12px;">{{ interview.episode_title || '-' }}</td>
                 <td style="padding: 12px;">
                     <span 
                         :style="{ background: statusColor, color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }"
                     >
-                        {{ interview.status }}
+                        {{ statusLabel }}
                     </span>
                 </td>
-                <td style="padding: 12px;">{{ interview.priority }}</td>
                 <td style="padding: 12px;">{{ interview.source || '-' }}</td>
                 <td style="padding: 12px;">{{ formatDate(interview.updated_at) }}</td>
             </tr>
@@ -539,9 +544,21 @@
                 store.toggleSelection(props.interview.id);
             };
 
+            const priorityStar = computed(() => {
+                const p = (props.interview.priority || '').toLowerCase();
+                if (p === 'high') return '★';      // Full star
+                if (p === 'medium') return '⯪';   // Half star
+                return '☆';                        // Empty star (low or none)
+            });
+
             const statusColor = computed(() => {
                 const col = store.statusColumns.find(c => c.key === props.interview.status);
                 return col ? col.color : '#6b7280';
+            });
+
+            const statusLabel = computed(() => {
+                const col = store.statusColumns.find(c => c.key === props.interview.status);
+                return col ? col.label : props.interview.status;
             });
 
             const formatDate = (dateStr) => {
@@ -554,7 +571,7 @@
                 window.location.href = '/app/interview/detail/?id=' + props.interview.id;
             };
 
-            return { store, isSelected, toggleSelect, statusColor, formatDate, onRowClick };
+            return { store, isSelected, toggleSelect, priorityStar, statusColor, statusLabel, formatDate, onRowClick };
         },
     };
 
@@ -573,10 +590,9 @@
                                     @change="store.selectAll"
                                 >
                             </th>
-                            <th style="padding: 12px; text-align: left;">Podcast</th>
-                            <th style="padding: 12px; text-align: left;">Episode</th>
+                            <th style="padding: 12px; text-align: center; width: 60px;">Priority</th>
+                            <th style="padding: 12px; text-align: left;">Podcast Name</th>
                             <th style="padding: 12px; text-align: left;">Status</th>
-                            <th style="padding: 12px; text-align: left;">Priority</th>
                             <th style="padding: 12px; text-align: left;">Source</th>
                             <th style="padding: 12px; text-align: left;">Updated</th>
                         </tr>
@@ -619,6 +635,16 @@
                 <h3>Edit {{ store.selectedIds.length }} Items</h3>
                 
                 <div class="form-group">
+                    <label>Interview Profile</label>
+                    <select v-model="bulkGuestProfileId">
+                        <option value="">Don't change</option>
+                        <option v-for="profile in guestProfiles" :key="profile.id" :value="profile.id">
+                            {{ profile.name }}
+                        </option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
                     <label>Status</label>
                     <select v-model="bulkStatus">
                         <option value="">Don't change</option>
@@ -640,38 +666,120 @@
                 
                 <div class="form-group">
                     <label>Source</label>
-                    <input type="text" v-model="bulkSource" placeholder="Don't change">
+                    <select v-model="bulkSource">
+                        <option value="">Don't change</option>
+                        <option v-for="source in sourceOptions" :key="source" :value="source">
+                            {{ source }}
+                        </option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" v-model="bulkArchive" @change="archiveChanged = true">
+                        Archive
+                    </label>
                 </div>
                 
                 <div class="actions">
-                    <button class="btn-secondary" @click="store.showBulkPanel = false">Cancel</button>
+                    <button class="btn-secondary" @click="cancelBulkEdit">Cancel</button>
                     <button class="btn-primary" @click="applyBulkEdit">Apply Changes</button>
                 </div>
             </div>
         `,
         setup() {
             const store = useInterviewStore();
+            const bulkGuestProfileId = ref('');
             const bulkStatus = ref('');
             const bulkPriority = ref('');
             const bulkSource = ref('');
+            const bulkArchive = ref(false);
+            const archiveChanged = ref(false);
+            const guestProfiles = ref([]);
+
+            const sourceOptions = [
+                'Direct Outreach',
+                'Referral / Introduction',
+                'Podcast Agency / Network',
+                'Event Connection',
+                'Online Platform',
+                'Internal Database',
+                'Media / Press Opportunity',
+                'Joint Venture / Strategic Partnership',
+                'Inbound Request',
+                'Personal Network',
+                'Other',
+            ];
+
+            // Fetch guest profiles on mount
+            const fetchGuestProfiles = async () => {
+                try {
+                    const response = await fetch(
+                        `${guestifyData.restUrl}guest-profiles`,
+                        {
+                            headers: {
+                                'X-WP-Nonce': guestifyData.nonce,
+                            },
+                        }
+                    );
+                    if (response.ok) {
+                        const data = await response.json();
+                        guestProfiles.value = data.data || [];
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch guest profiles:', err);
+                }
+            };
+
+            // Fetch profiles when panel opens
+            watch(() => store.showBulkPanel, (isOpen) => {
+                if (isOpen && guestProfiles.value.length === 0) {
+                    fetchGuestProfiles();
+                }
+            });
 
             const applyBulkEdit = () => {
                 const updates = {};
+                if (bulkGuestProfileId.value) updates.guest_profile_id = parseInt(bulkGuestProfileId.value);
                 if (bulkStatus.value) updates.status = bulkStatus.value;
                 if (bulkPriority.value) updates.priority = bulkPriority.value;
                 if (bulkSource.value) updates.source = bulkSource.value;
+                if (archiveChanged.value) updates.is_archived = bulkArchive.value ? 1 : 0;
 
                 if (Object.keys(updates).length > 0) {
                     store.bulkUpdate(updates);
                 }
 
-                // Reset
+                resetForm();
+            };
+
+            const cancelBulkEdit = () => {
+                store.showBulkPanel = false;
+                resetForm();
+            };
+
+            const resetForm = () => {
+                bulkGuestProfileId.value = '';
                 bulkStatus.value = '';
                 bulkPriority.value = '';
                 bulkSource.value = '';
+                bulkArchive.value = false;
+                archiveChanged.value = false;
             };
 
-            return { store, bulkStatus, bulkPriority, bulkSource, applyBulkEdit };
+            return { 
+                store, 
+                bulkGuestProfileId,
+                bulkStatus, 
+                bulkPriority, 
+                bulkSource, 
+                bulkArchive,
+                archiveChanged,
+                guestProfiles,
+                sourceOptions,
+                applyBulkEdit,
+                cancelBulkEdit,
+            };
         },
     };
 
@@ -694,14 +802,51 @@
                     <button @click="store.error = null" style="margin-left: 8px;">×</button>
                 </div>
                 
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <ViewToggle />
-                    <div style="color: #6b7280; font-size: 14px;">
-                        {{ store.filteredInterviews.length }} interviews
+                <div class="pit-toolbar">
+                    <div class="pit-search-wrapper">
+                        <svg class="pit-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                        </svg>
+                        <input 
+                            type="text" 
+                            v-model="searchQuery"
+                            placeholder="Search podcasts..."
+                            class="pit-search-input"
+                        >
                     </div>
+                    
+                    <div class="pit-filter-group">
+                        <select v-model="statusFilter" class="pit-select">
+                            <option value="">All Statuses</option>
+                            <option v-for="col in store.statusColumns" :key="col.key" :value="col.key">
+                                {{ col.label }}
+                            </option>
+                        </select>
+                        <select v-model="priorityFilter" class="pit-select">
+                            <option value="">All Priorities</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                        <select v-model="sourceFilter" class="pit-select">
+                            <option value="">All Sources</option>
+                            <option v-for="source in store.uniqueSources" :key="source" :value="source">
+                                {{ source }}
+                            </option>
+                        </select>
+                    </div>
+                    
+                    <div class="pit-divider"></div>
+                    
+                    <label class="pit-checkbox-label">
+                        <input type="checkbox" v-model="showArchived">
+                        <span>Archived</span>
+                    </label>
+                    
+                    <button class="pit-filter-submit" @click="store.fetchInterviews()">Filter Interviews</button>
+                    
+                    <ViewToggle />
                 </div>
-                
-                <FilterBar />
                 
                 <div v-if="store.loading" class="pit-loading">
                     <p>Loading interviews...</p>
@@ -719,18 +864,53 @@
         setup() {
             const store = useInterviewStore();
 
+            const searchQuery = computed({
+                get: () => store.filters.search,
+                set: (val) => store.setFilter('search', val),
+            });
+            const statusFilter = computed({
+                get: () => store.filters.status,
+                set: (val) => store.setFilter('status', val),
+            });
+            const priorityFilter = computed({
+                get: () => store.filters.priority,
+                set: (val) => store.setFilter('priority', val),
+            });
+            const sourceFilter = computed({
+                get: () => store.filters.source,
+                set: (val) => store.setFilter('source', val),
+            });
+            const showArchived = computed({
+                get: () => store.filters.showArchived,
+                set: (val) => {
+                    store.setFilter('showArchived', val);
+                    store.fetchInterviews();
+                },
+            });
+
             onMounted(() => {
-                // Get initial view from data attribute
-                const appEl = document.getElementById('interview-tracker-app');
-                if (appEl && appEl.dataset.initialView) {
-                    store.setView(appEl.dataset.initialView);
+                // Check localStorage for saved view preference
+                const savedView = localStorage.getItem('pit_interview_view');
+                if (savedView && (savedView === 'kanban' || savedView === 'table')) {
+                    store.setView(savedView);
+                } else {
+                    // Fallback to data attribute
+                    const appEl = document.getElementById('interview-tracker-app');
+                    if (appEl && appEl.dataset.initialView) {
+                        store.setView(appEl.dataset.initialView);
+                    }
                 }
 
                 // Fetch interviews
                 store.fetchInterviews();
             });
 
-            return { store };
+            // Watch for view changes and save to localStorage
+            watch(() => store.currentView, (newView) => {
+                localStorage.setItem('pit_interview_view', newView);
+            });
+
+            return { store, searchQuery, statusFilter, priorityFilter, sourceFilter, showArchived };
         },
     };
 
