@@ -203,7 +203,7 @@ class PIT_REST_Appearances {
         $total = (int) $wpdb->get_var($wpdb->prepare($count_sql, $params));
 
         // Get appearances
-        $sql = "SELECT a.*, p.title as podcast_name, p.rss_url, p.image_url as podcast_image
+        $sql = "SELECT a.*, p.title as podcast_name, p.rss_feed_url as rss_url, p.artwork_url as podcast_image
                 FROM {$table} a
                 LEFT JOIN {$podcasts_table} p ON a.podcast_id = p.id
                 WHERE {$where_sql}
@@ -242,14 +242,26 @@ class PIT_REST_Appearances {
         $podcasts_table = $wpdb->prefix . 'pit_podcasts';
         $offers_table = $wpdb->prefix . 'pit_appearance_offers';
 
-        $appearance = $wpdb->get_row($wpdb->prepare(
-            "SELECT a.*, p.title as podcast_name, p.rss_url, p.image_url as podcast_image,
-                    p.booking_link, p.recording_link
-             FROM {$table} a
-             LEFT JOIN {$podcasts_table} p ON a.podcast_id = p.id
-             WHERE a.id = %d AND a.user_id = %d",
-            $id, $user_id
-        ));
+        // Admins can view any appearance
+        if (current_user_can('manage_options')) {
+            $appearance = $wpdb->get_row($wpdb->prepare(
+                "SELECT a.*, p.title as podcast_name, p.rss_feed_url as rss_url, p.artwork_url as podcast_image,
+                        p.booking_link, p.recording_link
+                 FROM {$table} a
+                 LEFT JOIN {$podcasts_table} p ON a.podcast_id = p.id
+                 WHERE a.id = %d",
+                $id
+            ));
+        } else {
+            $appearance = $wpdb->get_row($wpdb->prepare(
+                "SELECT a.*, p.title as podcast_name, p.rss_feed_url as rss_url, p.artwork_url as podcast_image,
+                        p.booking_link, p.recording_link
+                 FROM {$table} a
+                 LEFT JOIN {$podcasts_table} p ON a.podcast_id = p.id
+                 WHERE a.id = %d AND a.user_id = %d",
+                $id, $user_id
+            ));
+        }
 
         if (!$appearance) {
             return new WP_Error('not_found', 'Appearance not found', ['status' => 404]);
@@ -314,11 +326,18 @@ class PIT_REST_Appearances {
 
         $table = $wpdb->prefix . 'pit_guest_appearances';
 
-        // Verify ownership
-        $exists = $wpdb->get_var($wpdb->prepare(
-            "SELECT id FROM {$table} WHERE id = %d AND user_id = %d",
-            $id, $user_id
-        ));
+        // Verify ownership (admins can update any)
+        if (current_user_can('manage_options')) {
+            $exists = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM {$table} WHERE id = %d",
+                $id
+            ));
+        } else {
+            $exists = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM {$table} WHERE id = %d AND user_id = %d",
+                $id, $user_id
+            ));
+        }
 
         if (!$exists) {
             return new WP_Error('not_found', 'Appearance not found', ['status' => 404]);

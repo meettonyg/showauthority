@@ -368,7 +368,8 @@
                 draggable="true"
                 @dragstart="onDragStart"
                 @dragend="onDragEnd"
-                style="background: white; border-radius: 8px; padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); cursor: grab;"
+                @click="openDetail"
+                style="background: white; border-radius: 8px; padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); cursor: pointer;"
             >
                 <div style="display: flex; align-items: flex-start; gap: 8px;">
                     <img 
@@ -407,7 +408,13 @@
                 e.target.classList.remove('dragging');
             };
 
-            return { formatDate, onDragStart, onDragEnd };
+            const openDetail = (e) => {
+                // Don't navigate if we're dragging
+                if (e.target.classList.contains('dragging')) return;
+                window.location.href = '/app/interview/detail/?id=' + props.interview.id;
+            };
+
+            return { formatDate, onDragStart, onDragEnd, openDetail };
         },
     };
 
@@ -492,8 +499,8 @@
     const TableRow = {
         props: ['interview'],
         template: `
-            <tr :class="['priority-' + interview.priority]" style="border-bottom: 1px solid #e5e7eb;">
-                <td style="padding: 12px;">
+            <tr :class="['priority-' + interview.priority]" style="border-bottom: 1px solid #e5e7eb; cursor: pointer;" @click="onRowClick">
+                <td style="padding: 12px;" @click.stop>
                     <input 
                         type="checkbox" 
                         :checked="isSelected"
@@ -543,7 +550,11 @@
                 return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
             };
 
-            return { store, isSelected, toggleSelect, statusColor, formatDate };
+            const onRowClick = () => {
+                window.location.href = '/app/interview/detail/?id=' + props.interview.id;
+            };
+
+            return { store, isSelected, toggleSelect, statusColor, formatDate, onRowClick };
         },
     };
 

@@ -62,6 +62,67 @@ class PIT_Interview_Tracker_Shortcode {
         </div>
         
         <style>
+            /* Interview Tracker Container */
+            .pit-interview-tracker {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            }
+            
+            /* Filter Bar */
+            .pit-filter-bar {
+                display: flex !important;
+                flex-direction: row !important;
+                flex-wrap: wrap !important;
+                gap: 12px !important;
+                margin-bottom: 16px !important;
+                align-items: center !important;
+            }
+            .pit-filter-bar input[type="text"],
+            .pit-filter-bar select {
+                padding: 8px 12px;
+                border: 1px solid #d1d5db;
+                border-radius: 4px;
+                font-size: 14px;
+                min-width: 150px;
+            }
+            .pit-filter-bar label {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 14px;
+                white-space: nowrap;
+            }
+            
+            /* Kanban Board */
+            .pit-kanban-board > div {
+                display: grid !important;
+                grid-template-columns: repeat(4, 1fr) !important;
+                gap: 12px !important;
+                margin-bottom: 16px !important;
+            }
+            
+            /* Kanban Column */
+            .pit-kanban-column {
+                background: #f3f4f6;
+                border-radius: 8px;
+                padding: 12px;
+                min-height: 200px;
+            }
+            
+            /* Kanban Card */
+            .pit-kanban-card {
+                background: white;
+                border-radius: 8px;
+                padding: 12px;
+                margin-bottom: 8px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                cursor: pointer;
+                transition: box-shadow 0.2s, transform 0.2s;
+            }
+            .pit-kanban-card:hover {
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                transform: translateY(-1px);
+            }
+            
             /* Drag and Drop Styles */
             .pit-kanban-card.dragging {
                 opacity: 0.5;
@@ -177,27 +238,79 @@ class PIT_Interview_Tracker_Shortcode {
             
             /* View Toggle */
             .pit-view-toggle {
-                display: flex;
-                gap: 8px;
+                display: inline-flex;
+                gap: 0;
                 margin-bottom: 16px;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                overflow: hidden;
             }
             .pit-view-toggle button {
                 padding: 8px 16px;
-                border: 1px solid #d1d5db;
+                border: none;
                 background: white;
-                border-radius: 4px;
                 cursor: pointer;
+                font-size: 14px;
+                border-right: 1px solid #d1d5db;
+            }
+            .pit-view-toggle button:last-child {
+                border-right: none;
             }
             .pit-view-toggle button.active {
                 background: #3b82f6;
                 color: white;
-                border-color: #3b82f6;
             }
             
             /* Priority Indicators */
             .priority-high { border-left: 4px solid #ef4444; }
             .priority-medium { border-left: 4px solid #f59e0b; }
             .priority-low { border-left: 4px solid #10b981; }
+            
+            /* Table View */
+            .pit-table-view table {
+                width: 100%;
+                border-collapse: collapse;
+                background: white;
+                border-radius: 8px;
+                overflow: hidden;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }
+            .pit-table-view th {
+                background: #f9fafb;
+                text-align: left;
+                padding: 12px;
+                font-weight: 600;
+                font-size: 14px;
+                border-bottom: 1px solid #e5e7eb;
+            }
+            .pit-table-view td {
+                padding: 12px;
+                border-bottom: 1px solid #e5e7eb;
+                font-size: 14px;
+            }
+            .pit-table-view tr:hover {
+                background: #f9fafb;
+            }
+            
+            /* Responsive */
+            @media (max-width: 1200px) {
+                .pit-kanban-board > div {
+                    grid-template-columns: repeat(2, 1fr) !important;
+                }
+            }
+            @media (max-width: 768px) {
+                .pit-kanban-board > div {
+                    grid-template-columns: 1fr !important;
+                }
+                .pit-filter-bar {
+                    flex-direction: column !important;
+                    align-items: stretch !important;
+                }
+                .pit-filter-bar input[type="text"],
+                .pit-filter-bar select {
+                    width: 100%;
+                }
+            }
         </style>
         <?php
         return ob_get_clean();
