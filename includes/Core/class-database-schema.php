@@ -20,7 +20,7 @@ class Database_Schema {
     /**
      * Database version for migrations
      */
-    const DB_VERSION = '3.3.0';
+    const DB_VERSION = '3.3.1';
 
     /**
      * Create all database tables
@@ -487,8 +487,18 @@ class Database_Schema {
         $sql_appearances = "CREATE TABLE $table_appearances (
             id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 
-            guest_id bigint(20) UNSIGNED NOT NULL,
+            -- User Ownership
+            user_id bigint(20) UNSIGNED NOT NULL,
+
+            guest_id bigint(20) UNSIGNED DEFAULT NULL,
             podcast_id bigint(20) UNSIGNED NOT NULL,
+            guest_profile_id bigint(20) UNSIGNED DEFAULT NULL,
+
+            -- CRM Status
+            status enum('potential', 'active', 'aired', 'convert', 'on_hold', 'cancelled', 'unqualified') DEFAULT 'potential',
+            priority enum('low', 'medium', 'high') DEFAULT 'medium',
+            source varchar(100) DEFAULT NULL,
+            is_archived tinyint(1) DEFAULT 0,
 
             -- Episode Details
             episode_number int(11) DEFAULT NULL,
@@ -497,6 +507,11 @@ class Database_Schema {
             episode_url text DEFAULT NULL,
             episode_duration int(11) DEFAULT NULL,
             episode_guid varchar(255) DEFAULT NULL,
+
+            -- Important Dates
+            record_date date DEFAULT NULL,
+            air_date date DEFAULT NULL,
+            promotion_date date DEFAULT NULL,
 
             -- Content Analysis (JSON)
             topics_discussed text DEFAULT NULL,
@@ -517,11 +532,15 @@ class Database_Schema {
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
             PRIMARY KEY (id),
+            KEY user_id_idx (user_id),
             KEY guest_id_idx (guest_id),
             KEY podcast_id_idx (podcast_id),
-            KEY episode_date_idx (episode_date),
-            UNIQUE KEY unique_guest_episode (guest_id, podcast_id, episode_guid)
-        ) $charset_collate;";
+            KEY guest_profile_id_idx (guest_profile_id),
+            KEY status_idx (status),
+            KEY priority_idx (priority),
+            KEY is_archived_idx (is_archived),
+            KEY episode_date_idx (episode_date)
+        ) $charset_collate";
 
         dbDelta($sql_appearances);
 

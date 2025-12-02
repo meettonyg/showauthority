@@ -413,14 +413,19 @@ body {
 
 /* Milestone Track */
 .milestone-track {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: auto auto;
+  gap: 8px;
   margin-bottom: 20px;
   border-radius: 4px;
-  overflow: hidden;
+}
+
+.milestone:nth-child(4) {
+  grid-column: 1 / -1;
 }
 
 .milestone {
-  flex: 1;
   padding: 10px 6px;
   text-align: center;
   font-size: 12px;
@@ -429,11 +434,13 @@ body {
   color: #64748b;
   position: relative;
   line-height: 1.3;
-  border-right: 1px solid #e2e8f0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .milestone:last-child {
-  border-right: none;
+  /* Remove border-right from convert */
 }
 
 .milestone.current {
@@ -2546,4 +2553,321 @@ button.cancel-button.custom-modal-close,
   .episode-title {
     font-size: 14px;
   }
+}
+
+/* ==============================
+   Profile Dropdown Styles (Connect Profile Section)
+============================== */
+
+/* Connect Profile Section Container */
+.connect-profile-section {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 24px;
+  margin: 20px 0;
+}
+
+.connect-profile-section h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+
+.connect-profile-section .description {
+  font-size: 14px;
+  color: #64748b;
+  margin-bottom: 20px;
+}
+
+/* Profile Selection */
+.profile-selection {
+  margin-bottom: 20px;
+}
+
+.profile-selection label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+/* Profile Dropdown Select */
+.profile-dropdown,
+.connect-profile-section select {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1e293b;
+  background-color: #fff;
+  background-clip: padding-box;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px 12px;
+  cursor: pointer;
+}
+
+.profile-dropdown:focus,
+.connect-profile-section select:focus {
+  color: #1e293b;
+  background-color: #fff;
+  border-color: #0ea5e9;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+}
+
+.profile-dropdown:hover,
+.connect-profile-section select:hover {
+  border-color: #9ca3af;
+}
+
+.profile-dropdown:disabled,
+.connect-profile-section select:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Specific styling for "Not Connected" state */
+.profile-dropdown option[value=""],
+.connect-profile-section select option[value=""],
+.profile-dropdown option:first-child,
+.connect-profile-section select option:first-child {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* Connected Profile Info Display */
+.profile-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 6px;
+  margin-top: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.profile-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.profile-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 2px;
+}
+
+.profile-meta {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* Button Container */
+.button-group {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.button-group button {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.save-button,
+.button-group .save-button {
+  background-color: #0ea5e9;
+  color: #fff;
+}
+
+.save-button:hover,
+.button-group .save-button:hover {
+  background-color: #0284c7;
+}
+
+.cancel-button,
+.button-group .cancel-button {
+  background-color: transparent;
+  color: #64748b;
+  border: 1px solid #d1d5db !important;
+}
+
+.cancel-button:hover,
+.button-group .cancel-button:hover {
+  background-color: #f9fafb;
+  color: #374151;
+}
+
+/* Connected Profile Badge */
+.connected-profile-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #dcfce7;
+  color: #16a34a;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.connected-profile-badge::before {
+  content: "●";
+  font-size: 8px;
+}
+
+/* Not Connected Badge */
+.not-connected-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.not-connected-badge::before {
+  content: "●";
+  font-size: 8px;
+}
+
+/* ==============================
+   Toast Notification Styles
+============================== */
+
+.toast-notification {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 999999;
+  min-width: 280px;
+  max-width: 400px;
+  animation: slideIn 0.3s ease-out;
+}
+
+.toast-notification.success {
+  background-color: #dcfce7;
+  color: #166534;
+  border-left: 4px solid #16a34a;
+}
+
+.toast-notification.error {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border-left: 4px solid #ef4444;
+}
+
+.toast-icon {
+  flex-shrink: 0;
+}
+
+.toast-message {
+  flex: 1;
+  line-height: 1.4;
+}
+
+/* Toast animations */
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.toast-enter-active {
+  animation: slideIn 0.3s ease-out;
+}
+
+.toast-leave-active {
+  animation: slideOut 0.3s ease-in;
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+}
+
+/* Milestone cursor pointer for clickable milestones */
+.milestone:hover:not(.current) {
+  opacity: 0.8;
+  transform: translateY(-1px);
+}
+
+.milestone.current {
+  cursor: default;
+}
+
+/* Important Dates hover effect */
+.date-wrapper[style*="cursor: pointer"] {
+  transition: background-color 0.2s ease;
+  border-radius: 6px;
+  margin: 0 -8px;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+.date-wrapper[style*="cursor: pointer"]:hover {
+  background-color: #f8fafc;
+}
+
+.date-wrapper[style*="cursor: pointer"] .edit-button-container {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.date-wrapper[style*="cursor: pointer"]:hover .edit-button-container {
+  opacity: 1 !important;
+  visibility: visible !important;
 }
