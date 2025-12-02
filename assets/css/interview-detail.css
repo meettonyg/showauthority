@@ -2055,3 +2055,127 @@ button.cancel-button.custom-modal-close,
     gap: 8px;
   }
 }
+
+/* ==============================
+   Expandable Task Description Styles
+============================== */
+
+/* Hide the checkbox input */
+.toggle-input {
+  display: none;
+}
+
+/* Task description container */
+.task-desc {
+  position: relative;
+}
+
+.task-desc .task-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-title {
+  font-weight: 500;
+  color: #334155;
+}
+
+.task-title.task-done {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+
+.task-type {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 400;
+}
+
+/* Expand toggle label - shows as clickable arrow */
+.expand-toggle {
+  cursor: pointer;
+  color: #64748b;
+  font-size: 12px;
+  margin-left: 4px;
+  transition: transform 0.2s ease;
+}
+
+.expand-toggle::after {
+  content: '▼';
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 0.2s ease;
+}
+
+/* Rotate arrow when expanded */
+.toggle-input:checked ~ .task-header .expand-toggle::after {
+  transform: rotate(180deg);
+}
+
+/* Hidden by default */
+.expandcontent {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, padding 0.3s ease;
+  padding: 0;
+}
+
+/* Show when checkbox is checked */
+.toggle-input:checked ~ .expandcontent,
+.toggle-input:checked + .task-header + .expandcontent {
+  max-height: 200px;
+  padding: 8px 0 0 0;
+}
+
+.task-details {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+  border-left: 2px solid #e2e8f0;
+  padding-left: 12px;
+  margin-top: 8px;
+}
+
+/* Completed task row styling */
+.tasks-table tr.task-completed {
+  background-color: #f8fafc;
+}
+
+.tasks-table tr.task-completed td {
+  color: #94a3b8;
+}
+
+/* Overdue date styling */
+.overdue {
+  color: #ef4444;
+  font-weight: 500;
+}
+
+/* Task action buttons in table */
+.tasks-table .task-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.tasks-table .task-action:hover {
+  background-color: #f1f5f9;
+  color: #0ea5e9;
+}
+
+/* Hover effect on table rows */
+.tasks-table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+.tasks-table tr.task-completed:hover {
+  background-color: #f1f5f9;
+}

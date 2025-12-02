@@ -697,44 +697,106 @@
                                     </div>
                                 </div>
                                 
-                                <!-- Task List -->
-                                <div v-else>
+                                <!-- Task Table -->
+                                <template v-else>
                                     <div class="tasks-header">
-                                        <h2 class="section-heading">Tasks</h2>
+                                        <h2 class="section-heading" style="margin-bottom: 0;">Tasks</h2>
                                         <button class="button add-button" @click="showTaskModal = true">
-                                            <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i> 
+                                            <i class="fas fa-plus" aria-hidden="true" style="margin-right: 6px;"></i>
                                             Add Task
                                         </button>
                                     </div>
                                     
-                                    <div v-for="task in tasks" :key="task.id" class="note-card">
-                                        <div class="note-header">
-                                            <h3>
-                                                <input type="checkbox" 
-                                                       :checked="task.is_done"
-                                                       @change="toggleTask(task.id)"
-                                                       style="margin-right: 8px;">
-                                                {{ task.title }}
-                                            </h3>
-                                            <div class="note-meta">
-                                                <span class="priority-badge" :class="task.priority">
-                                                    <span class="priority-indicator" :class="task.priority"></span>
-                                                    {{ task.priority }}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div class="note-content" v-if="task.description">
-                                            {{ task.description }}
-                                        </div>
-                                        <div class="note-actions">
-                                            <button class="note-action" v-if="task.due_date">
-                                                📅 {{ task.due_date }}
-                                            </button>
-                                            <button class="note-action">{{ task.task_type }}</button>
-                                            <button class="note-action" @click="deleteTask(task.id)">🗑️ Delete</button>
-                                        </div>
-                                    </div>
-                                </div>
+                                    <table class="tasks-table">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 40px;"></th>
+                                                <th>Task Description</th>
+                                                <th>Due Date</th>
+                                                <th>Priority</th>
+                                                <th style="width: 80px;">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="task in tasks" :key="task.id" :class="{ 'task-completed': task.is_done }">
+                                                <!-- Status Icon -->
+                                                <td>
+                                                    <svg v-if="task.is_done" 
+                                                         class="status-icon complete" 
+                                                         width="18" height="18" 
+                                                         viewBox="0 0 24 24" 
+                                                         fill="none" 
+                                                         stroke="currentColor" 
+                                                         stroke-width="2" 
+                                                         stroke-linecap="round" 
+                                                         stroke-linejoin="round"
+                                                         @click="toggleTask(task.id)"
+                                                         style="cursor: pointer;">
+                                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                                    </svg>
+                                                    <svg v-else 
+                                                         class="status-icon incomplete" 
+                                                         width="18" height="18" 
+                                                         viewBox="0 0 24 24" 
+                                                         fill="none" 
+                                                         stroke="currentColor" 
+                                                         stroke-width="2" 
+                                                         stroke-linecap="round" 
+                                                         stroke-linejoin="round"
+                                                         @click="toggleTask(task.id)"
+                                                         style="cursor: pointer;">
+                                                        <circle cx="12" cy="12" r="10"></circle>
+                                                    </svg>
+                                                </td>
+                                                
+                                                <!-- Task Description + Type (Expandable) -->
+                                                <td>
+                                                    <div class="shared-expand simple-expand task-desc">
+                                                        <input :id="'togglecontent-' + task.id" type="checkbox" class="toggle-input">
+                                                        <div class="task-header">
+                                                            <span class="task-title" :class="{ 'task-done': task.is_done }">{{ task.title }}</span>
+                                                            <span class="task-type">({{ formatTaskType(task.task_type) }})</span>
+                                                            <label v-if="task.description" :for="'togglecontent-' + task.id" class="expand-toggle"></label>
+                                                        </div>
+                                                        <div class="expandcontent task-details" v-if="task.description">
+                                                            {{ task.description }}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                
+                                                <!-- Due Date -->
+                                                <td>
+                                                    <span :class="{ 'overdue': isOverdue(task.due_date) && !task.is_done }">
+                                                        {{ task.due_date ? formatDateShort(task.due_date) : '—' }}
+                                                    </span>
+                                                </td>
+                                                
+                                                <!-- Priority Indicator -->
+                                                <td>
+                                                    <span class="priority-indicator" :class="task.priority || 'medium'"></span>
+                                                    {{ capitalize(task.priority || 'medium') }}
+                                                </td>
+                                                
+                                                <!-- Actions -->
+                                                <td>
+                                                    <button class="task-action" @click="editTask(task)" title="Edit">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                        </svg>
+                                                    </button>
+                                                    <button class="task-action" @click="deleteTask(task.id)" title="Delete">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                                        </svg>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </template>
                             </div>
                         </div>
 
@@ -798,13 +860,17 @@
                 <div id="taskModal" class="custom-modal" :class="{ active: showTaskModal }">
                     <div class="custom-modal-content">
                         <div class="custom-modal-header">
-                            <h2 id="modal-title">Add Task</h2>
-                            <span class="custom-modal-close" @click="showTaskModal = false">&times;</span>
+                            <h2 id="modal-title">{{ newTask.id ? 'Edit Task' : 'Add Task' }}</h2>
+                            <span class="custom-modal-close" @click="closeTaskModal">&times;</span>
                         </div>
                         <div class="custom-modal-body">
                             <div style="margin-bottom: 16px;">
                                 <label style="display: block; margin-bottom: 6px; font-weight: 500;">Task Title</label>
                                 <input v-model="newTask.title" type="text" class="field-input" placeholder="What needs to be done?">
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500;">Description (optional)</label>
+                                <textarea v-model="newTask.description" class="field-input" rows="3" placeholder="Add details..." style="resize: vertical;"></textarea>
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
                                 <div>
@@ -831,8 +897,8 @@
                                 <input v-model="newTask.due_date" type="date" class="field-input">
                             </div>
                             <div class="custom-modal-actions">
-                                <button type="button" class="cancel-button" @click="showTaskModal = false">Cancel</button>
-                                <button type="button" class="confirm-button" style="background-color: #0ea5e9;" @click="createTask" :disabled="!newTask.title">Add Task</button>
+                                <button type="button" class="cancel-button" @click="closeTaskModal">Cancel</button>
+                                <button type="button" class="confirm-button" style="background-color: #0ea5e9;" @click="saveTask" :disabled="!newTask.title">{{ newTask.id ? 'Update Task' : 'Add Task' }}</button>
                             </div>
                         </div>
                     </div>
@@ -903,7 +969,9 @@
             
             // Form data
             const newTask = reactive({
+                id: null,
                 title: '',
+                description: '',
                 task_type: 'todo',
                 priority: 'medium',
                 due_date: ''
@@ -964,15 +1032,42 @@
                 console.log('Open date modal:', type);
             };
             
-            const createTask = async () => {
-                if (!newTask.title) return;
-                await store.createTask({ ...newTask });
-                showTaskModal.value = false;
-                // Reset form
+            const resetTaskForm = () => {
+                newTask.id = null;
                 newTask.title = '';
+                newTask.description = '';
                 newTask.task_type = 'todo';
                 newTask.priority = 'medium';
                 newTask.due_date = '';
+            };
+            
+            const closeTaskModal = () => {
+                showTaskModal.value = false;
+                resetTaskForm();
+            };
+            
+            const saveTask = async () => {
+                if (!newTask.title) return;
+                if (newTask.id) {
+                    // Update existing task
+                    await store.updateTask(newTask.id, {
+                        title: newTask.title,
+                        description: newTask.description,
+                        task_type: newTask.task_type,
+                        priority: newTask.priority,
+                        due_date: newTask.due_date
+                    });
+                } else {
+                    // Create new task
+                    await store.createTask({ ...newTask });
+                }
+                closeTaskModal();
+            };
+            
+            const createTask = async () => {
+                if (!newTask.title) return;
+                await store.createTask({ ...newTask });
+                closeTaskModal();
             };
             
             const toggleTask = async (taskId) => {
@@ -1010,6 +1105,57 @@
                 showDeleteModal.value = false;
             };
             
+            // Task table helper methods
+            const formatTaskType = (type) => {
+                if (!type) return 'General';
+                const typeMap = {
+                    'todo': 'To-do',
+                    'email': 'Email',
+                    'message': 'Message',
+                    'research': 'Research',
+                    'call': 'Call',
+                    'follow_up': 'Follow-up',
+                    'scheduling': 'Scheduling',
+                    'outreach': 'Outreach',
+                    'general': 'General'
+                };
+                return typeMap[type.toLowerCase()] || type.charAt(0).toUpperCase() + type.slice(1);
+            };
+            
+            const formatDateShort = (dateStr) => {
+                if (!dateStr) return '';
+                try {
+                    const date = new Date(dateStr);
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                } catch {
+                    return dateStr;
+                }
+            };
+            
+            const isOverdue = (dateStr) => {
+                if (!dateStr) return false;
+                const dueDate = new Date(dateStr);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                return dueDate < today;
+            };
+            
+            const capitalize = (str) => {
+                if (!str) return '';
+                return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+            };
+            
+            const editTask = (task) => {
+                // Populate modal with task data for editing
+                newTask.id = task.id;
+                newTask.title = task.title;
+                newTask.description = task.description || '';
+                newTask.task_type = task.task_type || 'todo';
+                newTask.priority = task.priority || 'medium';
+                newTask.due_date = task.due_date || '';
+                showTaskModal.value = true;
+            };
+            
             // Lifecycle
             onMounted(() => {
                 if (typeof guestifyDetailData !== 'undefined') {
@@ -1039,14 +1185,21 @@
                 
                 // Methods
                 formatDate,
+                formatDateShort,
+                formatTaskType,
+                isOverdue,
+                capitalize,
                 getInitials,
                 handleImageError,
                 setTab,
                 setStatus,
                 openDateModal,
                 createTask,
+                saveTask,
+                closeTaskModal,
                 toggleTask,
                 deleteTask,
+                editTask,
                 createNote,
                 toggleNotePin,
                 deleteNote,

@@ -130,6 +130,27 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
             'permission_callback' => [__CLASS__, 'check_logged_in'],
         ]);
 
+        // Get podcast episodes (from RSS feed)
+        register_rest_route(self::NAMESPACE, '/podcasts/(?P<id>\d+)/episodes', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_episodes'],
+            'permission_callback' => [__CLASS__, 'check_logged_in'],
+            'args' => [
+                'offset' => [
+                    'default' => 0,
+                    'sanitize_callback' => 'absint',
+                ],
+                'limit' => [
+                    'default' => 10,
+                    'sanitize_callback' => 'absint',
+                ],
+                'refresh' => [
+                    'default' => false,
+                    'sanitize_callback' => 'rest_sanitize_boolean',
+                ],
+            ],
+        ]);
+
         // Discovery statistics (Layer 1 verification)
         register_rest_route(self::NAMESPACE, '/discovery/stats', [
             'methods' => 'GET',
