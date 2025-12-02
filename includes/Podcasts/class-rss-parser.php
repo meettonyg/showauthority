@@ -140,9 +140,15 @@ class PIT_RSS_Parser {
         }
 
         // Extract artwork
+        // Note: itunes:image has href as a non-namespaced attribute, so we need attributes()
         if (isset($itunes->image)) {
-            $data['artwork_url'] = (string) $itunes->image['href'];
-        } elseif (isset($channel->image->url)) {
+            $attrs = $itunes->image->attributes();
+            if (isset($attrs['href'])) {
+                $data['artwork_url'] = (string) $attrs['href'];
+            }
+        }
+        // Fallback to standard RSS image tag
+        if (empty($data['artwork_url']) && isset($channel->image->url)) {
             $data['artwork_url'] = (string) $channel->image->url;
         }
 
@@ -623,11 +629,21 @@ class PIT_RSS_Parser {
             }
 
             // Get episode thumbnail (iTunes image)
+            // Method 1: Try attributes() on namespaced element
             $thumbnail_url = '';
             if (!empty($itunes->image)) {
                 $image_attrs = $itunes->image->attributes();
                 if (isset($image_attrs['href'])) {
                     $thumbnail_url = (string) $image_attrs['href'];
+                }
+            }
+            
+            // Method 2: Fallback - try accessing via xpath if method 1 failed
+            if (empty($thumbnail_url)) {
+                $item->registerXPathNamespace('itunes', $itunes_ns);
+                $image_nodes = $item->xpath('itunes:image/@href');
+                if (!empty($image_nodes)) {
+                    $thumbnail_url = (string) $image_nodes[0];
                 }
             }
 
