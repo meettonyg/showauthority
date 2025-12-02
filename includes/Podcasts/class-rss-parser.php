@@ -431,6 +431,245 @@ class PIT_RSS_Parser {
     }
 
     /**
+     * Parse episodes from RSS feed
+     *
+     * Fetches and parses individual episodes from a podcast RSS feed.
+     * Results are cached via WordPress transients for performance.
+     *
+     * @param string $rss_url RSS feed URL
+     * @param int    $offset  Starting position (default 0)
+     * @param int    $limit   Number of episodes to return (default 10)
+     * @param bool   $refresh Force refresh, bypass cache (default false)
+     * @return array|WP_Error Array with episodes and metadata, or error
+     */
+    public static function parse_episodes($rss_url, $offset = 0, $limit = 10, $refresh = false) {
+        // Generate cache key
+        $cache_key = 'pit_episodes_' . md5($rss_url);
+        $cache_duration = 15 * MINUTE_IN_SECONDS;
+
+        // Check cache first (unless refresh requested)
+        if (!$refresh) {
+            $cached = get_transient($cache_key);
+            if ($cached !== false) {
+                // Return paginated slice from cached data
+                $all_episodes = $cached['episodes'];
+                $total = count($all_episodes);
+                $sliced = array_slice($all_episodes, $offset, $limit);
+
+                return [
+                    'success' => true,
+                    'episodes' => $sliced,
+                    'total_available' => $total,
+                    'has_more' => ($offset + $limit) < $total,
+                    'cached' => true,
+                    'cache_expires' => $cached['expires'],
+                ];
+            }
+        }
+
+        // Fetch RSS feed
+        $response = wp_remote_get($rss_url, [
+            'timeout' => 15,
+            'user-agent' => 'Podcast Influence Tracker/1.0',
+        ]);
+
+        if (is_wp_error($response)) {
+            return new WP_Error('rss_fetch_failed', 'Failed to fetch RSS feed: ' . $response->get_error_message());
+        }
+
+        $body = wp_remote_retrieve_body($response);
+
+        if (empty($body)) {
+            return new WP_Error('rss_empty', 'RSS feed is empty');
+        }
+
+        // Disable XML errors
+        libxml_use_internal_errors(true);
+
+        // Parse XML
+        $xml = simplexml_load_string($body);
+
+        if ($xml === false) {
+            $errors = libxml_get_errors();
+            libxml_clear_errors();
+            return new WP_Error('rss_parse_failed', 'Failed to parse RSS XML');
+        }
+
+        // Get channel and items
+        $channel = $xml->channel;
+        if (!$channel) {
+            return new WP_Error('invalid_rss', 'Invalid RSS feed structure - no channel found');
+        }
+
+        // Get iTunes namespace for episode-level data
+        $itunes_ns = 'http://www.itunes.com/dtds/podcast-1.0.dtd';
+
+        // Parse all episodes
+        $all_episodes = [];
+        foreach ($channel->item as $item) {
+            $itunes = $item->children($itunes_ns);
+
+            // Get title
+            $title = (string) $item->title;
+
+            // Get description (prefer iTunes summary, fall back to description)
+            $description = '';
+            if (!empty($itunes->summary)) {
+                $description = (string) $itunes->summary;
+            } elseif (!empty($item->description)) {
+                $description = (string) $item->description;
+            }
+            // Strip HTML and normalize whitespace
+            $description = strip_tags(str_replace(["\r", "\n"], ' ', $description));
+            $description = preg_replace('/\s+/', ' ', trim($description));
+
+            // Get publication date
+            $pub_date = (string) $item->pubDate;
+            $date_formatted = '';
+            $date_iso = '';
+            if ($pub_date) {
+                $timestamp = strtotime($pub_date);
+                if ($timestamp) {
+                    $date_formatted = date('j F Y', $timestamp);
+                    $date_iso = date('Y-m-d', $timestamp);
+                }
+            }
+
+            // Get enclosure (audio file)
+            $audio_url = '';
+            $enclosure = $item->enclosure;
+            if ($enclosure && isset($enclosure['url'])) {
+                $audio_url = (string) $enclosure['url'];
+            }
+
+            // Get duration
+            $duration_seconds = 0;
+            $duration_display = '';
+            if (!empty($itunes->duration)) {
+                $duration_raw = (string) $itunes->duration;
+                $duration_seconds = self::parse_duration($duration_raw);
+                $duration_display = self::format_duration($duration_seconds);
+            }
+
+            // Get episode thumbnail (iTunes image)
+            $thumbnail_url = '';
+            if (!empty($itunes->image)) {
+                $image_attrs = $itunes->image->attributes();
+                if (isset($image_attrs['href'])) {
+                    $thumbnail_url = (string) $image_attrs['href'];
+                }
+            }
+
+            // Get episode number if available
+            $episode_number = '';
+            if (!empty($itunes->episode)) {
+                $episode_number = (string) $itunes->episode;
+            }
+
+            // Get episode URL (link)
+            $episode_url = (string) $item->link;
+
+            // Get GUID
+            $guid = (string) $item->guid;
+
+            $all_episodes[] = [
+                'title' => $title,
+                'description' => $description,
+                'date' => $date_formatted,
+                'date_iso' => $date_iso,
+                'audio_url' => $audio_url,
+                'duration_seconds' => $duration_seconds,
+                'duration_display' => $duration_display,
+                'thumbnail_url' => $thumbnail_url,
+                'episode_number' => $episode_number,
+                'episode_url' => $episode_url,
+                'guid' => $guid,
+            ];
+        }
+
+        // Cache the full result
+        $cache_expires = gmdate('c', time() + $cache_duration);
+        set_transient($cache_key, [
+            'episodes' => $all_episodes,
+            'expires' => $cache_expires,
+        ], $cache_duration);
+
+        // Return paginated slice
+        $total = count($all_episodes);
+        $sliced = array_slice($all_episodes, $offset, $limit);
+
+        return [
+            'success' => true,
+            'episodes' => $sliced,
+            'total_available' => $total,
+            'has_more' => ($offset + $limit) < $total,
+            'cached' => false,
+            'cache_expires' => $cache_expires,
+        ];
+    }
+
+    /**
+     * Parse duration string to seconds
+     *
+     * Handles formats: "HH:MM:SS", "MM:SS", or raw seconds
+     *
+     * @param string $duration Duration string
+     * @return int Duration in seconds
+     */
+    private static function parse_duration($duration) {
+        // If already numeric, return as-is
+        if (is_numeric($duration)) {
+            return (int) $duration;
+        }
+
+        // Parse HH:MM:SS or MM:SS format
+        $parts = explode(':', $duration);
+        $count = count($parts);
+
+        if ($count === 3) {
+            // HH:MM:SS
+            return ((int) $parts[0] * 3600) + ((int) $parts[1] * 60) + (int) $parts[2];
+        } elseif ($count === 2) {
+            // MM:SS
+            return ((int) $parts[0] * 60) + (int) $parts[1];
+        }
+
+        return 0;
+    }
+
+    /**
+     * Format duration in seconds to display string
+     *
+     * @param int $seconds Duration in seconds
+     * @return string Formatted duration (e.g., "45 min", "1 hr 23 min")
+     */
+    private static function format_duration($seconds) {
+        if ($seconds <= 0) {
+            return '';
+        }
+
+        $hours = floor($seconds / 3600);
+        $minutes = floor(($seconds % 3600) / 60);
+
+        if ($hours > 0) {
+            return $hours . ' hr ' . $minutes . ' min';
+        }
+
+        return $minutes . ' min';
+    }
+
+    /**
+     * Clear episode cache for a specific RSS URL
+     *
+     * @param string $rss_url RSS feed URL
+     * @return bool True if cache was cleared
+     */
+    public static function clear_episode_cache($rss_url) {
+        $cache_key = 'pit_episodes_' . md5($rss_url);
+        return delete_transient($cache_key);
+    }
+
+    /**
      * Validate RSS feed URL
      */
     public static function is_valid_rss_url($url) {

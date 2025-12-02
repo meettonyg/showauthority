@@ -32,12 +32,24 @@
             tasks: [],
             notes: [],
             contacts: [],
+            episodes: [],
+            
+            // Episodes metadata
+            episodesMeta: {
+                totalAvailable: 0,
+                hasMore: false,
+                cached: false,
+                cacheExpires: null,
+                offset: 0,
+            },
             
             // UI state
             activeTab: 'about',
             loading: true,
             saving: false,
             error: null,
+            episodesLoading: false,
+            episodesError: null,
             
             // Config from WordPress
             config: {
@@ -277,8 +289,91 @@
                 }
             },
 
+            /**
+             * Load episodes from RSS feed via podcast-influence API
+             * Uses the podcast_id from the interview/appearance record
+             */
+            async loadEpisodes(refresh = false) {
+                // Need podcast_id from interview
+                if (!this.interview?.podcast_id) {
+                    this.episodesError = 'No podcast linked to this interview';
+                    return;
+                }
+
+                this.episodesLoading = true;
+                this.episodesError = null;
+
+                try {
+                    // Build API URL - note: uses podcast-influence namespace
+                    const baseUrl = this.config.restUrl.replace('guestify/v1/', 'podcast-influence/v1/');
+                    const params = new URLSearchParams({
+                        offset: refresh ? 0 : this.episodesMeta.offset,
+                        limit: 10,
+                        refresh: refresh ? 'true' : 'false',
+                    });
+
+                    const response = await fetch(
+                        `${baseUrl}podcasts/${this.interview.podcast_id}/episodes?${params}`,
+                        {
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-WP-Nonce': this.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.message || 'Failed to load episodes');
+                    }
+
+                    const data = await response.json();
+
+                    // If refreshing, replace episodes; otherwise append
+                    if (refresh || this.episodesMeta.offset === 0) {
+                        this.episodes = data.episodes || [];
+                    } else {
+                        this.episodes = [...this.episodes, ...(data.episodes || [])];
+                    }
+
+                    // Update metadata
+                    this.episodesMeta = {
+                        totalAvailable: data.total_available || 0,
+                        hasMore: data.has_more || false,
+                        cached: data.cached || false,
+                        cacheExpires: data.cache_expires || null,
+                        offset: this.episodes.length,
+                    };
+                } catch (err) {
+                    this.episodesError = err.message;
+                    console.error('Failed to load episodes:', err);
+                } finally {
+                    this.episodesLoading = false;
+                }
+            },
+
+            /**
+             * Load more episodes (pagination)
+             */
+            async loadMoreEpisodes() {
+                if (this.episodesLoading || !this.episodesMeta.hasMore) return;
+                await this.loadEpisodes(false);
+            },
+
+            /**
+             * Force refresh episodes (bypass cache)
+             */
+            async refreshEpisodes() {
+                this.episodesMeta.offset = 0;
+                await this.loadEpisodes(true);
+            },
+
             setActiveTab(tab) {
                 this.activeTab = tab;
+                // Load episodes when Listen tab is first accessed
+                if (tab === 'listen' && this.episodes.length === 0 && !this.episodesLoading) {
+                    this.loadEpisodes();
+                }
             }
         }
     });
@@ -539,16 +634,136 @@
                         <div class="tab-content listen" :style="{ display: activeTab === 'listen' ? 'block' : 'none' }">
                             <div class="listen-layout">
                                 <div class="listen-main">
-                                    <h2 class="section-heading">Recent Episodes</h2>
-                                    <div class="notes-empty" v-if="!interview?.episodes || interview.episodes.length === 0">
+                                    <!-- Header with Refresh Button -->
+                                    <div class="section-header">
+                                        <h2 class="section-heading">Recent Episodes</h2>
+                                        <button 
+                                            class="button outline-button small" 
+                                            @click="refreshEpisodes"
+                                            :disabled="episodesLoading">
+                                            <svg v-if="episodesLoading" class="button-icon spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                                            </svg>
+                                            <svg v-else class="button-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <polyline points="23 4 23 10 17 10"></polyline>
+                                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                            </svg>
+                                            {{ episodesLoading ? 'Loading...' : 'Refresh' }}
+                                        </button>
+                                    </div>
+
+                                    <!-- Loading State -->
+                                    <div v-if="episodesLoading && episodes.length === 0" class="episodes-loading">
+                                        <div class="pit-loading-spinner"></div>
+                                        <p>Loading episodes from RSS feed...</p>
+                                    </div>
+
+                                    <!-- Error State -->
+                                    <div v-else-if="episodesError && episodes.length === 0" class="notes-empty">
+                                        <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                        </svg>
+                                        <h3 class="notes-empty-title">Unable to Load Episodes</h3>
+                                        <p class="notes-empty-text">{{ episodesError }}</p>
+                                        <button class="button outline-button" @click="refreshEpisodes">Try Again</button>
+                                    </div>
+
+                                    <!-- Empty State -->
+                                    <div v-else-if="episodes.length === 0" class="notes-empty">
                                         <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                             <circle cx="12" cy="12" r="10"></circle>
                                             <polygon points="10 8 16 12 10 16 10 8"></polygon>
                                         </svg>
                                         <h3 class="notes-empty-title">No Episodes Found</h3>
-                                        <p class="notes-empty-text">Episodes from the RSS feed will appear here once the podcast data is refreshed.</p>
+                                        <p class="notes-empty-text">Episodes from the RSS feed will appear here. Click Refresh to load them.</p>
+                                        <button class="button outline-button" @click="refreshEpisodes">Load Episodes</button>
+                                    </div>
+
+                                    <!-- Episodes List -->
+                                    <div v-else class="episodes-list">
+                                        <div v-for="(episode, index) in episodes" :key="episode.guid || index" class="episode-card">
+                                            <!-- Episode Thumbnail -->
+                                            <img 
+                                                v-if="episode.thumbnail_url" 
+                                                :src="episode.thumbnail_url" 
+                                                :alt="episode.title"
+                                                class="episode-thumbnail"
+                                                loading="lazy"
+                                                @error="$event.target.style.display='none'">
+                                            <div v-else class="episode-thumbnail-placeholder">
+                                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                    <circle cx="12" cy="12" r="10"></circle>
+                                                    <polygon points="10 8 16 12 10 16 10 8"></polygon>
+                                                </svg>
+                                            </div>
+
+                                            <!-- Episode Info -->
+                                            <div class="episode-info">
+                                                <div class="episode-date">{{ episode.date }}</div>
+                                                <h3 class="episode-title">{{ episode.title }}</h3>
+                                                
+                                                <!-- Expandable Description -->
+                                                <div v-if="episode.description" class="shared-expand episode-expand">
+                                                    <input :id="'ep-toggle-' + index" type="checkbox" class="toggle-input">
+                                                    <label :for="'ep-toggle-' + index" class="expand-toggle"></label>
+                                                    <div class="expandcontent">
+                                                        <p class="episode-description">{{ episode.description }}</p>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Audio Player -->
+                                                <div v-if="episode.audio_url" class="episode-player">
+                                                    <audio controls preload="none">
+                                                        <source :src="episode.audio_url" type="audio/mpeg">
+                                                        Your browser does not support audio.
+                                                    </audio>
+                                                </div>
+                                            </div>
+
+                                            <!-- Duration Badge -->
+                                            <div v-if="episode.duration_display" class="episode-duration">
+                                                <svg class="duration-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <circle cx="12" cy="12" r="10"></circle>
+                                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                                </svg>
+                                                {{ episode.duration_display }}
+                                            </div>
+                                        </div>
+
+                                        <!-- Load More Button -->
+                                        <div v-if="episodesMeta.hasMore" class="load-more">
+                                            <button 
+                                                class="button outline-button" 
+                                                @click="loadMoreEpisodes"
+                                                :disabled="episodesLoading">
+                                                <svg v-if="episodesLoading" class="button-icon spinning" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                                                </svg>
+                                                <svg v-else class="button-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <polyline points="7 13 12 18 17 13"></polyline>
+                                                    <polyline points="7 6 12 11 17 6"></polyline>
+                                                </svg>
+                                                {{ episodesLoading ? 'Loading...' : 'Load More Episodes' }}
+                                            </button>
+                                        </div>
+
+                                        <!-- Episodes Count -->
+                                        <div class="episodes-meta">
+                                            <span>Showing {{ episodes.length }} of {{ episodesMeta.totalAvailable }} episodes</span>
+                                            <span v-if="episodesMeta.cached" class="cache-indicator" :title="'Cached until ' + episodesMeta.cacheExpires">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <circle cx="12" cy="12" r="10"></circle>
+                                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                                </svg>
+                                                Cached
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
+
+                                <!-- Sidebar -->
                                 <div class="listen-sidebar">
                                     <div class="sidebar-card">
                                         <div class="sidebar-header">
@@ -564,6 +779,26 @@
                                                     </svg>
                                                     <span class="social-link-text">{{ interview.website }}</span>
                                                 </a>
+                                                <p v-else class="no-links-text">No website configured</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Podcast Info Card -->
+                                    <div class="sidebar-card">
+                                        <div class="sidebar-header">
+                                            <h3 class="sidebar-title">Podcast Info</h3>
+                                        </div>
+                                        <div class="sidebar-content">
+                                            <div class="podcast-quick-stats">
+                                                <div class="stat-item">
+                                                    <span class="stat-label">Total Episodes</span>
+                                                    <span class="stat-value">{{ episodesMeta.totalAvailable || 'N/A' }}</span>
+                                                </div>
+                                                <div class="stat-item">
+                                                    <span class="stat-label">Latest Release</span>
+                                                    <span class="stat-value">{{ episodes[0]?.date || 'N/A' }}</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1171,6 +1406,10 @@
                 interview: computed(() => store.interview),
                 tasks: computed(() => store.tasks),
                 notes: computed(() => store.notes),
+                episodes: computed(() => store.episodes),
+                episodesMeta: computed(() => store.episodesMeta),
+                episodesLoading: computed(() => store.episodesLoading),
+                episodesError: computed(() => store.episodesError),
                 activeTab: computed(() => store.activeTab),
                 boardUrl: computed(() => store.config.boardUrl),
                 
@@ -1203,7 +1442,12 @@
                 createNote,
                 toggleNotePin,
                 deleteNote,
-                confirmDelete
+                confirmDelete,
+                
+                // Episode methods
+                loadEpisodes: () => store.loadEpisodes(),
+                loadMoreEpisodes: () => store.loadMoreEpisodes(),
+                refreshEpisodes: () => store.refreshEpisodes(),
             };
         }
     };

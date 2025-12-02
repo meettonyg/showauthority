@@ -489,6 +489,62 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
     }
 
     /**
+     * Get podcast episodes from RSS feed
+     *
+     * Parses the podcast's RSS feed and returns episodes with pagination.
+     * Results are cached for 15 minutes to reduce load on RSS servers.
+     *
+     * @param WP_REST_Request $request Request object with podcast ID and optional offset/limit/refresh params
+     * @return WP_REST_Response|WP_Error Episodes array or error
+     */
+    public static function get_episodes($request) {
+        $podcast_id = (int) $request['id'];
+        $offset = (int) $request->get_param('offset');
+        $limit = (int) $request->get_param('limit');
+        $refresh = (bool) $request->get_param('refresh');
+
+        // Validate limit (max 50 per request)
+        $limit = min($limit, 50);
+        if ($limit < 1) {
+            $limit = 10;
+        }
+
+        // Get podcast to retrieve RSS URL
+        $podcast = PIT_Podcast_Repository::get($podcast_id);
+
+        if (!$podcast) {
+            return self::error('not_found', 'Podcast not found', 404);
+        }
+
+        if (empty($podcast->rss_feed_url)) {
+            return self::error('no_rss_url', 'Podcast does not have an RSS feed URL configured', 400);
+        }
+
+        // Parse episodes from RSS feed
+        $result = PIT_RSS_Parser::parse_episodes(
+            $podcast->rss_feed_url,
+            $offset,
+            $limit,
+            $refresh
+        );
+
+        if (is_wp_error($result)) {
+            return self::error(
+                $result->get_error_code(),
+                $result->get_error_message(),
+                500
+            );
+        }
+
+        // Add podcast context to response
+        $result['podcast_id'] = $podcast_id;
+        $result['podcast_name'] = $podcast->title;
+        $result['podcast_artwork'] = $podcast->artwork_url ?? '';
+
+        return rest_ensure_response($result);
+    }
+
+    /**
      * Get discovery statistics (Layer 1 verification)
      *
      * Returns comprehensive stats about RSS parsing, social discovery, and contacts.
