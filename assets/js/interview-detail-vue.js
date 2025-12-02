@@ -528,8 +528,18 @@
                                     <!-- Description Section -->
                                     <div class="content-section">
                                         <h2 class="section-heading">About the Show</h2>
-                                        <div class="description-text" v-html="interview?.description || 'No description available.'"></div>
-                                        
+                                        <div class="description-text">
+                                            <div v-if="descriptionContent" v-html="descriptionContent"></div>
+                                            <p v-else>No description available.</p>
+                                            <button
+                                                v-if="showDescriptionToggle"
+                                                type="button"
+                                                class="description-toggle"
+                                                @click="toggleDescription">
+                                                {{ isDescriptionExpanded ? 'Show less' : 'Read more' }}
+                                            </button>
+                                        </div>
+
                                         <div class="show-quick-info">
                                             <div class="quick-info-item">
                                                 <div class="quick-info-label">Episodes</div>
@@ -1281,6 +1291,10 @@
             const showTaskModal = ref(false);
             const showNoteModal = ref(false);
             const showDeleteModal = ref(false);
+
+            // Description state
+            const isDescriptionExpanded = ref(false);
+            const DESCRIPTION_PREVIEW_LENGTH = 320;
             
             // Form data
             const newTask = reactive({
@@ -1309,6 +1323,40 @@
             const initials = computed(() => {
                 const name = store.interview?.podcast_name || '';
                 return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+            });
+
+            const stripHtml = (text) => {
+                if (!text) return '';
+                return text.replace(/<[^>]*>/g, '').trim();
+            };
+
+            const escapeHtml = (text) => {
+                if (!text) return '';
+                return text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            };
+
+            const strippedDescription = computed(() => stripHtml(store.interview?.description));
+
+            const truncatedDescription = computed(() => {
+                const text = strippedDescription.value;
+                if (!text) return '';
+                if (text.length <= DESCRIPTION_PREVIEW_LENGTH) return text;
+                return `${text.slice(0, DESCRIPTION_PREVIEW_LENGTH)}...`;
+            });
+
+            const showDescriptionToggle = computed(() => strippedDescription.value.length > DESCRIPTION_PREVIEW_LENGTH);
+
+            const descriptionContent = computed(() => {
+                if (isDescriptionExpanded.value || !showDescriptionToggle.value) {
+                    return store.interview?.description || '';
+                }
+
+                return escapeHtml(truncatedDescription.value);
             });
             
             // Methods
@@ -1358,6 +1406,10 @@
             
             const handleImageError = (e) => {
                 e.target.style.display = 'none';
+            };
+
+            const toggleDescription = () => {
+                isDescriptionExpanded.value = !isDescriptionExpanded.value;
             };
             
             const setTab = (tab) => {
@@ -1524,11 +1576,14 @@
                 showTaskModal,
                 showNoteModal,
                 showDeleteModal,
+                isDescriptionExpanded,
                 newTask,
                 newNote,
                 milestones,
                 initials,
-                
+                descriptionContent,
+                showDescriptionToggle,
+
                 // Methods
                 formatDate,
                 formatDateShort,
@@ -1539,6 +1594,7 @@
                 capitalize,
                 getInitials,
                 handleImageError,
+                toggleDescription,
                 setTab,
                 setStatus,
                 openDateModal,

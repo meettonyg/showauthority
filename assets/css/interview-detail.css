@@ -1549,6 +1549,30 @@ a.show-detail-link:hover {
   border: 1px solid #e2e8f0;
 }
 
+.description-text {
+  position: relative;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #475569;
+}
+
+.description-text p {
+  margin: 0 0 12px;
+}
+
+.description-toggle {
+  background: none;
+  border: none;
+  color: #0ea5e9;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.description-toggle:hover {
+  color: #0284c7;
+}
+
 .subsection-heading {
   font-size: 16px;
   font-weight: 600;
