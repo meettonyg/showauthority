@@ -368,6 +368,59 @@
                 await this.loadEpisodes(true);
             },
 
+            /**
+             * Refresh podcast metadata from RSS
+             * Updates episode count, frequency, dates, etc.
+             */
+            async refreshPodcastMetadata() {
+                if (!this.interview?.podcast_id) {
+                    this.error = 'No podcast linked to this interview';
+                    return;
+                }
+
+                this.saving = true;
+                try {
+                    const baseUrl = this.config.restUrl.replace('guestify/v1/', 'podcast-influence/v1/');
+                    const response = await fetch(
+                        `${baseUrl}podcasts/${this.interview.podcast_id}/refresh-metadata`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-WP-Nonce': this.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.message || 'Failed to refresh metadata');
+                    }
+
+                    const data = await response.json();
+                    
+                    // Update interview with refreshed podcast data
+                    if (data.podcast) {
+                        this.interview.episode_count = data.podcast.episode_count;
+                        this.interview.frequency = data.podcast.frequency;
+                        this.interview.average_duration = data.podcast.average_duration;
+                        this.interview.founded_date = data.podcast.founded_date;
+                        this.interview.last_episode_date = data.podcast.last_episode_date;
+                        this.interview.content_rating = data.podcast.explicit_rating;
+                        this.interview.explicit_rating = data.podcast.explicit_rating;
+                        this.interview.description = data.podcast.description;
+                        this.interview.podcast_image = data.podcast.artwork_url;
+                    }
+
+                    return data;
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                } finally {
+                    this.saving = false;
+                }
+            },
+
             setActiveTab(tab) {
                 this.activeTab = tab;
                 // Load episodes when Listen tab is first accessed
@@ -484,16 +537,37 @@
                                             </div>
                                             <div class="quick-info-item">
                                                 <div class="quick-info-label">Founded</div>
-                                                <div class="quick-info-value">{{ formatDate(interview?.founded_date) }}</div>
+                                                <div class="quick-info-value">{{ formatFoundedDate(interview?.founded_date) }}</div>
                                             </div>
                                             <div class="quick-info-item">
                                                 <div class="quick-info-label">Content Rating</div>
-                                                <div class="quick-info-value">{{ interview?.content_rating || 'N/A' }}</div>
+                                                <div class="quick-info-value">{{ formatContentRating(interview?.content_rating) }}</div>
                                             </div>
                                             <div class="quick-info-item">
                                                 <div class="quick-info-label">Frequency</div>
                                                 <div class="quick-info-value">{{ interview?.frequency || 'N/A' }}</div>
                                             </div>
+                                        </div>
+                                        
+                                        <!-- Refresh Metadata Button -->
+                                        <div class="refresh-metadata-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
+                                            <button 
+                                                class="button outline-button small" 
+                                                @click="refreshPodcastMetadata"
+                                                :disabled="saving"
+                                                style="font-size: 12px;">
+                                                <svg v-if="saving" class="button-icon spinning" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                                                </svg>
+                                                <svg v-else class="button-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                                </svg>
+                                                {{ saving ? 'Refreshing...' : 'Refresh Show Data' }}
+                                            </button>
+                                            <span v-if="interview?.metadata_updated_at" style="font-size: 11px; color: #64748b; margin-left: 8px;">
+                                                Last updated: {{ formatDate(interview.metadata_updated_at) }}
+                                            </span>
                                         </div>
                                     </div>
 
@@ -1251,6 +1325,32 @@
                 }
             };
             
+            const formatFoundedDate = (dateStr) => {
+                if (!dateStr) return 'N/A';
+                try {
+                    const date = new Date(dateStr);
+                    return date.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short'
+                    });
+                } catch {
+                    return dateStr;
+                }
+            };
+            
+            const formatContentRating = (rating) => {
+                if (!rating) return 'N/A';
+                const ratingMap = {
+                    'clean': 'Clean',
+                    'explicit': 'Explicit',
+                    'yes': 'Explicit',
+                    'no': 'Clean',
+                    'true': 'Explicit',
+                    'false': 'Clean'
+                };
+                return ratingMap[rating.toLowerCase()] || rating;
+            };
+            
             const getInitials = (name) => {
                 if (!name) return '?';
                 return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
@@ -1409,6 +1509,7 @@
                 // Store state
                 loading: computed(() => store.loading),
                 error: computed(() => store.error),
+                saving: computed(() => store.saving),
                 interview: computed(() => store.interview),
                 tasks: computed(() => store.tasks),
                 notes: computed(() => store.notes),
@@ -1432,6 +1533,8 @@
                 formatDate,
                 formatDateShort,
                 formatTaskType,
+                formatFoundedDate,
+                formatContentRating,
                 isOverdue,
                 capitalize,
                 getInitials,
@@ -1454,6 +1557,9 @@
                 loadEpisodes: () => store.loadEpisodes(),
                 loadMoreEpisodes: () => store.loadMoreEpisodes(),
                 refreshEpisodes: () => store.refreshEpisodes(),
+                
+                // Podcast metadata refresh
+                refreshPodcastMetadata: () => store.refreshPodcastMetadata(),
             };
         }
     };

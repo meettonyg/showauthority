@@ -242,11 +242,32 @@ class PIT_REST_Appearances {
         $podcasts_table = $wpdb->prefix . 'pit_podcasts';
         $offers_table = $wpdb->prefix . 'pit_appearance_offers';
 
+        // Include all podcast metadata fields in the query
+        $select_fields = "a.*, 
+                          p.title as podcast_name, 
+                          p.rss_feed_url as rss_url, 
+                          p.artwork_url as podcast_image,
+                          p.description as description,
+                          p.author as host_name,
+                          p.email as host_email,
+                          p.website_url as website,
+                          p.language,
+                          p.category,
+                          p.booking_link, 
+                          p.recording_link,
+                          p.episode_count,
+                          p.frequency,
+                          p.average_duration,
+                          p.founded_date,
+                          p.last_episode_date,
+                          p.explicit_rating,
+                          p.copyright,
+                          p.metadata_updated_at";
+
         // Admins can view any appearance
         if (current_user_can('manage_options')) {
             $appearance = $wpdb->get_row($wpdb->prepare(
-                "SELECT a.*, p.title as podcast_name, p.rss_feed_url as rss_url, p.artwork_url as podcast_image,
-                        p.booking_link, p.recording_link
+                "SELECT {$select_fields}
                  FROM {$table} a
                  LEFT JOIN {$podcasts_table} p ON a.podcast_id = p.id
                  WHERE a.id = %d",
@@ -254,8 +275,7 @@ class PIT_REST_Appearances {
             ));
         } else {
             $appearance = $wpdb->get_row($wpdb->prepare(
-                "SELECT a.*, p.title as podcast_name, p.rss_feed_url as rss_url, p.artwork_url as podcast_image,
-                        p.booking_link, p.recording_link
+                "SELECT {$select_fields}
                  FROM {$table} a
                  LEFT JOIN {$podcasts_table} p ON a.podcast_id = p.id
                  WHERE a.id = %d AND a.user_id = %d",
@@ -498,6 +518,23 @@ class PIT_REST_Appearances {
             'updated_at' => $row->updated_at,
             'booking_link' => $row->booking_link ?? '',
             'recording_link' => $row->recording_link ?? '',
+            // Podcast metadata fields
+            'description' => $row->description ?? '',
+            'host_name' => $row->host_name ?? '',
+            'host_email' => $row->host_email ?? '',
+            'website' => $row->website ?? '',
+            'language' => $row->language ?? 'English',
+            'category' => $row->category ?? '',
+            'categories' => !empty($row->category) ? array_map('trim', explode(',', $row->category)) : [],
+            'episode_count' => $row->episode_count ? (int) $row->episode_count : null,
+            'frequency' => $row->frequency ?? null,
+            'average_duration' => $row->average_duration ? (int) $row->average_duration : null,
+            'founded_date' => $row->founded_date ?? null,
+            'last_episode_date' => $row->last_episode_date ?? null,
+            'content_rating' => $row->explicit_rating ?? 'clean',  // Mapped for Vue template compatibility
+            'explicit_rating' => $row->explicit_rating ?? 'clean',
+            'copyright' => $row->copyright ?? '',
+            'metadata_updated_at' => $row->metadata_updated_at ?? null,
         ];
     }
 }

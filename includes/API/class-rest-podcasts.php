@@ -677,6 +677,9 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
             );
         }
 
+        // DEBUG: Log what RSS parser returned (remove after debugging)
+        error_log('PIT RSS Debug for podcast ' . $podcast_id . ': artwork_url = ' . ($rss_data['artwork_url'] ?? 'NULL'));
+
         // Build update data
         $update_data = [
             'title'             => $rss_data['podcast_name'] ?? $podcast->title,
@@ -713,6 +716,11 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
             'success' => true,
             'message' => 'Podcast metadata refreshed from RSS feed',
             'podcast' => $updated_podcast,
+            // DEBUG: Include raw RSS data (remove after debugging)
+            '_debug_rss' => [
+                'artwork_url' => $rss_data['artwork_url'] ?? null,
+                'podcast_name' => $rss_data['podcast_name'] ?? null,
+            ],
         ]);
     }
 
