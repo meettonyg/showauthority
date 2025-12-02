@@ -1281,6 +1281,49 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Date Event Modal -->
+                <div id="dateModal" class="custom-modal" :class="{ active: showDateModal }">
+                    <div class="custom-modal-content">
+                        <div class="custom-modal-header">
+                            <h2 id="modal-title">{{ newEvent.event_type === 'recording' ? 'Add Record Date' : 'Add Air Date' }}</h2>
+                            <span class="custom-modal-close" @click="closeDateModal">&times;</span>
+                        </div>
+                        <div class="custom-modal-body">
+                            <div v-if="eventError" style="background: #fee2e2; border: 1px solid #ef4444; color: #b91c1c; padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+                                {{ eventError }}
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500;">Event Title</label>
+                                <input v-model="newEvent.title" type="text" class="field-input" placeholder="Event title">
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500;">Date</label>
+                                <input v-model="newEvent.start_datetime" type="date" class="field-input" required>
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input v-model="newEvent.is_all_day" type="checkbox" style="width: auto;">
+                                    <span>All day event</span>
+                                </label>
+                            </div>
+                            <div v-if="!newEvent.is_all_day" style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500;">End Date/Time (optional)</label>
+                                <input v-model="newEvent.end_datetime" type="datetime-local" class="field-input">
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500;">Description (optional)</label>
+                                <textarea v-model="newEvent.description" class="field-input" rows="3" placeholder="Add notes about this event..." style="resize: vertical;"></textarea>
+                            </div>
+                            <div class="custom-modal-actions">
+                                <button type="button" class="cancel-button" @click="closeDateModal">Cancel</button>
+                                <button type="button" class="confirm-button" style="background-color: #0ea5e9;" @click="saveEvent" :disabled="eventSaving || !newEvent.start_datetime">
+                                    {{ eventSaving ? 'Saving...' : 'Save Event' }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         `,
         
@@ -1291,6 +1334,7 @@
             const showTaskModal = ref(false);
             const showNoteModal = ref(false);
             const showDeleteModal = ref(false);
+            const showDateModal = ref(false);
 
             // Description state
             const isDescriptionExpanded = ref(false);
@@ -1311,6 +1355,19 @@
                 content: '',
                 note_type: 'general'
             });
+
+            const newEvent = reactive({
+                event_type: 'recording',
+                title: '',
+                description: '',
+                start_datetime: '',
+                end_datetime: '',
+                is_all_day: false,
+                timezone: 'America/Chicago'
+            });
+
+            const eventSaving = ref(false);
+            const eventError = ref(null);
             
             // Milestones configuration
             const milestones = [
@@ -1421,8 +1478,88 @@
             };
             
             const openDateModal = (type) => {
-                // TODO: Implement date modal
-                console.log('Open date modal:', type);
+                // Reset form
+                newEvent.event_type = type === 'record' ? 'recording' : 'air_date';
+                newEvent.title = type === 'record'
+                    ? `Recording: ${store.interview?.podcast_name || 'Interview'}`
+                    : `Air Date: ${store.interview?.podcast_name || 'Interview'}`;
+                newEvent.description = '';
+                newEvent.start_datetime = '';
+                newEvent.end_datetime = '';
+                newEvent.is_all_day = type === 'air' ? true : false;
+                newEvent.timezone = 'America/Chicago';
+                eventError.value = null;
+                showDateModal.value = true;
+            };
+
+            const closeDateModal = () => {
+                showDateModal.value = false;
+                eventError.value = null;
+            };
+
+            const saveEvent = async () => {
+                if (!newEvent.start_datetime) {
+                    eventError.value = 'Please select a date';
+                    return;
+                }
+
+                eventSaving.value = true;
+                eventError.value = null;
+
+                try {
+                    // Build API URL for calendar events (uses pit/v1 namespace)
+                    const baseUrl = store.config.restUrl.replace('guestify/v1/', 'pit/v1/');
+
+                    // Format datetime - if is_all_day, add time component
+                    let startDatetime = newEvent.start_datetime;
+                    if (newEvent.is_all_day && !startDatetime.includes('T') && !startDatetime.includes(' ')) {
+                        startDatetime = startDatetime + ' 00:00:00';
+                    } else if (!newEvent.is_all_day && !startDatetime.includes('T') && !startDatetime.includes(' ')) {
+                        startDatetime = startDatetime + ' 09:00:00';
+                    }
+
+                    const eventData = {
+                        appearance_id: store.config.interviewId,
+                        podcast_id: store.interview?.podcast_id || null,
+                        event_type: newEvent.event_type,
+                        title: newEvent.title,
+                        description: newEvent.description || null,
+                        start_datetime: startDatetime,
+                        end_datetime: newEvent.end_datetime || null,
+                        is_all_day: newEvent.is_all_day ? 1 : 0,
+                        timezone: newEvent.timezone
+                    };
+
+                    const response = await fetch(`${baseUrl}calendar-events`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-WP-Nonce': store.config.nonce,
+                        },
+                        body: JSON.stringify(eventData),
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.message || 'Failed to create event');
+                    }
+
+                    const result = await response.json();
+
+                    // Update interview record with the date
+                    if (newEvent.event_type === 'recording') {
+                        await store.updateInterview('record_date', newEvent.start_datetime);
+                    } else if (newEvent.event_type === 'air_date') {
+                        await store.updateInterview('air_date', newEvent.start_datetime);
+                    }
+
+                    closeDateModal();
+                } catch (err) {
+                    console.error('Failed to save event:', err);
+                    eventError.value = err.message || 'Failed to save event';
+                } finally {
+                    eventSaving.value = false;
+                }
             };
             
             const resetTaskForm = () => {
@@ -1576,9 +1713,13 @@
                 showTaskModal,
                 showNoteModal,
                 showDeleteModal,
+                showDateModal,
                 isDescriptionExpanded,
                 newTask,
                 newNote,
+                newEvent,
+                eventSaving,
+                eventError,
                 milestones,
                 initials,
                 descriptionContent,
@@ -1598,6 +1739,8 @@
                 setTab,
                 setStatus,
                 openDateModal,
+                closeDateModal,
+                saveEvent,
                 createTask,
                 saveTask,
                 closeTaskModal,
