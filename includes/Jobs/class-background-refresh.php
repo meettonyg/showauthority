@@ -28,6 +28,9 @@ class PIT_Background_Refresh {
         // Hourly cron for auto-enriching empty data
         add_action('pit_auto_enrich', [__CLASS__, 'run_auto_enrich']);
 
+        // Daily cron for RSS metadata refresh
+        add_action('pit_rss_metadata_refresh', [__CLASS__, 'run_rss_metadata_refresh']);
+
         // Schedule daily refresh check if not scheduled
         if (!wp_next_scheduled('pit_background_refresh')) {
             wp_schedule_event(time(), 'daily', 'pit_background_refresh');
@@ -36,6 +39,11 @@ class PIT_Background_Refresh {
         // Schedule hourly auto-enrich for empty data
         if (!wp_next_scheduled('pit_auto_enrich')) {
             wp_schedule_event(time(), 'hourly', 'pit_auto_enrich');
+        }
+
+        // Schedule daily RSS metadata refresh
+        if (!wp_next_scheduled('pit_rss_metadata_refresh')) {
+            wp_schedule_event(time(), 'daily', 'pit_rss_metadata_refresh');
         }
     }
 
@@ -165,6 +173,100 @@ class PIT_Background_Refresh {
         if ($jobs_queued > 0) {
             error_log(sprintf('PIT Auto-Enrich: Queued %d jobs for unenriched links.', $jobs_queued));
         }
+    }
+
+    /**
+     * Run RSS metadata refresh for stale podcasts
+     *
+     * Refreshes episode counts, frequencies, and dates for podcasts
+     * that haven't had their RSS checked recently.
+     *
+     * Runs daily, processes podcasts not checked in 3+ days.
+     * This is FREE (no API costs) - just RSS parsing.
+     */
+    public static function run_rss_metadata_refresh() {
+        global $wpdb;
+
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+
+        // Find podcasts that haven't had RSS checked in 3+ days
+        // Only refresh tracked podcasts or those with active interviews
+        $stale_podcasts = $wpdb->get_results("
+            SELECT id, rss_feed_url, title
+            FROM $podcasts_table
+            WHERE rss_feed_url IS NOT NULL 
+              AND rss_feed_url != ''
+              AND (
+                  last_rss_check IS NULL 
+                  OR last_rss_check < DATE_SUB(NOW(), INTERVAL 3 DAY)
+              )
+              AND (is_tracked = 1 OR is_active = 1)
+            ORDER BY last_rss_check ASC
+            LIMIT 20
+        ");
+
+        if (empty($stale_podcasts)) {
+            error_log('PIT RSS Refresh: No podcasts need metadata refresh.');
+            return;
+        }
+
+        $refreshed = 0;
+        $failed = 0;
+
+        foreach ($stale_podcasts as $podcast) {
+            try {
+                // Parse RSS feed for latest metadata
+                $rss_data = PIT_RSS_Parser::parse($podcast->rss_feed_url);
+
+                if (is_wp_error($rss_data)) {
+                    error_log(sprintf(
+                        'PIT RSS Refresh: Failed to parse %s - %s',
+                        $podcast->title,
+                        $rss_data->get_error_message()
+                    ));
+                    $failed++;
+
+                    // Still update last_rss_check to avoid retrying constantly
+                    $wpdb->update(
+                        $podcasts_table,
+                        ['last_rss_check' => current_time('mysql')],
+                        ['id' => $podcast->id]
+                    );
+                    continue;
+                }
+
+                // Build update data
+                $update_data = [
+                    'episode_count'     => $rss_data['episode_count'] ?? 0,
+                    'frequency'         => $rss_data['frequency'] ?? 'Unknown',
+                    'average_duration'  => $rss_data['average_duration'] ?? null,
+                    'last_episode_date' => $rss_data['last_episode_date'] ?? null,
+                    'last_rss_check'    => current_time('mysql'),
+                    'metadata_updated_at' => current_time('mysql'),
+                ];
+
+                // Update podcast in database
+                PIT_Podcast_Repository::update($podcast->id, $update_data);
+                $refreshed++;
+
+            } catch (Exception $e) {
+                error_log(sprintf(
+                    'PIT RSS Refresh: Exception for %s - %s',
+                    $podcast->title,
+                    $e->getMessage()
+                ));
+                $failed++;
+            }
+
+            // Small delay to be polite to RSS servers
+            usleep(500000); // 0.5 seconds
+        }
+
+        error_log(sprintf(
+            'PIT RSS Refresh: Completed. Refreshed: %d, Failed: %d',
+            $refreshed,
+            $failed
+        ));
     }
 
     /**

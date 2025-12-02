@@ -87,9 +87,16 @@ class PIT_RSS_Parser {
             'email' => '',
             'homepage_url' => (string) $channel->link,
             'category' => '',
+            'categories' => [],
             'language' => (string) $channel->language,
             'artwork_url' => '',
             'social_links' => [],
+            // New metadata fields
+            'copyright' => (string) ($channel->copyright ?? ''),
+            'explicit' => 'clean',
+            'episode_count' => 0,
+            'founded_date' => null,
+            'last_episode_date' => null,
         ];
 
         // Extract email from managingEditor or itunes:owner
@@ -99,9 +106,37 @@ class PIT_RSS_Parser {
             $data['email'] = (string) $itunes->owner->email;
         }
 
-        // Extract category
+        // Extract category (single for backwards compatibility)
         if (isset($itunes->category)) {
             $data['category'] = (string) $itunes->category['text'];
+        }
+
+        // Extract all categories
+        if (isset($itunes->category)) {
+            foreach ($itunes->category as $cat) {
+                if (isset($cat['text'])) {
+                    $data['categories'][] = (string) $cat['text'];
+                    // Also get subcategories
+                    if (isset($cat->category)) {
+                        foreach ($cat->category as $subcat) {
+                            if (isset($subcat['text'])) {
+                                $data['categories'][] = (string) $subcat['text'];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Extract explicit rating
+        if (isset($itunes->explicit)) {
+            $explicit_value = strtolower((string) $itunes->explicit);
+            // Normalize values: 'yes', 'true', 'explicit' -> 'explicit'; 'no', 'false', 'clean' -> 'clean'
+            if (in_array($explicit_value, ['yes', 'true', 'explicit', '1'])) {
+                $data['explicit'] = 'explicit';
+            } else {
+                $data['explicit'] = 'clean';
+            }
         }
 
         // Extract artwork
@@ -109,6 +144,42 @@ class PIT_RSS_Parser {
             $data['artwork_url'] = (string) $itunes->image['href'];
         } elseif (isset($channel->image->url)) {
             $data['artwork_url'] = (string) $channel->image->url;
+        }
+
+        // Episode analysis (count and dates)
+        $items = $channel->item;
+        $count = count($items);
+        $data['episode_count'] = $count;
+
+        // Calculate frequency from episode dates
+        $data['frequency'] = self::calculate_frequency($items);
+
+        // Calculate average duration
+        $avg_duration = self::calculate_average_duration($items);
+        if ($avg_duration) {
+            $data['average_duration'] = $avg_duration;
+        }
+
+        if ($count > 0) {
+            // Last episode date (usually first item in feed - most recent)
+            $first_item_date = isset($items[0]->pubDate) ? (string) $items[0]->pubDate : '';
+            if ($first_item_date) {
+                $timestamp = strtotime($first_item_date);
+                if ($timestamp) {
+                    $data['last_episode_date'] = date('Y-m-d', $timestamp);
+                }
+            }
+
+            // Founded date (approximate via last/oldest item in current feed)
+            // Note: RSS feeds are often paginated, so this is "oldest visible episode"
+            $last_item = $items[$count - 1];
+            $last_item_date = isset($last_item->pubDate) ? (string) $last_item->pubDate : '';
+            if ($last_item_date) {
+                $timestamp = strtotime($last_item_date);
+                if ($timestamp) {
+                    $data['founded_date'] = date('Y-m-d', $timestamp);
+                }
+            }
         }
 
         // Look for social links in description
@@ -656,6 +727,110 @@ class PIT_RSS_Parser {
         }
 
         return $minutes . ' min';
+    }
+
+    /**
+     * Calculate publishing frequency based on recent episodes
+     *
+     * Analyzes the gaps between recent episode publication dates
+     * to determine the podcast's publishing schedule.
+     *
+     * @param SimpleXMLElement|array $items XML items/entries from RSS feed
+     * @return string Frequency label (Daily, Weekly, Bi-Weekly, etc.)
+     */
+    private static function calculate_frequency($items) {
+        // Need at least 3 episodes to establish a pattern
+        if (empty($items) || count($items) < 3) {
+            return 'Unknown';
+        }
+
+        // Extract dates from the last 5-10 episodes for better accuracy
+        $dates = [];
+        $max_check = min(count($items), 10);
+
+        for ($i = 0; $i < $max_check; $i++) {
+            $item = $items[$i];
+            // Handle both RSS (pubDate) and Atom (published)
+            $date_str = isset($item->pubDate) ? (string) $item->pubDate : (string) ($item->published ?? '');
+            $timestamp = strtotime($date_str);
+            if ($timestamp) {
+                $dates[] = $timestamp;
+            }
+        }
+
+        // Need at least 3 valid dates
+        if (count($dates) < 3) {
+            return 'Unknown';
+        }
+
+        // Calculate intervals between consecutive episodes (in days)
+        $intervals = [];
+        for ($i = 0; $i < count($dates) - 1; $i++) {
+            // Dates are newest first, so dates[$i] > dates[$i+1]
+            $diff_days = ($dates[$i] - $dates[$i + 1]) / 86400; // 86400 seconds per day
+            if ($diff_days > 0) {
+                $intervals[] = $diff_days;
+            }
+        }
+
+        if (empty($intervals)) {
+            return 'Irregular';
+        }
+
+        // Calculate average days between episodes
+        $avg_days = array_sum($intervals) / count($intervals);
+
+        // Map average interval to human-readable frequency
+        if ($avg_days <= 1.5) {
+            return 'Daily';
+        } elseif ($avg_days <= 4.5) {
+            return 'Twice Weekly';
+        } elseif ($avg_days <= 9.0) {
+            return 'Weekly';
+        } elseif ($avg_days <= 16.0) {
+            return 'Bi-Weekly';
+        } elseif ($avg_days <= 35.0) {
+            return 'Monthly';
+        } elseif ($avg_days <= 95.0) {
+            return 'Quarterly';
+        }
+
+        return 'Irregular';
+    }
+
+    /**
+     * Calculate average episode duration from recent episodes
+     *
+     * @param SimpleXMLElement|array $items XML items/entries from RSS feed
+     * @return int|null Average duration in seconds, or null if unavailable
+     */
+    private static function calculate_average_duration($items) {
+        if (empty($items)) {
+            return null;
+        }
+
+        $itunes_ns = 'http://www.itunes.com/dtds/podcast-1.0.dtd';
+        $durations = [];
+        $max_check = min(count($items), 10);
+
+        for ($i = 0; $i < $max_check; $i++) {
+            $item = $items[$i];
+            $itunes = $item->children($itunes_ns);
+
+            if (!empty($itunes->duration)) {
+                $duration_raw = (string) $itunes->duration;
+                $seconds = self::parse_duration($duration_raw);
+                if ($seconds > 0) {
+                    $durations[] = $seconds;
+                }
+            }
+        }
+
+        if (empty($durations)) {
+            return null;
+        }
+
+        return (int) round(array_sum($durations) / count($durations));
     }
 
     /**

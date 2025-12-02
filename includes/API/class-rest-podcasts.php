@@ -164,6 +164,13 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
             'callback' => [__CLASS__, 'backfill_podcast_data'],
             'permission_callback' => [__CLASS__, 'check_admin_permission'],
         ]);
+
+        // Refresh podcast metadata from RSS
+        register_rest_route(self::NAMESPACE, '/podcasts/(?P<id>\d+)/refresh-metadata', [
+            'methods' => 'POST',
+            'callback' => [__CLASS__, 'refresh_podcast_metadata'],
+            'permission_callback' => [__CLASS__, 'check_logged_in'],
+        ]);
     }
 
     /**
@@ -635,6 +642,78 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
         $stats['sample_missing_social'] = $missing_social;
 
         return rest_ensure_response($stats);
+    }
+
+    /**
+     * Refresh podcast metadata from RSS feed
+     *
+     * Re-parses the RSS feed to update all metadata fields.
+     * Useful for getting latest episode count, dates, etc.
+     *
+     * @param WP_REST_Request $request Request with podcast ID
+     * @return WP_REST_Response|WP_Error Updated podcast data or error
+     */
+    public static function refresh_podcast_metadata($request) {
+        $podcast_id = (int) $request['id'];
+
+        $podcast = PIT_Podcast_Repository::get($podcast_id);
+
+        if (!$podcast) {
+            return self::error('not_found', 'Podcast not found', 404);
+        }
+
+        if (empty($podcast->rss_feed_url)) {
+            return self::error('no_rss_url', 'Podcast does not have an RSS feed URL configured', 400);
+        }
+
+        // Parse RSS feed for latest metadata
+        $rss_data = PIT_RSS_Parser::parse($podcast->rss_feed_url);
+
+        if (is_wp_error($rss_data)) {
+            return self::error(
+                $rss_data->get_error_code(),
+                $rss_data->get_error_message(),
+                500
+            );
+        }
+
+        // Build update data
+        $update_data = [
+            'title'             => $rss_data['podcast_name'] ?? $podcast->title,
+            'description'       => $rss_data['description'] ?? $podcast->description,
+            'author'            => $rss_data['author'] ?? $podcast->author,
+            'artwork_url'       => $rss_data['artwork_url'] ?? $podcast->artwork_url,
+            'website_url'       => $rss_data['homepage_url'] ?? $podcast->website_url,
+            'language'          => $rss_data['language'] ?? $podcast->language,
+            'category'          => is_array($rss_data['categories'] ?? null)
+                                   ? implode(', ', $rss_data['categories'])
+                                   : ($rss_data['category'] ?? $podcast->category),
+            'episode_count'     => $rss_data['episode_count'] ?? $podcast->episode_count,
+            'explicit_rating'   => $rss_data['explicit'] ?? $podcast->explicit_rating,
+            'copyright'         => $rss_data['copyright'] ?? $podcast->copyright,
+            'founded_date'      => $rss_data['founded_date'] ?? $podcast->founded_date,
+            'last_episode_date' => $rss_data['last_episode_date'] ?? $podcast->last_episode_date,
+            'frequency'         => $rss_data['frequency'] ?? $podcast->frequency,
+            'average_duration'  => $rss_data['average_duration'] ?? $podcast->average_duration,
+            'metadata_updated_at' => current_time('mysql'),
+            'last_rss_check'    => current_time('mysql'),
+        ];
+
+        // Update podcast in database
+        $result = PIT_Podcast_Repository::update($podcast_id, $update_data);
+
+        if (!$result) {
+            return self::error('update_failed', 'Failed to update podcast metadata', 500);
+        }
+
+        // Fetch the updated podcast
+        $updated_podcast = PIT_Podcast_Repository::get($podcast_id);
+
+        return rest_ensure_response([
+            'success' => true,
+            'message' => 'Podcast metadata refreshed from RSS feed',
+            'podcast' => $updated_podcast,
+        ]);
     }
 
     /**

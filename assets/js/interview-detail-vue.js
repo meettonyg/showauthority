@@ -705,11 +705,17 @@
                                                 <h3 class="episode-title">{{ episode.title }}</h3>
                                                 
                                                 <!-- Expandable Description -->
-                                                <div v-if="episode.description" class="shared-expand episode-expand">
-                                                    <input :id="'ep-toggle-' + index" type="checkbox" class="toggle-input">
-                                                    <label :for="'ep-toggle-' + index" class="expand-toggle"></label>
-                                                    <div class="expandcontent">
-                                                        <p class="episode-description">{{ episode.description }}</p>
+                                                <div v-if="episode.description" class="episode-expand">
+                                                    <input :id="'ep-toggle-' + index" type="checkbox" class="episode-toggle-input">
+                                                    <label :for="'ep-toggle-' + index" class="episode-toggle-label">
+                                                        <span class="toggle-show">Show description</span>
+                                                        <span class="toggle-hide">Hide description</span>
+                                                        <svg class="toggle-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                            <polyline points="6 9 12 15 18 9"></polyline>
+                                                        </svg>
+                                                    </label>
+                                                    <div class="episode-description-content">
+                                                        <p>{{ episode.description }}</p>
                                                     </div>
                                                 </div>
 

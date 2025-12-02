@@ -2377,45 +2377,64 @@ button.cancel-button.custom-modal-close,
   margin-top: 8px;
 }
 
-.episode-expand .expand-toggle {
+.episode-toggle-input {
+  display: none !important;
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.episode-toggle-label {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   color: #0ea5e9;
   font-size: 13px;
   cursor: pointer;
   user-select: none;
 }
 
-.episode-expand .expand-toggle::before {
-  content: 'Show description';
+.episode-toggle-label:hover {
+  color: #0284c7;
 }
 
-.episode-expand .expand-toggle::after {
-  content: '▼';
-  font-size: 10px;
+.episode-toggle-label .toggle-show {
+  display: inline;
+}
+
+.episode-toggle-label .toggle-hide {
+  display: none;
+}
+
+.episode-toggle-label .toggle-arrow {
   transition: transform 0.2s ease;
 }
 
-.episode-expand .toggle-input:checked + .expand-toggle::before {
-  content: 'Hide description';
+/* When checked: swap text and rotate arrow */
+.episode-toggle-input:checked + .episode-toggle-label .toggle-show {
+  display: none;
 }
 
-.episode-expand .toggle-input:checked + .expand-toggle::after {
+.episode-toggle-input:checked + .episode-toggle-label .toggle-hide {
+  display: inline;
+}
+
+.episode-toggle-input:checked + .episode-toggle-label .toggle-arrow {
   transform: rotate(180deg);
 }
 
-.episode-expand .expandcontent {
+/* Description content - hidden by default */
+.episode-description-content {
   max-height: 0;
   overflow: hidden;
   transition: max-height 0.3s ease;
 }
 
-.episode-expand .toggle-input:checked ~ .expandcontent {
-  max-height: 500px;
+.episode-toggle-input:checked ~ .episode-description-content {
+  max-height: 1000px;
 }
 
-.episode-description {
+.episode-description-content p {
   margin: 12px 0 0 0;
   padding: 12px;
   background-color: white;

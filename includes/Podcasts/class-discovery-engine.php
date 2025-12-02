@@ -243,6 +243,14 @@ class PIT_Discovery_Engine {
             'itunes_id'       => $rss_data['itunes_id'] ?? null,
             'tracking_status' => 'not_tracked',
             'source'          => 'rss_discovery',
+            // New metadata fields
+            'explicit_rating'    => $rss_data['explicit'] ?? 'clean',
+            'copyright'          => $rss_data['copyright'] ?? '',
+            'founded_date'       => $rss_data['founded_date'] ?? null,
+            'last_episode_date'  => $rss_data['last_episode_date'] ?? null,
+            'frequency'          => $rss_data['frequency'] ?? 'Unknown',
+            'average_duration'   => $rss_data['average_duration'] ?? null,
+            'metadata_updated_at' => current_time('mysql'),
         ];
     }
 

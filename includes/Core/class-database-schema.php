@@ -20,7 +20,7 @@ class Database_Schema {
     /**
      * Database version for migrations
      */
-    const DB_VERSION = '3.2.0';
+    const DB_VERSION = '3.3.0';
 
     /**
      * Create all database tables
@@ -198,9 +198,13 @@ class Database_Schema {
             -- Metadata
             category varchar(100) DEFAULT NULL,
             language varchar(10) DEFAULT 'en',
+            explicit_rating varchar(20) DEFAULT 'clean',
+            copyright text DEFAULT NULL,
             episode_count int(11) DEFAULT 0,
             frequency varchar(50) DEFAULT NULL,
             average_duration int(11) DEFAULT NULL,
+            founded_date date DEFAULT NULL,
+            last_episode_date date DEFAULT NULL,
 
             -- External IDs (for deduplication)
             itunes_id varchar(50) DEFAULT NULL,
@@ -218,6 +222,7 @@ class Database_Schema {
             social_links_discovered tinyint(1) DEFAULT 0,
             metrics_enriched tinyint(1) DEFAULT 0,
             last_enriched_at datetime DEFAULT NULL,
+            metadata_updated_at datetime DEFAULT NULL,
 
             -- Quality Scores
             data_quality_score int(11) DEFAULT 0,
