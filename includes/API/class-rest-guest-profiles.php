@@ -124,10 +124,8 @@ class PIT_REST_Guest_Profiles {
             'order'          => $order,
         ];
 
-        // Filter by author (current user) unless admin
-        if (!current_user_can('manage_options')) {
-            $args['author'] = $current_user_id;
-        }
+        // Filter by author (current user)
+        $args['author'] = $current_user_id;
 
         // Add search
         if (!empty($search)) {
@@ -218,10 +216,12 @@ class PIT_REST_Guest_Profiles {
             'first_name'   => $first_name,
             'last_name'    => $last_name,
             'full_name'    => $full_name,
+            'author_id'    => (int) $post->post_author,
             'email'        => get_post_meta($post_id, 'email', true),
             'company'      => get_post_meta($post_id, 'company', true),
             'guest_title'  => get_post_meta($post_id, 'guest_title', true),
             'thumbnail'    => get_the_post_thumbnail_url($post_id, 'thumbnail'),
+            'permalink'    => get_permalink($post_id),
         ];
 
         // Add full details if requested

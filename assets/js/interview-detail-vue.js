@@ -33,7 +33,8 @@
             notes: [],
             contacts: [],
             episodes: [],
-            
+            guestProfiles: [],
+
             // Episodes metadata
             episodesMeta: {
                 totalAvailable: 0,
@@ -50,6 +51,8 @@
             error: null,
             episodesLoading: false,
             episodesError: null,
+            profilesLoading: false,
+            profilesError: null,
             
             // Config from WordPress
             config: {
@@ -117,6 +120,32 @@
                     console.error('Failed to load interview:', err);
                 } finally {
                     this.loading = false;
+                }
+            },
+
+            async loadGuestProfiles(force = false) {
+                if (this.profilesLoading || (this.guestProfiles.length && !force)) {
+                    return;
+                }
+
+                this.profilesLoading = true;
+                this.profilesError = null;
+
+                try {
+                    const response = await this.api('guest-profiles');
+                    const profiles = response.data || [];
+
+                    this.guestProfiles = profiles.filter(profile => {
+                        if (!profile.author_id || !this.config.userId) {
+                            return true;
+                        }
+                        return profile.author_id === this.config.userId;
+                    });
+                } catch (err) {
+                    console.error('Failed to load guest profiles:', err);
+                    this.profilesError = err.message;
+                } finally {
+                    this.profilesLoading = false;
                 }
             },
 
@@ -493,12 +522,41 @@
                         <!-- Profile Section -->
                         <div class="profile-section">
                             <div class="profile-label">Connected Profile</div>
-                            <div class="profile-name">{{ interview?.guest_name || 'Not Connected' }}</div>
+                            <div class="profile-name">{{ interview?.guest_profile_name || 'Not Connected' }}</div>
                             <div class="profile-actions">
-                                <a v-if="interview?.guest_id" :href="'/app/profiles/guest/profile/?id=' + interview.guest_id" target="_blank" class="button primary-button">
+                                <a v-if="interview?.guest_profile_id" :href="interview?.guest_profile_link || ('/app/profiles/guest/profile/?id=' + interview.guest_profile_id)" target="_blank" class="button primary-button">
                                     View
                                 </a>
-                                <button class="button secondary-button">Edit Profile</button>
+                                <button class="button secondary-button" @click="openProfileModal">Edit Profile</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Profile Modal -->
+                    <div v-if="showProfileModal" class="modal-overlay">
+                        <div class="modal-content" role="dialog" aria-modal="true">
+                            <div class="modal-header">
+                                <h3>Connect Profile</h3>
+                                <button class="close-button" @click="closeProfileModal" aria-label="Close">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <p style="margin-bottom: 12px;">Link this interview to one of your profiles.</p>
+                                <div class="form-group">
+                                    <label for="guest-profile-select">Profile</label>
+                                    <select id="guest-profile-select" v-model="selectedProfileId" :disabled="profilesLoading">
+                                        <option value="">Not Connected</option>
+                                        <option v-for="profile in availableProfiles" :key="profile.id" :value="profile.id">
+                                            {{ profile.name }}
+                                        </option>
+                                    </select>
+                                    <p v-if="profilesError" class="error-text">{{ profilesError }}</p>
+                                </div>
+                            </div>
+                            <div class="modal-actions">
+                                <button class="button secondary-button" @click="closeProfileModal">Cancel</button>
+                                <button class="button primary-button" :disabled="profileSaving" @click="saveProfileSelection">
+                                    {{ profileSaving ? 'Saving...' : 'Save Connection' }}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1291,10 +1349,15 @@
             const showTaskModal = ref(false);
             const showNoteModal = ref(false);
             const showDeleteModal = ref(false);
+            const showProfileModal = ref(false);
 
             // Description state
             const isDescriptionExpanded = ref(false);
             const DESCRIPTION_PREVIEW_LENGTH = 320;
+
+            // Profile state
+            const selectedProfileId = ref('');
+            const profileSaving = ref(false);
             
             // Form data
             const newTask = reactive({
@@ -1324,6 +1387,8 @@
                 const name = store.interview?.podcast_name || '';
                 return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
             });
+
+            const availableProfiles = computed(() => store.guestProfiles || []);
 
             const stripHtml = (text) => {
                 if (!text) return '';
@@ -1418,6 +1483,37 @@
             
             const setStatus = async (status) => {
                 await store.updateInterview('status', status);
+            };
+
+            const openProfileModal = async () => {
+                selectedProfileId.value = store.interview?.guest_profile_id || '';
+                showProfileModal.value = true;
+                await store.loadGuestProfiles();
+            };
+
+            const closeProfileModal = () => {
+                showProfileModal.value = false;
+            };
+
+            const saveProfileSelection = async () => {
+                profileSaving.value = true;
+                try {
+                    const profileId = selectedProfileId.value ? parseInt(selectedProfileId.value) : 0;
+                    await store.updateInterview('guest_profile_id', profileId);
+
+                    const selectedProfile = store.guestProfiles.find(p => p.id === profileId);
+                    if (store.interview) {
+                        store.interview.guest_profile_id = profileId;
+                        store.interview.guest_profile_name = selectedProfile ? selectedProfile.name : '';
+                        store.interview.guest_profile_link = selectedProfile ? selectedProfile.permalink : '';
+                    }
+
+                    closeProfileModal();
+                } catch (err) {
+                    console.error('Failed to save profile selection:', err);
+                } finally {
+                    profileSaving.value = false;
+                }
             };
             
             const openDateModal = (type) => {
@@ -1571,16 +1667,22 @@
                 episodesError: computed(() => store.episodesError),
                 activeTab: computed(() => store.activeTab),
                 boardUrl: computed(() => store.config.boardUrl),
-                
+                profilesLoading: computed(() => store.profilesLoading),
+                profilesError: computed(() => store.profilesError),
+
                 // Local state
                 showTaskModal,
                 showNoteModal,
                 showDeleteModal,
+                showProfileModal,
                 isDescriptionExpanded,
                 newTask,
                 newNote,
                 milestones,
                 initials,
+                availableProfiles,
+                selectedProfileId,
+                profileSaving,
                 descriptionContent,
                 showDescriptionToggle,
 
@@ -1598,6 +1700,9 @@
                 setTab,
                 setStatus,
                 openDateModal,
+                openProfileModal,
+                closeProfileModal,
+                saveProfileSelection,
                 createTask,
                 saveTask,
                 closeTaskModal,

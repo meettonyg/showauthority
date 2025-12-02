@@ -29,8 +29,10 @@
                 status: '',
                 priority: '',
                 source: '',
+                guestProfileId: '',
                 showArchived: false,
             },
+            guestProfiles: [],
             // Status columns matching Formidable field 8113 (Interview Status)
             statusColumns: [
                 { key: 'potential', label: 'Potential', color: '#6b7280' },
@@ -65,6 +67,11 @@
 
                 if (state.filters.source) {
                     result = result.filter(i => i.source === state.filters.source);
+                }
+
+                if (state.filters.guestProfileId) {
+                    const profileId = parseInt(state.filters.guestProfileId);
+                    result = result.filter(i => i.guest_profile_id === profileId);
                 }
 
                 if (!state.filters.showArchived) {
@@ -162,6 +169,32 @@
                     console.error('Fetch error:', err);
                 } finally {
                     this.loading = false;
+                }
+            },
+
+            async fetchGuestProfiles() {
+                if (this.guestProfiles.length) return;
+
+                try {
+                    const response = await fetch(
+                        `${guestifyData.restUrl}guest-profiles`,
+                        {
+                            headers: {
+                                'X-WP-Nonce': guestifyData.nonce,
+                            },
+                        }
+                    );
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        const profiles = data.data || [];
+                        this.guestProfiles = profiles.filter(profile => {
+                            if (!profile.author_id || !guestifyData.userId) return true;
+                            return parseInt(profile.author_id) === parseInt(guestifyData.userId);
+                        });
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch guest profiles:', err);
                 }
             },
 
@@ -294,6 +327,13 @@
                         {{ source }}
                     </option>
                 </select>
+
+                <select v-model="guestProfileFilter" style="padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px;">
+                    <option value="">All Profiles</option>
+                    <option v-for="profile in store.guestProfiles" :key="profile.id" :value="profile.id">
+                        {{ profile.name }}
+                    </option>
+                </select>
                 
                 <label style="display: flex; align-items: center; gap: 4px;">
                     <input type="checkbox" v-model="showArchived">
@@ -324,6 +364,11 @@
                 set: (val) => store.setFilter('source', val),
             });
 
+            const guestProfileFilter = computed({
+                get: () => store.filters.guestProfileId,
+                set: (val) => store.setFilter('guestProfileId', val),
+            });
+
             const showArchived = computed({
                 get: () => store.filters.showArchived,
                 set: (val) => {
@@ -332,7 +377,11 @@
                 },
             });
 
-            return { store, searchQuery, statusFilter, priorityFilter, sourceFilter, showArchived };
+            onMounted(() => {
+                store.fetchGuestProfiles();
+            });
+
+            return { store, searchQuery, statusFilter, priorityFilter, sourceFilter, guestProfileFilter, showArchived };
         },
     };
 
@@ -695,7 +744,6 @@
             const bulkSource = ref('');
             const bulkArchive = ref(false);
             const archiveChanged = ref(false);
-            const guestProfiles = ref([]);
 
             const sourceOptions = [
                 'Direct Outreach',
@@ -711,30 +759,10 @@
                 'Other',
             ];
 
-            // Fetch guest profiles on mount
-            const fetchGuestProfiles = async () => {
-                try {
-                    const response = await fetch(
-                        `${guestifyData.restUrl}guest-profiles`,
-                        {
-                            headers: {
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                        }
-                    );
-                    if (response.ok) {
-                        const data = await response.json();
-                        guestProfiles.value = data.data || [];
-                    }
-                } catch (err) {
-                    console.error('Failed to fetch guest profiles:', err);
-                }
-            };
-
             // Fetch profiles when panel opens
             watch(() => store.showBulkPanel, (isOpen) => {
-                if (isOpen && guestProfiles.value.length === 0) {
-                    fetchGuestProfiles();
+                if (isOpen && store.guestProfiles.length === 0) {
+                    store.fetchGuestProfiles();
                 }
             });
 
@@ -772,10 +800,10 @@
                 bulkGuestProfileId,
                 bulkStatus, 
                 bulkPriority, 
-                bulkSource, 
+                bulkSource,
                 bulkArchive,
                 archiveChanged,
-                guestProfiles,
+                guestProfiles: computed(() => store.guestProfiles),
                 sourceOptions,
                 applyBulkEdit,
                 cancelBulkEdit,
@@ -834,6 +862,13 @@
                                 {{ source }}
                             </option>
                         </select>
+
+                        <select v-model="guestProfileFilter" class="pit-select">
+                            <option value="">All Profiles</option>
+                            <option v-for="profile in store.guestProfiles" :key="profile.id" :value="profile.id">
+                                {{ profile.name }}
+                            </option>
+                        </select>
                     </div>
                     
                     <div class="pit-divider"></div>
@@ -880,6 +915,10 @@
                 get: () => store.filters.source,
                 set: (val) => store.setFilter('source', val),
             });
+            const guestProfileFilter = computed({
+                get: () => store.filters.guestProfileId,
+                set: (val) => store.setFilter('guestProfileId', val),
+            });
             const showArchived = computed({
                 get: () => store.filters.showArchived,
                 set: (val) => {
@@ -889,6 +928,7 @@
             });
 
             onMounted(() => {
+                store.fetchGuestProfiles();
                 // Check localStorage for saved view preference
                 const savedView = localStorage.getItem('pit_interview_view');
                 if (savedView && (savedView === 'kanban' || savedView === 'table')) {
@@ -910,7 +950,7 @@
                 localStorage.setItem('pit_interview_view', newView);
             });
 
-            return { store, searchQuery, statusFilter, priorityFilter, sourceFilter, showArchived };
+            return { store, searchQuery, statusFilter, priorityFilter, sourceFilter, guestProfileFilter, showArchived };
         },
     };
 

@@ -364,13 +364,17 @@ class PIT_REST_Appearances {
         }
 
         // Build update data
-        $allowed_fields = ['status', 'priority', 'source', 'episode_title', 'episode_date', 'is_archived'];
+        $allowed_fields = ['status', 'priority', 'source', 'episode_title', 'episode_date', 'is_archived', 'guest_profile_id'];
         $data = [];
 
         foreach ($allowed_fields as $field) {
             $value = $request->get_param($field);
             if ($value !== null) {
-                $data[$field] = is_string($value) ? sanitize_text_field($value) : $value;
+                if ($field === 'guest_profile_id') {
+                    $data[$field] = intval($value);
+                } else {
+                    $data[$field] = is_string($value) ? sanitize_text_field($value) : $value;
+                }
             }
         }
 
@@ -500,6 +504,15 @@ class PIT_REST_Appearances {
      * Format appearance for API response
      */
     private static function format_appearance($row) {
+        $guest_profile_id = isset($row->guest_profile_id) ? (int) $row->guest_profile_id : 0;
+        $guest_profile_name = '';
+        $guest_profile_link = '';
+
+        if ($guest_profile_id) {
+            $guest_profile_name = get_the_title($guest_profile_id);
+            $guest_profile_link = get_permalink($guest_profile_id);
+        }
+
         return [
             'id' => (int) $row->id,
             'podcast_id' => (int) $row->podcast_id,
@@ -507,6 +520,9 @@ class PIT_REST_Appearances {
             'podcast_image' => $row->podcast_image ?? '',
             'rss_url' => $row->rss_url ?? '',
             'guest_id' => (int) $row->guest_id,
+            'guest_profile_id' => $guest_profile_id,
+            'guest_profile_name' => $guest_profile_name,
+            'guest_profile_link' => $guest_profile_link,
             'status' => $row->status ?? 'potential',
             'priority' => $row->priority ?? 'medium',
             'source' => $row->source ?? '',
