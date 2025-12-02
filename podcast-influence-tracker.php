@@ -118,8 +118,10 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-appearance-notes.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-guest-profiles.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-calendar-events.php';
+        require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-events-schema.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-tracker-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-detail-shortcode.php';
+        require_once PIT_PLUGIN_DIR . 'includes/class-calendar-shortcode.php';
     }
 
     private function init_hooks() {
@@ -180,6 +182,7 @@ class Podcast_Influence_Tracker {
         PIT_Formidable_Integration::init();
         PIT_Interview_Tracker_Shortcode::init();
         PIT_Interview_Detail_Shortcode::init();
+        PIT_Calendar_Shortcode::init();
 
         add_action('pit_process_jobs', ['PIT_Job_Queue', 'process_next_job']);
         add_action('pit_rate_limit_cleanup', ['PIT_Rate_Limiter', 'cleanup']);
