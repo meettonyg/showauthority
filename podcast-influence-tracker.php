@@ -67,6 +67,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/Guests/class-appearance-repository.php';
         require_once PIT_PLUGIN_DIR . 'includes/Guests/class-topic-repository.php';
         require_once PIT_PLUGIN_DIR . 'includes/Guests/class-network-repository.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Guests/class-guest-merge-helper.php';
 
         // SOCIAL METRICS DOMAIN
         require_once PIT_PLUGIN_DIR . 'includes/SocialMetrics/class-social-link-repository.php';
@@ -105,6 +106,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/admin/class-admin-page.php';
         require_once PIT_PLUGIN_DIR . 'includes/admin/class-settings.php';
         require_once PIT_PLUGIN_DIR . 'includes/admin/class-admin-bulk-tools.php';
+        require_once PIT_PLUGIN_DIR . 'includes/admin/class-admin-migration-v4.php';
 
         // COST TRACKING
         require_once PIT_PLUGIN_DIR . 'includes/class-cost-tracker.php';
