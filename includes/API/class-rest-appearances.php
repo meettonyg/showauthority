@@ -364,7 +364,7 @@ class PIT_REST_Appearances {
         }
 
         // Build update data
-        $allowed_fields = ['status', 'priority', 'source', 'episode_title', 'episode_date', 'is_archived', 'guest_profile_id'];
+        $allowed_fields = ['status', 'priority', 'source', 'episode_title', 'episode_date', 'is_archived', 'guest_profile_id', 'record_date', 'air_date', 'promotion_date'];
         $data = [];
 
         foreach ($allowed_fields as $field) {
@@ -432,7 +432,7 @@ class PIT_REST_Appearances {
         }
 
         // Build update data
-        $allowed_fields = ['status', 'priority', 'source', 'is_archived', 'guest_profile_id'];
+        $allowed_fields = ['status', 'priority', 'source', 'is_archived', 'guest_profile_id', 'record_date', 'air_date', 'promotion_date'];
         $data = [];
 
         foreach ($allowed_fields as $field) {
@@ -527,8 +527,15 @@ class PIT_REST_Appearances {
             'priority' => $row->priority ?? 'medium',
             'source' => $row->source ?? '',
             'episode_title' => $row->episode_title ?? '',
+            'episode_number' => $row->episode_number ?? '',
             'episode_date' => $row->episode_date ?? '',
             'episode_url' => $row->episode_url ?? '',
+            'interview_topic' => $row->interview_topic ?? '',
+            'audience' => $row->audience ?? '',
+            'commission' => $row->commission ?? '',
+            'record_date' => $row->record_date ?? null,
+            'air_date' => $row->air_date ?? null,
+            'promotion_date' => $row->promotion_date ?? null,
             'is_archived' => (bool) $row->is_archived,
             'created_at' => $row->created_at,
             'updated_at' => $row->updated_at,
