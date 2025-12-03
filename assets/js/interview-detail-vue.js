@@ -33,7 +33,8 @@
             notes: [],
             contacts: [],
             episodes: [],
-            
+            guestProfiles: [],
+
             // Episodes metadata
             episodesMeta: {
                 totalAvailable: 0,
@@ -50,6 +51,8 @@
             error: null,
             episodesLoading: false,
             episodesError: null,
+            profilesLoading: false,
+            profilesError: null,
             
             // Config from WordPress
             config: {
@@ -117,6 +120,33 @@
                     console.error('Failed to load interview:', err);
                 } finally {
                     this.loading = false;
+                }
+            },
+
+            async loadGuestProfiles(force = false) {
+                if (this.profilesLoading || (this.guestProfiles.length && !force)) {
+                    return;
+                }
+
+                this.profilesLoading = true;
+                this.profilesError = null;
+
+                try {
+                    const response = await this.api('guest-profiles');
+                    const profiles = response.data || [];
+
+                    // Backend already filters by user, but double-check with parseInt for consistency
+                    this.guestProfiles = profiles.filter(profile => {
+                        if (!profile.author_id || !this.config.userId) {
+                            return true;
+                        }
+                        return parseInt(profile.author_id) === parseInt(this.config.userId);
+                    });
+                } catch (err) {
+                    console.error('Failed to load guest profiles:', err);
+                    this.profilesError = err.message;
+                } finally {
+                    this.profilesLoading = false;
                 }
             },
 
@@ -427,6 +457,63 @@
                 if (tab === 'listen' && this.episodes.length === 0 && !this.episodesLoading) {
                     this.loadEpisodes();
                 }
+            },
+
+            /**
+             * Archive the interview
+             */
+            async archiveInterview() {
+                this.saving = true;
+                try {
+                    await this.api(`appearances/${this.config.interviewId}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ is_archived: true }),
+                    });
+                    this.interview.is_archived = true;
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                } finally {
+                    this.saving = false;
+                }
+            },
+
+            /**
+             * Restore the interview from archive
+             */
+            async restoreInterview() {
+                this.saving = true;
+                try {
+                    await this.api(`appearances/${this.config.interviewId}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ is_archived: false }),
+                    });
+                    this.interview.is_archived = false;
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                } finally {
+                    this.saving = false;
+                }
+            },
+
+            /**
+             * Delete the interview permanently
+             */
+            async deleteInterview() {
+                this.saving = true;
+                try {
+                    await this.api(`appearances/${this.config.interviewId}`, {
+                        method: 'DELETE',
+                    });
+                    // Redirect to board after successful deletion
+                    window.location.href = this.config.boardUrl;
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                } finally {
+                    this.saving = false;
+                }
             }
         }
     });
@@ -493,12 +580,54 @@
                         <!-- Profile Section -->
                         <div class="profile-section">
                             <div class="profile-label">Connected Profile</div>
-                            <div class="profile-name">{{ interview?.guest_name || 'Not Connected' }}</div>
+                            <div class="profile-name">{{ interview?.guest_profile_name || 'Not Connected' }}</div>
                             <div class="profile-actions">
-                                <a v-if="interview?.guest_id" :href="'/app/profiles/guest/profile/?id=' + interview.guest_id" target="_blank" class="button primary-button">
+                                <a v-if="interview?.guest_profile_id" :href="interview?.guest_profile_link || ('/app/profiles/guest/profile/?id=' + interview.guest_profile_id)" target="_blank" class="button primary-button">
                                     View
                                 </a>
-                                <button class="button secondary-button">Edit Profile</button>
+                                <button class="button secondary-button" @click="openProfileModal">Edit Profile</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Profile Modal -->
+                    <div v-if="showProfileModal" class="modal-overlay">
+                        <div class="modal-content connect-profile-section" role="dialog" aria-modal="true" style="max-width: 500px;">
+                            <div class="modal-header">
+                                <h2>Connect Profile</h2>
+                                <button class="close-button" @click="closeProfileModal" aria-label="Close">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="description">Link this interview to one of your profiles.</p>
+                                <div class="profile-selection">
+                                    <label for="guest-profile-select">Profile</label>
+                                    <select 
+                                        id="guest-profile-select" 
+                                        class="profile-dropdown"
+                                        v-model="selectedProfileId" 
+                                        :disabled="profilesLoading">
+                                        <option value="">Not Connected</option>
+                                        <option v-for="profile in availableProfiles" :key="profile.id" :value="profile.id">
+                                            {{ profile.name }}
+                                        </option>
+                                    </select>
+                                    <p v-if="profilesError" class="error-text">{{ profilesError }}</p>
+                                </div>
+                                
+                                <!-- Show connected profile preview -->
+                                <div v-if="selectedProfileId && selectedProfile" class="profile-info">
+                                    <div class="profile-avatar">{{ getProfileInitials(selectedProfile.name) }}</div>
+                                    <div class="profile-details">
+                                        <div class="profile-name">{{ selectedProfile.name }}</div>
+                                    </div>
+                                    <span class="connected-profile-badge">Connected</span>
+                                </div>
+                            </div>
+                            <div class="modal-actions button-group">
+                                <button class="cancel-button" @click="closeProfileModal">Cancel</button>
+                                <button class="save-button" :disabled="profileSaving" @click="saveProfileSelection">
+                                    {{ profileSaving ? 'Saving...' : 'Save Connection' }}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -617,6 +746,26 @@
 
                                 <!-- Sidebar -->
                                 <div class="about-sidebar">
+                                    
+                                    <!-- Archive Banner -->
+                                    <div v-if="interview?.is_archived" class="archive-banner" id="archive-banner">
+                                        <div class="archive-message">
+                                            <svg class="archive-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="21 8 21 21 3 21 3 8"></polyline>
+                                                <rect x="1" y="3" width="22" height="5"></rect>
+                                                <line x1="10" y1="12" x2="14" y2="12"></line>
+                                            </svg>
+                                            This interview is archived.
+                                        </div>
+                                        <button type="button" class="restore-btn action-btn" @click="handleRestore" :disabled="saving">
+                                            <svg class="action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                                                <path d="M3 3v5h5"></path>
+                                            </svg>
+                                            {{ saving ? 'Restoring...' : 'Restore' }}
+                                        </button>
+                                    </div>
+
                                     <!-- Milestones Card -->
                                     <div class="sidebar-card">
                                         <div class="sidebar-header">
@@ -636,13 +785,34 @@
                                             <div class="divider"></div>
                                             
                                             <div class="view-actions">
-                                                <button class="archive-btn action-btn">
+                                                <!-- Archive Button (shown when not archived) -->
+                                                <button v-if="!interview?.is_archived" class="archive-btn action-btn" @click="handleArchive" :disabled="saving">
                                                     <svg class="action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <polyline points="21 8 21 21 3 21 3 8"></polyline>
                                                         <rect x="1" y="3" width="22" height="5"></rect>
                                                         <line x1="10" y1="12" x2="14" y2="12"></line>
                                                     </svg>
-                                                    Archive
+                                                    {{ saving ? 'Archiving...' : 'Archive' }}
+                                                </button>
+                                                
+                                                <!-- Restore Button (shown when archived) -->
+                                                <button v-if="interview?.is_archived" class="restore-btn action-btn" @click="handleRestore" :disabled="saving">
+                                                    <svg class="action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                                                        <path d="M3 3v5h5"></path>
+                                                    </svg>
+                                                    {{ saving ? 'Restoring...' : 'Restore' }}
+                                                </button>
+                                                
+                                                <!-- Delete Button (only shown when archived) -->
+                                                <button v-if="interview?.is_archived" class="action-btn open-delete-modal" @click="showDeleteModal = true">
+                                                    <svg class="action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                                                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                                                    </svg>
+                                                    Delete
                                                 </button>
                                             </div>
                                         </div>
@@ -654,24 +824,76 @@
                                             <h3 class="sidebar-title">Important Dates</h3>
                                         </div>
                                         <div class="sidebar-content">
-                                            <div class="date-item">
-                                                <div class="frm_no_entries">
-                                                    <div class="date-item">
-                                                        <i class="fas fa-calendar-plus"></i>
-                                                        <span class="custom-modal-button" @click="openDateModal('record')">
-                                                            {{ interview?.record_date ? formatDate(interview.record_date) : 'Add Record Date' }}
-                                                        </span>
+                                            <div class="date-wrapper" @click="openDateModal('record')" style="cursor: pointer; padding: 8px 0;">
+                                                <div class="date-content" style="padding: 0;">
+                                                    <svg class="date-icon" style="color: #64748b;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                                                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                                                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                                                    </svg>
+                                                    <div class="date-info" style="margin-right: 8px;">
+                                                        <div class="date-label" :style="{ color: interview?.record_date ? '#0ea5e9' : '#64748b' }">Record Date</div>
+                                                        <div class="date-value" :style="{ color: interview?.record_date ? '#334155' : '#94a3b8', fontStyle: interview?.record_date ? 'normal' : 'italic' }">
+                                                            {{ interview?.record_date ? formatDate(interview.record_date) : 'Not set' }}
+                                                        </div>
                                                     </div>
                                                 </div>
+                                                <div class="edit-button-container">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                    </svg>
+                                                </div>
                                             </div>
-                                            <div class="date-item">
-                                                <div class="frm_no_entries">
-                                                    <div class="date-item">
-                                                        <i class="fas fa-calendar-check"></i>
-                                                        <span class="custom-modal-button" @click="openDateModal('air')">
-                                                            {{ interview?.air_date ? formatDate(interview.air_date) : 'Add Air Date' }}
-                                                        </span>
+                                            
+                                            <div class="date-wrapper" @click="openDateModal('air')" style="cursor: pointer; padding: 8px 0;">
+                                                <div class="date-content" style="padding: 0;">
+                                                    <svg class="date-icon" style="color: #64748b;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                                                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                                                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                                                        <polyline points="20 7 12 15 8 11"></polyline>
+                                                    </svg>
+                                                    <div class="date-info" style="margin-right: 8px;">
+                                                        <div class="date-label" :style="{ color: interview?.air_date ? '#0ea5e9' : '#64748b' }">Air Date</div>
+                                                        <div class="date-value" :style="{ color: interview?.air_date ? '#334155' : '#94a3b8', fontStyle: interview?.air_date ? 'normal' : 'italic' }">
+                                                            {{ interview?.air_date ? formatDate(interview.air_date) : 'Not set' }}
+                                                        </div>
                                                     </div>
+                                                </div>
+                                                <div class="edit-button-container">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="date-wrapper" @click="openDateModal('promotion')" style="cursor: pointer; padding: 8px 0;">
+                                                <div class="date-content" style="padding: 0;">
+                                                    <svg class="date-icon" style="color: #64748b;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                                                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                                                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                                                        <path d="M8 14h.01"></path>
+                                                        <path d="M12 14h.01"></path>
+                                                        <path d="M16 14h.01"></path>
+                                                    </svg>
+                                                    <div class="date-info" style="margin-right: 8px;">
+                                                        <div class="date-label" :style="{ color: interview?.promotion_date ? '#0ea5e9' : '#64748b' }">Promotion Date(s)</div>
+                                                        <div class="date-value" :style="{ color: interview?.promotion_date ? '#334155' : '#94a3b8', fontStyle: interview?.promotion_date ? 'normal' : 'italic' }">
+                                                            {{ interview?.promotion_date ? formatDate(interview.promotion_date) : 'Not set' }}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="edit-button-container">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                    </svg>
                                                 </div>
                                             </div>
                                         </div>
@@ -1265,6 +1487,37 @@
                     </div>
                 </div>
 
+                <!-- Date Modal -->
+                <div id="dateModal" class="custom-modal" :class="{ active: showDateModal }">
+                    <div class="custom-modal-content">
+                        <div class="custom-modal-header">
+                            <h2 id="modal-title">
+                                {{ dateModalType === 'record' ? 'Set Record Date' : 
+                                   dateModalType === 'air' ? 'Set Air Date' : 
+                                   'Set Promotion Date(s)' }}
+                            </h2>
+                            <span class="custom-modal-close" @click="closeDateModal">&times;</span>
+                        </div>
+                        <div class="custom-modal-body">
+                            <p style="margin-bottom: 12px;">
+                                {{ dateModalType === 'record' ? 'When will this interview be recorded?' : 
+                                   dateModalType === 'air' ? 'When will this episode air?' :
+                                   'When will this episode be promoted?' }}
+                            </p>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500;">Date</label>
+                                <input v-model="dateModalValue" type="date" class="field-input">
+                            </div>
+                            <div class="custom-modal-actions">
+                                <button type="button" class="cancel-button" @click="closeDateModal">Cancel</button>
+                                <button type="button" class="confirm-button" style="background-color: #0ea5e9;" @click="saveDateModal" :disabled="!dateModalValue">
+                                    {{ dateModalValue && (dateModalType === 'record' ? interview?.record_date : dateModalType === 'air' ? interview?.air_date : interview?.promotion_date) ? 'Update Date' : 'Set Date' }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Delete Modal -->
                 <div id="deleteModal" class="custom-modal delete-modal" :class="{ active: showDeleteModal }">
                     <div class="custom-modal-content small">
@@ -1324,6 +1577,22 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Toast Notification -->
+                <transition name="toast">
+                    <div v-if="showToast" class="toast-notification" :class="toastType">
+                        <svg v-if="toastType === 'success'" class="toast-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <svg v-else class="toast-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <span class="toast-message">{{ toastMessage }}</span>
+                    </div>
+                </transition>
             </div>
         `,
         
@@ -1334,11 +1603,42 @@
             const showTaskModal = ref(false);
             const showNoteModal = ref(false);
             const showDeleteModal = ref(false);
+            const showProfileModal = ref(false);
             const showDateModal = ref(false);
+            const dateModalType = ref(''); // 'record' or 'air'
+            const dateModalValue = ref('');
+            
+            // Toast notification state
+            const toastMessage = ref('');
+            const toastType = ref('success'); // 'success' or 'error'
+            const showToast = ref(false);
+            
+            // Toast notification methods
+            const showSuccessMessage = (message) => {
+                toastMessage.value = message;
+                toastType.value = 'success';
+                showToast.value = true;
+                setTimeout(() => {
+                    showToast.value = false;
+                }, 3000);
+            };
+            
+            const showErrorMessage = (message) => {
+                toastMessage.value = message;
+                toastType.value = 'error';
+                showToast.value = true;
+                setTimeout(() => {
+                    showToast.value = false;
+                }, 3000);
+            };
 
             // Description state
             const isDescriptionExpanded = ref(false);
             const DESCRIPTION_PREVIEW_LENGTH = 320;
+
+            // Profile state
+            const selectedProfileId = ref('');
+            const profileSaving = ref(false);
             
             // Form data
             const newTask = reactive({
@@ -1374,12 +1674,20 @@
                 { id: 'potential', label: 'Potential' },
                 { id: 'active', label: 'Active' },
                 { id: 'aired', label: 'Aired' },
+                { id: 'convert', label: 'Convert' },
             ];
             
             // Computed
             const initials = computed(() => {
                 const name = store.interview?.podcast_name || '';
                 return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+            });
+
+            const availableProfiles = computed(() => store.guestProfiles || []);
+
+            const selectedProfile = computed(() => {
+                if (!selectedProfileId.value) return null;
+                return store.guestProfiles.find(p => p.id === parseInt(selectedProfileId.value));
             });
 
             const stripHtml = (text) => {
@@ -1461,6 +1769,11 @@
                 return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
             };
             
+            const getProfileInitials = (name) => {
+                if (!name) return '?';
+                return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+            };
+            
             const handleImageError = (e) => {
                 e.target.style.display = 'none';
             };
@@ -1474,7 +1787,47 @@
             };
             
             const setStatus = async (status) => {
-                await store.updateInterview('status', status);
+                try {
+                    await store.updateInterview('status', status);
+                    // Show success feedback
+                    showSuccessMessage('Status updated successfully');
+                } catch (err) {
+                    console.error('Failed to update status:', err);
+                    showErrorMessage('Failed to update status');
+                }
+            };
+
+            const openProfileModal = async () => {
+                selectedProfileId.value = store.interview?.guest_profile_id || '';
+                showProfileModal.value = true;
+                await store.loadGuestProfiles();
+            };
+
+            const closeProfileModal = () => {
+                showProfileModal.value = false;
+            };
+
+            const saveProfileSelection = async () => {
+                profileSaving.value = true;
+                try {
+                    const profileId = selectedProfileId.value ? parseInt(selectedProfileId.value) : 0;
+                    await store.updateInterview('guest_profile_id', profileId);
+
+                    const selectedProfile = store.guestProfiles.find(p => p.id === profileId);
+                    if (store.interview) {
+                        store.interview.guest_profile_id = profileId;
+                        store.interview.guest_profile_name = selectedProfile ? selectedProfile.name : '';
+                        store.interview.guest_profile_link = selectedProfile ? selectedProfile.permalink : '';
+                    }
+
+                    showSuccessMessage('Profile connected successfully');
+                    closeProfileModal();
+                } catch (err) {
+                    console.error('Failed to save profile selection:', err);
+                    showErrorMessage('Failed to save profile connection');
+                } finally {
+                    profileSaving.value = false;
+                }
             };
             
             const openDateModal = (type) => {
@@ -1578,20 +1931,27 @@
             
             const saveTask = async () => {
                 if (!newTask.title) return;
-                if (newTask.id) {
-                    // Update existing task
-                    await store.updateTask(newTask.id, {
-                        title: newTask.title,
-                        description: newTask.description,
-                        task_type: newTask.task_type,
-                        priority: newTask.priority,
-                        due_date: newTask.due_date
-                    });
-                } else {
-                    // Create new task
-                    await store.createTask({ ...newTask });
+                try {
+                    if (newTask.id) {
+                        // Update existing task
+                        await store.updateTask(newTask.id, {
+                            title: newTask.title,
+                            description: newTask.description,
+                            task_type: newTask.task_type,
+                            priority: newTask.priority,
+                            due_date: newTask.due_date
+                        });
+                        showSuccessMessage('Task updated successfully');
+                    } else {
+                        // Create new task
+                        await store.createTask({ ...newTask });
+                        showSuccessMessage('Task created successfully');
+                    }
+                    closeTaskModal();
+                } catch (err) {
+                    console.error('Failed to save task:', err);
+                    showErrorMessage('Failed to save task');
                 }
-                closeTaskModal();
             };
             
             const createTask = async () => {
@@ -1601,38 +1961,97 @@
             };
             
             const toggleTask = async (taskId) => {
-                await store.toggleTask(taskId);
+                try {
+                    await store.toggleTask(taskId);
+                    showSuccessMessage('Task updated');
+                } catch (err) {
+                    console.error('Failed to toggle task:', err);
+                    showErrorMessage('Failed to update task');
+                }
             };
             
             const deleteTask = async (taskId) => {
                 if (confirm('Delete this task?')) {
-                    await store.deleteTask(taskId);
+                    try {
+                        await store.deleteTask(taskId);
+                        showSuccessMessage('Task deleted successfully');
+                    } catch (err) {
+                        console.error('Failed to delete task:', err);
+                        showErrorMessage('Failed to delete task');
+                    }
                 }
             };
             
             const createNote = async () => {
                 if (!newNote.content) return;
-                await store.createNote({ ...newNote });
-                showNoteModal.value = false;
-                // Reset form
-                newNote.title = '';
-                newNote.content = '';
-                newNote.note_type = 'general';
+                try {
+                    await store.createNote({ ...newNote });
+                    showSuccessMessage('Note created successfully');
+                    showNoteModal.value = false;
+                    // Reset form
+                    newNote.title = '';
+                    newNote.content = '';
+                    newNote.note_type = 'general';
+                } catch (err) {
+                    console.error('Failed to create note:', err);
+                    showErrorMessage('Failed to create note');
+                }
             };
             
             const toggleNotePin = async (noteId) => {
-                await store.toggleNotePin(noteId);
+                try {
+                    await store.toggleNotePin(noteId);
+                    showSuccessMessage('Note updated');
+                } catch (err) {
+                    console.error('Failed to toggle note pin:', err);
+                    showErrorMessage('Failed to update note');
+                }
             };
             
             const deleteNote = async (noteId) => {
                 if (confirm('Delete this note?')) {
-                    await store.deleteNote(noteId);
+                    try {
+                        await store.deleteNote(noteId);
+                        showSuccessMessage('Note deleted successfully');
+                    } catch (err) {
+                        console.error('Failed to delete note:', err);
+                        showErrorMessage('Failed to delete note');
+                    }
+                }
+            };
+            
+            const handleArchive = async () => {
+                if (!confirm('Are you sure you want to archive this interview? You can restore it later.')) {
+                    return;
+                }
+                try {
+                    await store.archiveInterview();
+                    showSuccessMessage('Interview archived successfully');
+                } catch (err) {
+                    console.error('Failed to archive interview:', err);
+                    showErrorMessage('Failed to archive interview');
+                }
+            };
+
+            const handleRestore = async () => {
+                try {
+                    await store.restoreInterview();
+                    showSuccessMessage('Interview restored successfully');
+                } catch (err) {
+                    console.error('Failed to restore interview:', err);
+                    showErrorMessage('Failed to restore interview');
                 }
             };
             
             const confirmDelete = async () => {
-                // TODO: Implement delete
-                showDeleteModal.value = false;
+                try {
+                    await store.deleteInterview();
+                    // The store method redirects to board after deletion
+                } catch (err) {
+                    console.error('Failed to delete interview:', err);
+                    showErrorMessage('Failed to delete interview');
+                    showDeleteModal.value = false;
+                }
             };
             
             // Task table helper methods
@@ -1708,12 +2127,20 @@
                 episodesError: computed(() => store.episodesError),
                 activeTab: computed(() => store.activeTab),
                 boardUrl: computed(() => store.config.boardUrl),
-                
+                profilesLoading: computed(() => store.profilesLoading),
+                profilesError: computed(() => store.profilesError),
+
                 // Local state
                 showTaskModal,
                 showNoteModal,
                 showDeleteModal,
+                showProfileModal,
                 showDateModal,
+                dateModalType,
+                dateModalValue,
+                toastMessage,
+                toastType,
+                showToast,
                 isDescriptionExpanded,
                 newTask,
                 newNote,
@@ -1722,6 +2149,11 @@
                 eventError,
                 milestones,
                 initials,
+                availableProfiles,
+                selectedProfile,
+                selectedProfileId,
+                profileSaving,
+                getProfileInitials,
                 descriptionContent,
                 showDescriptionToggle,
 
@@ -1741,6 +2173,10 @@
                 openDateModal,
                 closeDateModal,
                 saveEvent,
+                saveDateModal,
+                openProfileModal,
+                closeProfileModal,
+                saveProfileSelection,
                 createTask,
                 saveTask,
                 closeTaskModal,
@@ -1750,6 +2186,8 @@
                 createNote,
                 toggleNotePin,
                 deleteNote,
+                handleArchive,
+                handleRestore,
                 confirmDelete,
                 
                 // Episode methods
