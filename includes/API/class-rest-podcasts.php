@@ -720,6 +720,8 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
             '_debug_rss' => [
                 'artwork_url' => $rss_data['artwork_url'] ?? null,
                 'podcast_name' => $rss_data['podcast_name'] ?? null,
+                'categories' => $rss_data['categories'] ?? [],
+                'category' => $rss_data['category'] ?? null,
             ],
         ]);
     }

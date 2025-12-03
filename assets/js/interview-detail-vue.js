@@ -109,6 +109,12 @@
                 
                 try {
                     const response = await this.api(`appearances/${this.config.interviewId}`);
+                    
+                    // DEBUG: Log initial interview load
+                    console.log('Initial interview load:', response);
+                    console.log('Categories from initial load:', response.categories);
+                    console.log('Category string from initial load:', response.category);
+                    
                     this.interview = response;
                     
                     await Promise.all([
@@ -428,6 +434,11 @@
                     }
 
                     const data = await response.json();
+                    
+                    // DEBUG: Log what refresh returns
+                    console.log('Refresh metadata response:', data);
+                    console.log('Podcast data:', data.podcast);
+                    console.log('Category field:', data.podcast?.category);
                     
                     // Update interview with refreshed podcast data
                     if (data.podcast) {

@@ -78,6 +78,10 @@ class PIT_RSS_Parser {
 
         // Get iTunes namespace
         $itunes = $channel->children('http://www.itunes.com/dtds/podcast-1.0.dtd');
+        
+        // DEBUG: Log iTunes namespace parsing
+        error_log('PIT RSS Parser - iTunes namespace children count: ' . count($itunes));
+        error_log('PIT RSS Parser - iTunes category isset: ' . (isset($itunes->category) ? 'YES' : 'NO'));
 
         $data = [
             'podcast_name' => (string) $channel->title,
@@ -113,9 +117,13 @@ class PIT_RSS_Parser {
 
         // Extract all categories
         if (isset($itunes->category)) {
+            error_log('PIT RSS Parser - Found itunes:category element(s)');
             foreach ($itunes->category as $cat) {
+                error_log('PIT RSS Parser - Category element: ' . print_r($cat, true));
                 if (isset($cat['text'])) {
-                    $data['categories'][] = (string) $cat['text'];
+                    $cat_text = (string) $cat['text'];
+                    error_log('PIT RSS Parser - Adding category: ' . $cat_text);
+                    $data['categories'][] = $cat_text;
                     // Also get subcategories
                     if (isset($cat->category)) {
                         foreach ($cat->category as $subcat) {
