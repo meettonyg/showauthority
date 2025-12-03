@@ -110,30 +110,43 @@ class PIT_RSS_Parser {
             $data['email'] = (string) $itunes->owner->email;
         }
 
-        // Extract category (single for backwards compatibility)
+        // Extract categories using attributes() method for proper namespace handling
+        // The 'text' attribute is NOT namespaced, so we access it via attributes()
         if (isset($itunes->category)) {
-            $data['category'] = (string) $itunes->category['text'];
-        }
-
-        // Extract all categories
-        if (isset($itunes->category)) {
-            error_log('PIT RSS Parser - Found itunes:category element(s)');
+            error_log('PIT RSS Parser - Found itunes:category element(s), count: ' . count($itunes->category));
+            
+            // Get first category for backwards compatibility
+            $first_cat_attrs = $itunes->category->attributes();
+            if (isset($first_cat_attrs['text'])) {
+                $data['category'] = (string) $first_cat_attrs['text'];
+                error_log('PIT RSS Parser - First category: ' . $data['category']);
+            }
+            
+            // Extract all categories
             foreach ($itunes->category as $cat) {
-                error_log('PIT RSS Parser - Category element: ' . print_r($cat, true));
-                if (isset($cat['text'])) {
-                    $cat_text = (string) $cat['text'];
+                $cat_attrs = $cat->attributes();
+                
+                if (isset($cat_attrs['text'])) {
+                    $cat_text = (string) $cat_attrs['text'];
                     error_log('PIT RSS Parser - Adding category: ' . $cat_text);
                     $data['categories'][] = $cat_text;
-                    // Also get subcategories
-                    if (isset($cat->category)) {
-                        foreach ($cat->category as $subcat) {
-                            if (isset($subcat['text'])) {
-                                $data['categories'][] = (string) $subcat['text'];
+                    
+                    // Also get subcategories (nested itunes:category elements)
+                    $sub_itunes = $cat->children('http://www.itunes.com/dtds/podcast-1.0.dtd');
+                    if (isset($sub_itunes->category)) {
+                        foreach ($sub_itunes->category as $subcat) {
+                            $subcat_attrs = $subcat->attributes();
+                            if (isset($subcat_attrs['text'])) {
+                                $subcat_text = (string) $subcat_attrs['text'];
+                                error_log('PIT RSS Parser - Adding subcategory: ' . $subcat_text);
+                                $data['categories'][] = $subcat_text;
                             }
                         }
                     }
                 }
             }
+        } else {
+            error_log('PIT RSS Parser - No itunes:category found');
         }
 
         // Extract explicit rating

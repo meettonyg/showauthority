@@ -578,6 +578,7 @@
                                 <h1 class="podcast-title">{{ interview?.podcast_name || 'Unknown Podcast' }}</h1>
                                 <div class="priority-badge" :class="interview?.priority || 'medium'">
                                     <span class="priority-indicator"></span>
+                                    {{ capitalize(interview?.priority || 'medium') }}
                                 </div>
                             </div>
                             

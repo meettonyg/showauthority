@@ -1656,25 +1656,45 @@ a.show-detail-link:hover {
 .priority-badge {
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
+  gap: 6px;
+  padding: 4px 10px;
   border-radius: 12px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
+}
+
+.priority-badge .priority-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .priority-badge.high {
-  background-color: #fee2e2;
-  color: #ef4444;
+  background-color: rgba(229, 62, 62, 0.1);
+  color: #E53E3E;
+}
+
+.priority-badge.high .priority-indicator {
+  background-color: #E53E3E;
 }
 
 .priority-badge.medium {
-  background-color: #fef9c3;
-  color: #ca8a04;
+  background-color: rgba(237, 137, 54, 0.1);
+  color: #ED8936;
+}
+
+.priority-badge.medium .priority-indicator {
+  background-color: #ED8936;
 }
 
 .priority-badge.low {
-  background-color: #dcfce7;
-  color: #16a34a;
+  background-color: rgba(43, 122, 76, 0.1);
+  color: #2B7A4C;
+}
+
+.priority-badge.low .priority-indicator {
+  background-color: #2B7A4C;
 }
 
 /* Tag Container */
