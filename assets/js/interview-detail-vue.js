@@ -533,16 +533,6 @@
                     Back to Interviews
                 </a>
 
-                <!-- Archive Banner -->
-                <div v-if="interview?.is_archived" class="archive-banner" style="background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; color: #92400e;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="21 8 21 21 3 21 3 8"></polyline>
-                        <rect x="1" y="3" width="22" height="5"></rect>
-                        <line x1="10" y1="12" x2="14" y2="12"></line>
-                    </svg>
-                    <span style="font-weight: 500;">This interview is archived.</span>
-                </div>
-
                 <!-- Loading State -->
                 <div v-if="loading" class="pit-loading">
                     <div class="pit-loading-spinner"></div>
@@ -756,6 +746,26 @@
 
                                 <!-- Sidebar -->
                                 <div class="about-sidebar">
+                                    
+                                    <!-- Archive Banner -->
+                                    <div v-if="interview?.is_archived" class="archive-banner" id="archive-banner">
+                                        <div class="archive-message">
+                                            <svg class="archive-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="21 8 21 21 3 21 3 8"></polyline>
+                                                <rect x="1" y="3" width="22" height="5"></rect>
+                                                <line x1="10" y1="12" x2="14" y2="12"></line>
+                                            </svg>
+                                            This interview is archived.
+                                        </div>
+                                        <button type="button" class="restore-btn action-btn" @click="handleRestore" :disabled="saving">
+                                            <svg class="action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                                                <path d="M3 3v5h5"></path>
+                                            </svg>
+                                            {{ saving ? 'Restoring...' : 'Restore' }}
+                                        </button>
+                                    </div>
+
                                     <!-- Milestones Card -->
                                     <div class="sidebar-card">
                                         <div class="sidebar-header">
@@ -786,7 +796,7 @@
                                                 </button>
                                                 
                                                 <!-- Restore Button (shown when archived) -->
-                                                <button v-if="interview?.is_archived" class="restore-btn action-btn" @click="handleRestore" :disabled="saving" style="background-color: #dcfce7; color: #166534; border-color: #86efac;">
+                                                <button v-if="interview?.is_archived" class="restore-btn action-btn" @click="handleRestore" :disabled="saving">
                                                     <svg class="action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
                                                         <path d="M3 3v5h5"></path>
@@ -795,7 +805,7 @@
                                                 </button>
                                                 
                                                 <!-- Delete Button (only shown when archived) -->
-                                                <button v-if="interview?.is_archived" class="action-btn" @click="showDeleteModal = true" style="background-color: #fee2e2; color: #991b1b; border-color: #fca5a5;">
+                                                <button v-if="interview?.is_archived" class="action-btn open-delete-modal" @click="showDeleteModal = true">
                                                     <svg class="action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <polyline points="3 6 5 6 21 6"></polyline>
                                                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>

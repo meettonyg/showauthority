@@ -1746,6 +1746,86 @@ a.show-detail-link:hover {
   text-align: center;
 }
 
+/* ==========================================
+   Archive Banner CSS
+   ========================================== */
+
+/* Base Archive Banner - Works anywhere */
+.archive-banner {
+  background-color: #f8fafc;
+  padding: 12px 16px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.archive-banner .archive-message {
+  display: flex;
+  align-items: center;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.archive-banner .archive-icon {
+  flex-shrink: 0;
+  margin-right: 8px;
+  color: #94a3b8;
+  width: 16px;
+  height: 16px;
+}
+
+.archive-banner .restore-btn {
+  background-color: #dcfce7;
+  color: #16a34a;
+  border: 1px solid #86efac;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+/* Specific override for restore button in archive banner */
+.archive-banner .restore-btn.action-btn {
+  width: auto;
+}
+
+.archive-banner .restore-btn:hover {
+  background-color: #bbf7d0;
+  border-color: #4ade80;
+}
+
+.archive-banner .action-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Narrow Layout (Sidebar) - Vertical Stack */
+/* Only apply vertical layout when explicitly needed with .narrow class */
+.archive-banner.narrow {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 12px;
+}
+
+.archive-banner.narrow .restore-btn {
+  width: 100%;
+  justify-content: center;
+}
+
 /* Archive/Restore/Delete Actions */
 .view-actions {
   display: flex !important;
@@ -1779,14 +1859,15 @@ a.show-detail-link:hover {
   background-color: #e2e8f0;
 }
 
-.restore-btn {
+.action-btn.restore-btn {
   background-color: #dcfce7;
   color: #16a34a;
   border-color: #86efac;
 }
 
-.restore-btn:hover {
+.action-btn.restore-btn:hover {
   background-color: #bbf7d0;
+  border-color: #4ade80;
 }
 
 .open-delete-modal {
@@ -1801,6 +1882,145 @@ a.show-detail-link:hover {
 
 .action-btn .action-icon {
   margin-right: 8px;
+}
+
+/* Show/hide based on archived state */
+body.archived .sidebar-card .view-actions .archive-btn {
+  display: none !important;
+}
+
+body.archived .sidebar-card .view-actions .restore-btn {
+  display: flex !important;
+}
+
+body:not(.archived) .sidebar-card .view-actions .archive-btn {
+  display: flex !important;
+}
+
+/* Ensure view-actions is visible */
+.sidebar-card .sidebar-content .view-actions {
+  display: flex !important;
+}
+
+/* Force buttons to look like buttons */
+.sidebar-card .action-btn, 
+.archive-banner .restore-btn {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  text-decoration: none;
+  text-align: center;
+  line-height: normal;
+}
+
+/* ==========================================
+   Delete Confirmation Modal
+   ========================================== */
+body .gpf-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+body .gpf-modal-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+body .gpf-modal-overlay .gpf-modal {
+  background-color: white;
+  border-radius: 8px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  transform: scale(0.95);
+  transition: transform 0.3s ease;
+}
+
+body .gpf-modal-overlay.active .gpf-modal {
+  transform: scale(1);
+}
+
+body .gpf-modal-overlay .gpf-modal-header {
+  padding: 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+body .gpf-modal-overlay .gpf-modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+body .gpf-modal-overlay .gpf-modal-body {
+  padding: 16px;
+}
+
+body .gpf-modal-overlay .gpf-modal-message {
+  font-size: 14px;
+  color: #475569;
+  margin: 0;
+}
+
+body .gpf-modal-overlay .gpf-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+body .gpf-modal-overlay .gpf-modal-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+}
+
+body .gpf-modal-overlay .gpf-modal-btn-cancel {
+  background-color: #f1f5f9;
+  color: #64748b;
+}
+
+body .gpf-modal-overlay .gpf-modal-btn-cancel:hover {
+  background-color: #e2e8f0;
+}
+
+body .gpf-modal-overlay .gpf-modal-btn-confirm {
+  background-color: #ef4444;
+  color: white;
+}
+
+body .gpf-modal-overlay .gpf-modal-btn-confirm:hover {
+  background-color: #dc2626;
+}
+
+/* Loading Indicator */
+body #gpf-loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.7);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Convert Milestone */
@@ -2071,6 +2291,17 @@ button.cancel-button.custom-modal-close,
 
   .show-quick-info {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Archive banner responsive */
+  .archive-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .archive-banner .restore-btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .custom-modal-content {
