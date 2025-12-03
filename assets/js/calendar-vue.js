@@ -277,6 +277,12 @@
                             </svg>
                             Add Event
                         </button>
+                        <button class="sync-settings-btn" @click="showSyncModal = true" :class="{ connected: syncStatus.google?.connected }">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"></path>
+                            </svg>
+                            {{ syncStatus.google?.connected ? 'Synced' : 'Sync' }}
+                        </button>
                     </div>
                 </div>
 
@@ -511,6 +517,115 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Sync Settings Modal -->
+                <div class="calendar-modal sync-modal" :class="{ active: showSyncModal }">
+                    <div class="calendar-modal-content">
+                        <div class="calendar-modal-header">
+                            <h2>Calendar Sync</h2>
+                            <button class="modal-close" @click="showSyncModal = false">&times;</button>
+                        </div>
+                        <div class="calendar-modal-body">
+                            <!-- Google Calendar Section -->
+                            <div class="sync-provider">
+                                <div class="sync-provider-header">
+                                    <div class="sync-provider-icon google">
+                                        <svg width="20" height="20" viewBox="0 0 24 24">
+                                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                                        </svg>
+                                    </div>
+                                    <div class="sync-provider-info">
+                                        <h3>Google Calendar</h3>
+                                        <p v-if="syncStatus.google?.connected">
+                                            Connected as {{ syncStatus.google.email }}
+                                        </p>
+                                        <p v-else-if="!syncStatus.google?.configured">
+                                            Not configured by administrator
+                                        </p>
+                                        <p v-else>Not connected</p>
+                                    </div>
+                                    <div class="sync-provider-action">
+                                        <button
+                                            v-if="syncStatus.google?.connected"
+                                            class="btn-disconnect"
+                                            @click="disconnectGoogle"
+                                            :disabled="syncLoading">
+                                            Disconnect
+                                        </button>
+                                        <button
+                                            v-else-if="syncStatus.google?.configured"
+                                            class="btn-connect"
+                                            @click="connectGoogle"
+                                            :disabled="syncLoading">
+                                            Connect
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Connected Settings -->
+                                <div v-if="syncStatus.google?.connected" class="sync-settings">
+                                    <div v-if="syncStatus.google.sync_error" class="sync-error">
+                                        {{ syncStatus.google.sync_error }}
+                                    </div>
+
+                                    <div class="sync-setting-row">
+                                        <label>Calendar</label>
+                                        <select v-model="selectedCalendarId" class="form-input" @change="selectCalendar">
+                                            <option value="">Select a calendar...</option>
+                                            <option v-for="cal in googleCalendars" :key="cal.id" :value="cal.id">
+                                                {{ cal.name }} {{ cal.primary ? '(Primary)' : '' }}
+                                            </option>
+                                        </select>
+                                    </div>
+
+                                    <div class="sync-setting-row">
+                                        <label>Sync Direction</label>
+                                        <select v-model="syncDirection" class="form-input" @change="updateSyncSettings">
+                                            <option value="both">Two-way sync</option>
+                                            <option value="push">Push to Google only</option>
+                                            <option value="pull">Pull from Google only</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="sync-setting-row toggle">
+                                        <label>
+                                            <input type="checkbox" v-model="syncEnabled" @change="updateSyncSettings">
+                                            <span>Enable automatic sync</span>
+                                        </label>
+                                    </div>
+
+                                    <div class="sync-actions">
+                                        <button class="btn-sync" @click="triggerSync" :disabled="syncLoading || !syncStatus.google.calendar_id">
+                                            {{ syncLoading ? 'Syncing...' : 'Sync Now' }}
+                                        </button>
+                                        <span v-if="syncStatus.google.last_sync_at" class="last-sync">
+                                            Last synced: {{ formatLastSync(syncStatus.google.last_sync_at) }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Outlook Section (Coming Soon) -->
+                            <div class="sync-provider disabled">
+                                <div class="sync-provider-header">
+                                    <div class="sync-provider-icon outlook">
+                                        <svg width="20" height="20" viewBox="0 0 24 24">
+                                            <path fill="#0078D4" d="M24 7.387v10.478c0 .23-.08.424-.238.576-.158.152-.352.228-.582.228h-8.547v-6.036l1.387 1.004c.07.047.15.07.238.07.089 0 .168-.023.238-.07l6.768-4.907c.094-.07.165-.158.211-.262.047-.105.07-.211.07-.317v-.457c0-.212-.082-.388-.246-.527-.164-.14-.359-.175-.586-.106l-7.843 5.7-.879-.639V6.316h8.547c.23 0 .424.076.582.228.158.152.238.346.238.576v.267h-.157z"/>
+                                            <path fill="#0078D4" d="M7.477 19.59c-2.063 0-3.809-.723-5.238-2.168C.813 15.977.098 14.195.098 12.078c0-2.118.715-3.9 2.145-5.348 1.43-1.449 3.176-2.173 5.238-2.173 2.063 0 3.809.724 5.238 2.173 1.43 1.448 2.145 3.23 2.145 5.348 0 2.117-.715 3.899-2.145 5.344-1.43 1.445-3.176 2.168-5.238 2.168zm0-2.46c1.266 0 2.34-.465 3.223-1.395.883-.93 1.324-2.106 1.324-3.528s-.441-2.598-1.324-3.528c-.883-.93-1.957-1.395-3.223-1.395s-2.34.465-3.223 1.395c-.883.93-1.324 2.106-1.324 3.528s.441 2.598 1.324 3.528c.883.93 1.957 1.395 3.223 1.395z"/>
+                                        </svg>
+                                    </div>
+                                    <div class="sync-provider-info">
+                                        <h3>Microsoft Outlook</h3>
+                                        <p class="coming-soon">Coming soon</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         `,
 
@@ -527,11 +642,20 @@
             const showEventModal = ref(false);
             const showDetailModal = ref(false);
             const showDeleteModal = ref(false);
+            const showSyncModal = ref(false);
             const isEditing = ref(false);
             const saving = ref(false);
             const deleting = ref(false);
             const modalError = ref(null);
             const eventToDelete = ref(null);
+
+            // Sync state
+            const syncStatus = ref({ google: null, outlook: null });
+            const syncLoading = ref(false);
+            const googleCalendars = ref([]);
+            const selectedCalendarId = ref('');
+            const syncDirection = ref('both');
+            const syncEnabled = ref(true);
 
             // Event form
             const eventForm = reactive({
@@ -850,10 +974,226 @@
                 }
             };
 
+            // ==========================================================================
+            // SYNC METHODS
+            // ==========================================================================
+
+            const fetchSyncStatus = async () => {
+                try {
+                    const response = await fetch(
+                        `${store.config.restUrl}calendar-sync/status`,
+                        {
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        syncStatus.value = data.data;
+
+                        // Update local state from server
+                        if (data.data.google) {
+                            selectedCalendarId.value = data.data.google.calendar_id || '';
+                            syncDirection.value = data.data.google.sync_direction || 'both';
+                            syncEnabled.value = data.data.google.sync_enabled ?? true;
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch sync status:', err);
+                }
+            };
+
+            const connectGoogle = async () => {
+                syncLoading.value = true;
+                try {
+                    const response = await fetch(
+                        `${store.config.restUrl}calendar-sync/google/auth`,
+                        {
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        // Redirect to Google OAuth
+                        window.location.href = data.data.auth_url;
+                    }
+                } catch (err) {
+                    console.error('Failed to get auth URL:', err);
+                } finally {
+                    syncLoading.value = false;
+                }
+            };
+
+            const disconnectGoogle = async () => {
+                if (!confirm('Are you sure you want to disconnect Google Calendar?')) {
+                    return;
+                }
+
+                syncLoading.value = true;
+                try {
+                    await fetch(
+                        `${store.config.restUrl}calendar-sync/google/disconnect`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    await fetchSyncStatus();
+                    googleCalendars.value = [];
+                } catch (err) {
+                    console.error('Failed to disconnect:', err);
+                } finally {
+                    syncLoading.value = false;
+                }
+            };
+
+            const loadGoogleCalendars = async () => {
+                try {
+                    const response = await fetch(
+                        `${store.config.restUrl}calendar-sync/google/calendars`,
+                        {
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        googleCalendars.value = data.data || [];
+                    }
+                } catch (err) {
+                    console.error('Failed to load calendars:', err);
+                }
+            };
+
+            const selectCalendar = async () => {
+                if (!selectedCalendarId.value) return;
+
+                const calendar = googleCalendars.value.find(c => c.id === selectedCalendarId.value);
+
+                syncLoading.value = true;
+                try {
+                    await fetch(
+                        `${store.config.restUrl}calendar-sync/google/select-calendar`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                            body: JSON.stringify({
+                                calendar_id: selectedCalendarId.value,
+                                calendar_name: calendar?.name || 'Calendar',
+                            }),
+                        }
+                    );
+
+                    await fetchSyncStatus();
+                } catch (err) {
+                    console.error('Failed to select calendar:', err);
+                } finally {
+                    syncLoading.value = false;
+                }
+            };
+
+            const updateSyncSettings = async () => {
+                try {
+                    await fetch(
+                        `${store.config.restUrl}calendar-sync/settings`,
+                        {
+                            method: 'PATCH',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                            body: JSON.stringify({
+                                sync_enabled: syncEnabled.value,
+                                sync_direction: syncDirection.value,
+                            }),
+                        }
+                    );
+                } catch (err) {
+                    console.error('Failed to update settings:', err);
+                }
+            };
+
+            const triggerSync = async () => {
+                syncLoading.value = true;
+                try {
+                    const response = await fetch(
+                        `${store.config.restUrl}calendar-sync/google/sync`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (response.ok) {
+                        await fetchSyncStatus();
+                        // Refresh events
+                        const today = new Date();
+                        const start = new Date(today.getFullYear(), today.getMonth(), 1);
+                        const end = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+                        await store.fetchEvents(
+                            start.toISOString().split('T')[0],
+                            end.toISOString().split('T')[0]
+                        );
+                    }
+                } catch (err) {
+                    console.error('Failed to sync:', err);
+                } finally {
+                    syncLoading.value = false;
+                }
+            };
+
+            const formatLastSync = (datetime) => {
+                if (!datetime) return 'Never';
+                const date = new Date(datetime);
+                const now = new Date();
+                const diffMs = now - date;
+                const diffMins = Math.floor(diffMs / 60000);
+
+                if (diffMins < 1) return 'Just now';
+                if (diffMins < 60) return `${diffMins} min ago`;
+
+                const diffHours = Math.floor(diffMins / 60);
+                if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+
+                return date.toLocaleDateString();
+            };
+
+            // Watch for sync modal to load calendars
+            watch(showSyncModal, async (isOpen) => {
+                if (isOpen && syncStatus.value.google?.connected && googleCalendars.value.length === 0) {
+                    await loadGoogleCalendars();
+                }
+            });
+
             // Lifecycle
             onMounted(() => {
                 if (typeof pitCalendarData !== 'undefined') {
                     store.initConfig(pitCalendarData);
+                }
+
+                // Fetch sync status
+                fetchSyncStatus();
+
+                // Check for OAuth callback messages
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('calendar_connected')) {
+                    // Clean up URL
+                    window.history.replaceState({}, document.title, window.location.pathname);
                 }
 
                 // Initial fetch
@@ -887,12 +1227,21 @@
                 showEventModal,
                 showDetailModal,
                 showDeleteModal,
+                showSyncModal,
                 isEditing,
                 saving,
                 deleting,
                 modalError,
                 eventToDelete,
                 eventForm,
+
+                // Sync state
+                syncStatus,
+                syncLoading,
+                googleCalendars,
+                selectedCalendarId,
+                syncDirection,
+                syncEnabled,
 
                 // Computed
                 loading,
@@ -918,6 +1267,14 @@
                 saveEvent,
                 confirmDeleteEvent,
                 deleteEvent,
+
+                // Sync methods
+                connectGoogle,
+                disconnectGoogle,
+                selectCalendar,
+                updateSyncSettings,
+                triggerSync,
+                formatLastSync,
             };
         },
     };

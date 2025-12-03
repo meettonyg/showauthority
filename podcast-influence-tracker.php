@@ -122,6 +122,13 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-tracker-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-detail-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-calendar-shortcode.php';
+
+        // GOOGLE CALENDAR SYNC (v3.3)
+        require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-connections-schema.php';
+        require_once PIT_PLUGIN_DIR . 'includes/integrations/class-google-calendar.php';
+        require_once PIT_PLUGIN_DIR . 'includes/integrations/class-calendar-sync-service.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-calendar-sync.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Jobs/class-calendar-sync-job.php';
     }
 
     private function init_hooks() {
@@ -163,6 +170,7 @@ class Podcast_Influence_Tracker {
         wp_clear_scheduled_hook('pit_process_jobs');
         wp_clear_scheduled_hook('pit_rate_limit_cleanup');
         wp_clear_scheduled_hook('pit_monthly_usage_reset');
+        PIT_Calendar_Sync_Job::deactivate();
         flush_rewrite_rules();
     }
 
@@ -183,6 +191,7 @@ class Podcast_Influence_Tracker {
         PIT_Interview_Tracker_Shortcode::init();
         PIT_Interview_Detail_Shortcode::init();
         PIT_Calendar_Shortcode::init();
+        PIT_Calendar_Sync_Job::init();
 
         add_action('pit_process_jobs', ['PIT_Job_Queue', 'process_next_job']);
         add_action('pit_rate_limit_cleanup', ['PIT_Rate_Limiter', 'cleanup']);
@@ -200,6 +209,7 @@ class Podcast_Influence_Tracker {
         PIT_REST_Appearances::register_routes();
         PIT_REST_Appearance_Tasks::register_routes();
         PIT_REST_Appearance_Notes::register_routes();
+        PIT_REST_Calendar_Sync::register_routes();
     }
 
     public function add_cron_schedules($schedules) {

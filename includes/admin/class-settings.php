@@ -32,6 +32,10 @@ class PIT_Settings {
         'rss_field_id' => '',
         'podcast_name_field_id' => '',
         'formidable_auto_sync' => true,
+
+        // Google Calendar Integration
+        'google_client_id' => '',
+        'google_client_secret' => '',
     ];
 
     /**
@@ -238,6 +242,20 @@ class PIT_Settings {
                 'label' => 'Notification Email',
                 'description' => 'Email address for notifications',
                 'default' => '',
+            ],
+            'google_client_id' => [
+                'type' => 'string',
+                'label' => 'Google Client ID',
+                'description' => 'OAuth 2.0 Client ID from Google Cloud Console (for Calendar sync)',
+                'required' => false,
+                'section' => 'calendar',
+            ],
+            'google_client_secret' => [
+                'type' => 'password',
+                'label' => 'Google Client Secret',
+                'description' => 'OAuth 2.0 Client Secret from Google Cloud Console',
+                'required' => false,
+                'section' => 'calendar',
             ],
         ];
     }

@@ -350,6 +350,11 @@ class PIT_REST_Calendar_Events {
 
         $event_id = $wpdb->insert_id;
 
+        // Sync to Google Calendar if connected
+        if (class_exists('PIT_Calendar_Sync_Service')) {
+            PIT_Calendar_Sync_Service::sync_event_to_google($event_id);
+        }
+
         // Fetch the created event
         $event = $wpdb->get_row($wpdb->prepare(
             "SELECT * FROM $table WHERE id = %d",
@@ -406,10 +411,24 @@ class PIT_REST_Calendar_Events {
 
         $data['updated_at'] = current_time('mysql');
 
+        // Mark as pending sync if synced previously
+        $has_google_id = $wpdb->get_var($wpdb->prepare(
+            "SELECT google_event_id FROM $table WHERE id = %d",
+            $id
+        ));
+        if ($has_google_id && !isset($data['sync_status'])) {
+            $data['sync_status'] = 'pending_sync';
+        }
+
         $updated = $wpdb->update($table, $data, ['id' => $id]);
 
         if ($updated === false) {
             return new WP_Error('update_failed', 'Failed to update event: ' . $wpdb->last_error, ['status' => 500]);
+        }
+
+        // Sync to Google Calendar if connected
+        if (class_exists('PIT_Calendar_Sync_Service')) {
+            PIT_Calendar_Sync_Service::sync_event_to_google($id);
         }
 
         // Fetch updated event
@@ -446,8 +465,18 @@ class PIT_REST_Calendar_Events {
             return new WP_Error('not_found', 'Event not found', ['status' => 404]);
         }
 
-        // TODO: If synced to external calendars, queue deletion there too
-        // This would be handled by a separate sync service
+        // Get full event data for sync
+        $event = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table WHERE id = %d",
+            $id
+        ), ARRAY_A);
+
+        // Delete from Google Calendar if synced
+        $google_deleted = false;
+        if (!empty($existing['google_event_id']) && class_exists('PIT_Calendar_Sync_Service')) {
+            $result = PIT_Calendar_Sync_Service::delete_event_from_google($event);
+            $google_deleted = !is_wp_error($result);
+        }
 
         $deleted = $wpdb->delete($table, ['id' => $id]);
 
@@ -459,8 +488,8 @@ class PIT_REST_Calendar_Events {
             'success' => true,
             'message' => 'Event deleted successfully',
             'deleted_external' => [
-                'google' => !empty($existing['google_event_id']),
-                'outlook' => !empty($existing['outlook_event_id']),
+                'google' => $google_deleted,
+                'outlook' => false,
             ],
         ]);
     }

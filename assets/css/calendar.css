@@ -909,3 +909,214 @@ textarea.form-input {
         opacity: 1;
     }
 }
+
+/* ==========================================================================
+   SYNC STYLES
+   ========================================================================== */
+
+/* Sync Settings Button */
+.sync-settings-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    background: var(--cal-bg);
+    border: 1px solid var(--cal-border);
+    color: var(--cal-text-secondary);
+    border-radius: var(--cal-radius);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sync-settings-btn:hover {
+    background: var(--cal-bg-secondary);
+    color: var(--cal-text);
+}
+
+.sync-settings-btn.connected {
+    background: #dcfce7;
+    border-color: #86efac;
+    color: #166534;
+}
+
+.sync-settings-btn.connected:hover {
+    background: #bbf7d0;
+}
+
+/* Sync Provider Card */
+.sync-provider {
+    border: 1px solid var(--cal-border);
+    border-radius: var(--cal-radius-lg);
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+
+.sync-provider.disabled {
+    opacity: 0.6;
+}
+
+.sync-provider-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px;
+    background: var(--cal-bg-secondary);
+}
+
+.sync-provider-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--cal-radius);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border: 1px solid var(--cal-border);
+}
+
+.sync-provider-info {
+    flex: 1;
+}
+
+.sync-provider-info h3 {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--cal-text);
+}
+
+.sync-provider-info p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--cal-text-secondary);
+}
+
+.sync-provider-info .coming-soon {
+    color: var(--cal-warning);
+    font-style: italic;
+}
+
+.sync-provider-action {
+    flex-shrink: 0;
+}
+
+/* Connect/Disconnect Buttons */
+.btn-connect {
+    padding: 10px 20px;
+    background: var(--cal-primary);
+    color: white;
+    border: none;
+    border-radius: var(--cal-radius);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-connect:hover {
+    background: var(--cal-primary-hover);
+}
+
+.btn-connect:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-disconnect {
+    padding: 10px 20px;
+    background: white;
+    color: var(--cal-danger);
+    border: 1px solid var(--cal-danger);
+    border-radius: var(--cal-radius);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-disconnect:hover {
+    background: var(--cal-danger);
+    color: white;
+}
+
+.btn-disconnect:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Sync Settings */
+.sync-settings {
+    padding: 20px;
+    background: var(--cal-bg);
+}
+
+.sync-error {
+    background: #fee2e2;
+    border: 1px solid var(--cal-danger);
+    color: #b91c1c;
+    padding: 12px;
+    border-radius: var(--cal-radius);
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+
+.sync-setting-row {
+    margin-bottom: 16px;
+}
+
+.sync-setting-row label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--cal-text);
+    margin-bottom: 6px;
+}
+
+.sync-setting-row.toggle label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-weight: normal;
+}
+
+.sync-setting-row.toggle input[type="checkbox"] {
+    width: auto;
+}
+
+/* Sync Actions */
+.sync-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--cal-border);
+}
+
+.btn-sync {
+    padding: 10px 20px;
+    background: var(--cal-success);
+    color: white;
+    border: none;
+    border-radius: var(--cal-radius);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-sync:hover {
+    background: #059669;
+}
+
+.btn-sync:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.last-sync {
+    font-size: 12px;
+    color: var(--cal-text-secondary);
+}
