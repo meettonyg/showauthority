@@ -440,6 +440,10 @@
                         this.interview.explicit_rating = data.podcast.explicit_rating;
                         this.interview.description = data.podcast.description;
                         this.interview.podcast_image = data.podcast.artwork_url;
+                        // Update categories from refreshed metadata
+                        if (data.podcast.category) {
+                            this.interview.categories = data.podcast.category.split(',').map(c => c.trim());
+                        }
                     }
 
                     return data;
