@@ -67,11 +67,11 @@ class PIT_REST_Engagements {
             'permission_callback' => [__CLASS__, 'check_admin_permissions'],
         ]);
 
-        // Verify engagement
+        // Verify engagement (admin only - global trust signal)
         register_rest_route(self::NAMESPACE, '/engagements/(?P<id>\d+)/verify', [
             'methods' => 'POST',
             'callback' => [__CLASS__, 'verify_engagement'],
-            'permission_callback' => [__CLASS__, 'check_permissions'],
+            'permission_callback' => [__CLASS__, 'check_admin_permissions'],
         ]);
 
         // Get engagements for guest
@@ -218,8 +218,11 @@ class PIT_REST_Engagements {
                     $data[$field] = sanitize_textarea_field($value);
                 } elseif (in_array($field, ['url', 'embed_url', 'audio_url', 'video_url', 'thumbnail_url', 'transcript_url', 'event_url'])) {
                     $data[$field] = esc_url_raw($value);
+                } elseif (in_array($field, ['episode_number', 'season_number', 'duration_seconds', 'view_count', 'like_count', 'comment_count', 'share_count'])) {
+                    $data[$field] = (int) $value;
                 } else {
-                    $data[$field] = $value;
+                    // Handles 'engagement_date', 'published_date', and any other text-like fields
+                    $data[$field] = sanitize_text_field($value);
                 }
             }
         }

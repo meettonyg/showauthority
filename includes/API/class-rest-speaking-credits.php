@@ -56,11 +56,11 @@ class PIT_REST_Speaking_Credits {
             'permission_callback' => [__CLASS__, 'check_permissions'],
         ]);
 
-        // Verify credit
+        // Verify credit (admin only - global trust signal)
         register_rest_route(self::NAMESPACE, '/speaking-credits/(?P<id>\d+)/verify', [
             'methods' => 'POST',
             'callback' => [__CLASS__, 'verify_credit'],
-            'permission_callback' => [__CLASS__, 'check_permissions'],
+            'permission_callback' => [__CLASS__, 'check_admin_permissions'],
         ]);
 
         // Link guest to engagement (convenience endpoint)
@@ -87,6 +87,10 @@ class PIT_REST_Speaking_Credits {
 
     public static function check_permissions() {
         return is_user_logged_in();
+    }
+
+    public static function check_admin_permissions() {
+        return current_user_can('manage_options');
     }
 
     /**
