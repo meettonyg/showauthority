@@ -15,10 +15,17 @@ if (!defined('ABSPATH')) {
 
 class PIT_Admin_Migration_V4 {
 
+    private static $initialized = false;
+
     /**
      * Initialize admin hooks
      */
     public static function init() {
+        if (self::$initialized) {
+            return;
+        }
+        self::$initialized = true;
+
         add_action('admin_menu', [__CLASS__, 'add_admin_menu']);
         add_action('admin_init', [__CLASS__, 'handle_actions']);
         add_action('wp_ajax_pit_migration_v4_status', [__CLASS__, 'ajax_status']);
@@ -50,7 +57,6 @@ class PIT_Admin_Migration_V4 {
 
         // Handle dry run
         if (isset($_POST['pit_migration_dry_run']) && wp_verify_nonce($_POST['_wpnonce'], 'pit_migration_v4')) {
-            require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
             $results = PIT_Schema_Migration_V4::run(true);
             set_transient('pit_migration_v4_results', $results, 300);
             wp_redirect(admin_url('tools.php?page=pit-migration-v4&action=dry_run_complete'));
@@ -59,7 +65,6 @@ class PIT_Admin_Migration_V4 {
 
         // Handle actual migration
         if (isset($_POST['pit_migration_execute']) && wp_verify_nonce($_POST['_wpnonce'], 'pit_migration_v4')) {
-            require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
             $results = PIT_Schema_Migration_V4::run(false);
             set_transient('pit_migration_v4_results', $results, 300);
             wp_redirect(admin_url('tools.php?page=pit-migration-v4&action=migration_complete'));
@@ -68,7 +73,6 @@ class PIT_Admin_Migration_V4 {
 
         // Handle rollback
         if (isset($_POST['pit_migration_rollback']) && wp_verify_nonce($_POST['_wpnonce'], 'pit_migration_v4')) {
-            require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
             $results = PIT_Schema_Migration_V4::rollback(false);
             set_transient('pit_migration_v4_results', $results, 300);
             wp_redirect(admin_url('tools.php?page=pit-migration-v4&action=rollback_complete'));
@@ -84,15 +88,15 @@ class PIT_Admin_Migration_V4 {
             wp_die('Unauthorized access');
         }
 
-        require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
-        
         $status = PIT_Schema_Migration_V4::get_status();
         $results = get_transient('pit_migration_v4_results');
         $action = isset($_GET['action']) ? sanitize_text_field($_GET['action']) : '';
 
         // Load merge helper for duplicate detection
-        require_once PIT_PLUGIN_DIR . 'includes/Guests/class-guest-merge-helper.php';
-        $duplicates = PIT_Guest_Merge_Helper::find_duplicates();
+        $duplicates = [];
+        if (class_exists('PIT_Guest_Merge_Helper')) {
+            $duplicates = PIT_Guest_Merge_Helper::find_duplicates();
+        }
 
         ?>
         <div class="wrap">
@@ -267,6 +271,28 @@ class PIT_Admin_Migration_V4 {
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+
+                <?php if (!empty($results['duplicate_groups'])): ?>
+                <h4>Duplicate Groups Found</h4>
+                <table class="widefat">
+                    <thead>
+                        <tr><th>Type</th><th>Hash</th><th>Guest IDs</th><th>Count</th></tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach (array_slice($results['duplicate_groups'], 0, 10) as $group): ?>
+                        <tr>
+                            <td><?php echo esc_html($group['type']); ?></td>
+                            <td><code style="font-size: 10px;"><?php echo esc_html(substr($group['hash'], 0, 12) . '...'); ?></code></td>
+                            <td><?php echo esc_html($group['ids']); ?></td>
+                            <td><?php echo esc_html($group['count']); ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php if (count($results['duplicate_groups']) > 10): ?>
+                <p><em>Showing first 10 of <?php echo count($results['duplicate_groups']); ?> duplicate groups.</em></p>
+                <?php endif; ?>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
 
@@ -348,7 +374,10 @@ class PIT_Admin_Migration_V4 {
                 <h4>6. Creates <code>pit_speaking_credits</code> table</h4>
                 <p>Links guests to engagements (enables network graph).</p>
 
-                <h4>7. Migrates existing data</h4>
+                <h4>7. Creates <code>pit_pipeline_stages</code> table</h4>
+                <p>Customizable pipeline stages for the CRM workflow.</p>
+
+                <h4>8. Migrates existing data</h4>
                 <ul>
                     <li>Appearances → Opportunities (all statuses)</li>
                     <li>Aired appearances → Engagements + Speaking Credits</li>
@@ -399,7 +428,6 @@ class PIT_Admin_Migration_V4 {
             wp_send_json_error('Unauthorized');
         }
 
-        require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
         wp_send_json_success(PIT_Schema_Migration_V4::get_status());
     }
 
@@ -415,7 +443,6 @@ class PIT_Admin_Migration_V4 {
 
         $dry_run = isset($_POST['dry_run']) && $_POST['dry_run'] === 'true';
 
-        require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
         $results = PIT_Schema_Migration_V4::run($dry_run);
         
         wp_send_json_success($results);
@@ -438,8 +465,6 @@ class PIT_Admin_Migration_V4 {
             wp_send_json_error('Invalid parameters');
         }
 
-        require_once PIT_PLUGIN_DIR . 'includes/Guests/class-guest-merge-helper.php';
-
         $results = [];
         foreach ($duplicate_ids as $dup_id) {
             $results[] = PIT_Guest_Merge_Helper::execute_merge($master_id, $dup_id, false);
@@ -447,9 +472,4 @@ class PIT_Admin_Migration_V4 {
 
         wp_send_json_success($results);
     }
-}
-
-// Initialize on admin
-if (is_admin()) {
-    PIT_Admin_Migration_V4::init();
 }

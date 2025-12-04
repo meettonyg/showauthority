@@ -205,6 +205,7 @@ class Podcast_Influence_Tracker {
 
         PIT_Admin_Page::init();
         PIT_Admin_Bulk_Tools::get_instance();
+        // PIT_Admin_Migration_V4::init(); // Migration complete - uncomment if rollback needed
         PIT_Shortcodes::init();
         PIT_Background_Refresh::init();
         PIT_Formidable_Integration::init();

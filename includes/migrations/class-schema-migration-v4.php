@@ -95,6 +95,11 @@ class PIT_Schema_Migration_V4 {
             $results['speaking_credits_created'] = $step8['speaking_credits'] ?? 0;
             $results['steps_completed'][] = $step8;
 
+            // Step 8b: Backfill missing speaking credits
+            $step8b = self::step_8b_backfill_speaking_credits($dry_run);
+            $results['speaking_credits_created'] += $step8b['speaking_credits'] ?? 0;
+            $results['steps_completed'][] = $step8b;
+
             // Step 9: Find and report duplicates (for manual review)
             $step9 = self::step_9_find_duplicates($dry_run);
             $results['duplicates_found'] = $step9['count'] ?? 0;
@@ -926,6 +931,85 @@ class PIT_Schema_Migration_V4 {
             'opportunities' => $stats['opportunities'],
             'engagements' => $stats['engagements'],
             'speaking_credits' => $stats['speaking_credits'],
+        ];
+    }
+
+    /**
+     * Step 8b: Backfill missing speaking credits
+     * 
+     * This handles the case where opportunities and engagements exist
+     * but speaking credits weren't created (e.g., from a previous partial migration)
+     */
+    private static function step_8b_backfill_speaking_credits($dry_run) {
+        global $wpdb;
+
+        $opportunities_table = $wpdb->prefix . 'pit_opportunities';
+        $credits_table = $wpdb->prefix . 'pit_speaking_credits';
+        $appearances_table = $wpdb->prefix . 'pit_guest_appearances';
+
+        // Find opportunities that have engagement_id and guest_id but no speaking credit
+        $missing = $wpdb->get_results(
+            "SELECT o.id as opp_id, o.guest_id, o.engagement_id, o.legacy_appearance_id,
+                    a.is_host, a.ai_confidence_score, a.manually_verified, a.user_id, a.created_at
+             FROM $opportunities_table o
+             LEFT JOIN $credits_table sc ON sc.guest_id = o.guest_id AND sc.engagement_id = o.engagement_id
+             LEFT JOIN $appearances_table a ON a.id = o.legacy_appearance_id
+             WHERE o.engagement_id IS NOT NULL 
+               AND o.guest_id IS NOT NULL
+               AND sc.id IS NULL"
+        );
+
+        $count = count($missing);
+
+        if ($dry_run) {
+            return [
+                'step' => 'step_8b_backfill_speaking_credits',
+                'status' => $count > 0 ? 'would_run' : 'skipped',
+                'speaking_credits' => $count,
+                'message' => $count > 0 
+                    ? "Would create $count missing speaking credits" 
+                    : 'No missing speaking credits found',
+            ];
+        }
+
+        $created = 0;
+        foreach ($missing as $row) {
+            // Determine role
+            $role = (!empty($row->is_host) && $row->is_host) ? 'host' : 'guest';
+
+            // Check again to avoid race conditions
+            $exists = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM $credits_table WHERE guest_id = %d AND engagement_id = %d",
+                $row->guest_id, $row->engagement_id
+            ));
+
+            if ($exists) {
+                continue;
+            }
+
+            $data = [
+                'guest_id' => $row->guest_id,
+                'engagement_id' => $row->engagement_id,
+                'role' => $role,
+                'is_primary' => 1,
+                'ai_confidence_score' => $row->ai_confidence_score ?: 0,
+                'manually_verified' => $row->manually_verified ?: 0,
+                'discovered_by_user_id' => $row->user_id,
+                'extraction_method' => 'migration_v4_backfill',
+                'created_at' => $row->created_at ?: current_time('mysql'),
+            ];
+
+            $result = $wpdb->insert($credits_table, $data);
+            if ($result) {
+                $created++;
+            }
+        }
+
+        return [
+            'step' => 'step_8b_backfill_speaking_credits',
+            'status' => 'completed',
+            'speaking_credits' => $created,
+            'message' => "Created $created speaking credits (backfill)",
         ];
     }
 
