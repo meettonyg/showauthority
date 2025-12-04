@@ -2,9 +2,11 @@
  * Interview Tracker Vue.js Application
  * 
  * Provides Kanban and Table views for managing podcast guest appearances.
+ * Pipeline stages loaded from database for customization support.
  * 
  * @package Podcast_Influence_Tracker
  * @since 3.0.0
+ * @updated 4.0.0 - Pipeline stages from database
  */
 
 (function() {
@@ -20,6 +22,7 @@
         state: () => ({
             interviews: [],
             loading: false,
+            stagesLoading: false,
             error: null,
             currentView: 'kanban',
             selectedIds: [],
@@ -33,16 +36,9 @@
                 showArchived: false,
             },
             guestProfiles: [],
-            // Status columns for Interview Tracker
-            statusColumns: [
-                { key: 'potential', label: 'Potential', color: '#6b7280' },
-                { key: 'active', label: 'Active', color: '#3b82f6' },
-                { key: 'aired', label: 'Aired', color: '#10b981' },
-                { key: 'convert', label: 'Convert', color: '#059669' },
-                { key: 'on_hold', label: 'On Hold', color: '#f59e0b' },
-                { key: 'cancelled', label: 'Cancelled', color: '#ef4444' },
-                { key: 'unqualified', label: 'Unqualified', color: '#9ca3af' },
-            ],
+            // Pipeline stages loaded from database
+            statusColumns: [],
+            stagesAreCustom: false,
         }),
 
         getters: {
@@ -98,18 +94,14 @@
                 return grouped;
             },
 
-            // Row 1: Pre-interview stages
+            // Row 1: Main flow stages (row_group = 1)
             row1Columns: (state) => {
-                return state.statusColumns.filter(c => 
-                    ['potential', 'active', 'aired', 'convert'].includes(c.key)
-                );
+                return state.statusColumns.filter(c => c.row_group === 1);
             },
 
-            // Row 2: Terminal/hold statuses
+            // Row 2: Terminal states (row_group = 2)
             row2Columns: (state) => {
-                return state.statusColumns.filter(c => 
-                    ['on_hold', 'cancelled', 'unqualified'].includes(c.key)
-                );
+                return state.statusColumns.filter(c => c.row_group === 2);
             },
 
             allSelected: (state) => {
@@ -131,6 +123,45 @@
         },
 
         actions: {
+            async fetchPipelineStages() {
+                if (this.statusColumns.length > 0) return;
+                
+                this.stagesLoading = true;
+                
+                try {
+                    const response = await fetch(
+                        `${guestifyData.restUrl}pipeline-stages`,
+                        {
+                            headers: {
+                                'X-WP-Nonce': guestifyData.nonce,
+                            },
+                        }
+                    );
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.statusColumns = data.data || [];
+                        this.stagesAreCustom = data.is_custom || false;
+                    } else {
+                        throw new Error('Failed to load stages');
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch pipeline stages:', err);
+                    // Fallback to defaults if API fails
+                    this.statusColumns = [
+                        { key: 'potential', label: 'Potential', color: '#6b7280', row_group: 1 },
+                        { key: 'active', label: 'Active', color: '#3b82f6', row_group: 1 },
+                        { key: 'aired', label: 'Aired', color: '#10b981', row_group: 1 },
+                        { key: 'convert', label: 'Convert', color: '#059669', row_group: 1 },
+                        { key: 'on_hold', label: 'On Hold', color: '#f59e0b', row_group: 2 },
+                        { key: 'cancelled', label: 'Cancelled', color: '#ef4444', row_group: 2 },
+                        { key: 'unqualified', label: 'Unqualified', color: '#9ca3af', row_group: 2 },
+                    ];
+                } finally {
+                    this.stagesLoading = false;
+                }
+            },
+
             async fetchInterviews() {
                 this.loading = true;
                 this.error = null;
@@ -883,8 +914,8 @@
                     <ViewToggle />
                 </div>
                 
-                <div v-if="store.loading" class="pit-loading">
-                    <p>Loading interviews...</p>
+                <div v-if="store.loading || store.stagesLoading" class="pit-loading">
+                    <p>Loading...</p>
                 </div>
                 
                 <template v-else>
@@ -927,8 +958,13 @@
                 },
             });
 
-            onMounted(() => {
+            onMounted(async () => {
+                // Load pipeline stages first (required for columns)
+                await store.fetchPipelineStages();
+                
+                // Then load other data
                 store.fetchGuestProfiles();
+                
                 // Check localStorage for saved view preference
                 const savedView = localStorage.getItem('pit_interview_view');
                 if (savedView && (savedView === 'kanban' || savedView === 'table')) {

@@ -120,6 +120,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-appearance-notes.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-guest-profiles.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-calendar-events.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-pipeline-stages.php';
         require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-events-schema.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-tracker-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-detail-shortcode.php';
@@ -212,6 +213,7 @@ class Podcast_Influence_Tracker {
         PIT_REST_Appearance_Tasks::register_routes();
         PIT_REST_Appearance_Notes::register_routes();
         PIT_REST_Calendar_Sync::register_routes();
+        PIT_REST_Pipeline_Stages::register_routes();
     }
 
     public function add_cron_schedules($schedules) {

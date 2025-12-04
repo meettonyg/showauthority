@@ -34,6 +34,7 @@
             contacts: [],
             episodes: [],
             guestProfiles: [],
+            stages: [], // Pipeline stages from database
 
             // Episodes metadata
             episodesMeta: {
@@ -103,11 +104,30 @@
                 return response.json();
             },
 
+            async loadStages() {
+                try {
+                    const response = await this.api('pipeline-stages');
+                    this.stages = response.data || [];
+                } catch (err) {
+                    console.error('Failed to load pipeline stages:', err);
+                    // Fallback to hardcoded stages if API fails
+                    this.stages = [
+                        { key: 'potential', label: 'Potential', color: '#94a3b8' },
+                        { key: 'active', label: 'Active', color: '#f59e0b' },
+                        { key: 'aired', label: 'Aired', color: '#10b981' },
+                        { key: 'convert', label: 'Convert', color: '#8b5cf6' },
+                    ];
+                }
+            },
+
             async loadInterview() {
                 this.loading = true;
                 this.error = null;
                 
                 try {
+                    // Load stages first
+                    await this.loadStages();
+                    
                     const response = await this.api(`appearances/${this.config.interviewId}`);
                     
                     // DEBUG: Log initial interview load
@@ -1631,13 +1651,13 @@
                 note_type: 'general'
             });
             
-            // Milestones configuration
-            const milestones = [
-                { id: 'potential', label: 'Potential' },
-                { id: 'active', label: 'Active' },
-                { id: 'aired', label: 'Aired' },
-                { id: 'convert', label: 'Convert' },
-            ];
+            // Computed milestones from database stages
+            const milestones = computed(() => {
+                return store.stages.map(stage => ({
+                    id: stage.key,
+                    label: stage.label
+                }));
+            });
             
             // Computed
             const initials = computed(() => {
@@ -2069,6 +2089,7 @@
                 boardUrl: computed(() => store.config.boardUrl),
                 profilesLoading: computed(() => store.profilesLoading),
                 profilesError: computed(() => store.profilesError),
+                stages: computed(() => store.stages),
 
                 // Local state
                 showTaskModal,
