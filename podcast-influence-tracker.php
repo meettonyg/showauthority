@@ -3,7 +3,7 @@
  * Plugin Name: Podcast Influence Tracker
  * Plugin URI: https://github.com/meettonyg/showauthority
  * Description: Track and analyze social media influence metrics for podcasts with intelligent guest management
- * Version: 2.0.3
+ * Version: 4.0.0
  * Author: Guestify
  * Author URI: https://guestify.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('PIT_VERSION', '3.1.0');
+define('PIT_VERSION', '4.0.0');
 define('PIT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PIT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('PIT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -53,6 +53,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/Core/class-user-limits-repository.php';
         require_once PIT_PLUGIN_DIR . 'includes/Core/class-user-podcasts-repository.php';
         require_once PIT_PLUGIN_DIR . 'includes/Core/class-rate-limiter.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Core/class-pipeline-stage-repository.php';
 
         // PODCASTS DOMAIN
         require_once PIT_PLUGIN_DIR . 'includes/Podcasts/class-podcast-repository.php';
@@ -68,6 +69,13 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/Guests/class-topic-repository.php';
         require_once PIT_PLUGIN_DIR . 'includes/Guests/class-network-repository.php';
         require_once PIT_PLUGIN_DIR . 'includes/Guests/class-guest-merge-helper.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Guests/class-opportunity-repository.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Guests/class-private-contact-repository.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Guests/class-claim-request-repository.php';
+
+        // ENGAGEMENTS DOMAIN (v4.0)
+        require_once PIT_PLUGIN_DIR . 'includes/Engagements/class-engagement-repository.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Engagements/class-speaking-credit-repository.php';
 
         // SOCIAL METRICS DOMAIN
         require_once PIT_PLUGIN_DIR . 'includes/SocialMetrics/class-social-link-repository.php';
@@ -121,6 +129,15 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-guest-profiles.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-calendar-events.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-pipeline-stages.php';
+
+        // v4.0 CRM/INTELLIGENCE SEPARATION
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-engagements.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-speaking-credits.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-private-contacts.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-claim-requests.php';
+
+        // MIGRATIONS
+        require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
         require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-events-schema.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-tracker-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-detail-shortcode.php';
@@ -214,6 +231,12 @@ class Podcast_Influence_Tracker {
         PIT_REST_Appearance_Notes::register_routes();
         PIT_REST_Calendar_Sync::register_routes();
         PIT_REST_Pipeline_Stages::register_routes();
+
+        // v4.0 CRM/Intelligence Separation APIs
+        PIT_REST_Engagements::register_routes();
+        PIT_REST_Speaking_Credits::register_routes();
+        PIT_REST_Private_Contacts::register_routes();
+        PIT_REST_Claim_Requests::register_routes();
     }
 
     public function add_cron_schedules($schedules) {

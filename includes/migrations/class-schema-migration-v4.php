@@ -85,6 +85,9 @@ class PIT_Schema_Migration_V4 {
             // Step 7: Create pit_speaking_credits table
             $results['steps_completed'][] = self::step_7_create_speaking_credits_table($dry_run);
 
+            // Step 7b: Create pit_pipeline_stages table
+            $results['steps_completed'][] = self::step_7b_create_pipeline_stages_table($dry_run);
+
             // Step 8: Migrate pit_guest_appearances data
             $step8 = self::step_8_migrate_appearances_data($dry_run);
             $results['opportunities_created'] = $step8['opportunities'] ?? 0;
@@ -724,6 +727,114 @@ class PIT_Schema_Migration_V4 {
     }
 
     /**
+     * Step 7b: Create pit_pipeline_stages table
+     */
+    private static function step_7b_create_pipeline_stages_table($dry_run) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_pipeline_stages';
+        $charset_collate = $wpdb->get_charset_collate();
+
+        if ($wpdb->get_var("SHOW TABLES LIKE '$table'") === $table) {
+            return [
+                'step' => 'step_7b_create_pipeline_stages_table',
+                'status' => 'skipped',
+                'message' => 'Table already exists',
+            ];
+        }
+
+        $sql = "CREATE TABLE $table (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            -- User ownership (NULL = system default)
+            user_id bigint(20) UNSIGNED DEFAULT NULL,
+
+            -- Stage definition
+            stage_key VARCHAR(50) NOT NULL,
+            label VARCHAR(100) NOT NULL,
+            color VARCHAR(20) DEFAULT '#6b7280',
+
+            -- Ordering
+            sort_order INT(11) DEFAULT 0,
+            row_group TINYINT(4) DEFAULT 1,
+
+            -- Status
+            is_system TINYINT(1) DEFAULT 0,
+            is_active TINYINT(1) DEFAULT 1,
+
+            -- Timestamps
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (id),
+            KEY user_id_idx (user_id),
+            KEY stage_key_idx (stage_key),
+            KEY sort_order_idx (sort_order),
+            UNIQUE KEY user_stage_unique (user_id, stage_key)
+        ) $charset_collate;";
+
+        if ($dry_run) {
+            return [
+                'step' => 'step_7b_create_pipeline_stages_table',
+                'status' => 'would_run',
+                'sql' => $sql,
+            ];
+        }
+
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+
+        $created = $wpdb->get_var("SHOW TABLES LIKE '$table'") === $table;
+
+        // Insert default system stages if table was created
+        if ($created) {
+            self::insert_default_pipeline_stages();
+        }
+
+        return [
+            'step' => 'step_7b_create_pipeline_stages_table',
+            'status' => $created ? 'completed' : 'failed',
+        ];
+    }
+
+    /**
+     * Insert default system pipeline stages
+     */
+    private static function insert_default_pipeline_stages() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_pipeline_stages';
+
+        $defaults = [
+            // Row 1: Early pipeline
+            ['stage_key' => 'lead', 'label' => 'Lead', 'color' => '#6b7280', 'sort_order' => 1, 'row_group' => 1],
+            ['stage_key' => 'researching', 'label' => 'Researching', 'color' => '#8b5cf6', 'sort_order' => 2, 'row_group' => 1],
+            ['stage_key' => 'outreach', 'label' => 'Outreach', 'color' => '#3b82f6', 'sort_order' => 3, 'row_group' => 1],
+            ['stage_key' => 'pitched', 'label' => 'Pitched', 'color' => '#06b6d4', 'sort_order' => 4, 'row_group' => 1],
+            ['stage_key' => 'negotiating', 'label' => 'Negotiating', 'color' => '#14b8a6', 'sort_order' => 5, 'row_group' => 1],
+
+            // Row 2: Active pipeline
+            ['stage_key' => 'scheduled', 'label' => 'Scheduled', 'color' => '#22c55e', 'sort_order' => 6, 'row_group' => 2],
+            ['stage_key' => 'recorded', 'label' => 'Recorded', 'color' => '#84cc16', 'sort_order' => 7, 'row_group' => 2],
+            ['stage_key' => 'editing', 'label' => 'Editing', 'color' => '#eab308', 'sort_order' => 8, 'row_group' => 2],
+            ['stage_key' => 'aired', 'label' => 'Aired', 'color' => '#f97316', 'sort_order' => 9, 'row_group' => 2],
+            ['stage_key' => 'promoted', 'label' => 'Promoted', 'color' => '#ef4444', 'sort_order' => 10, 'row_group' => 2],
+
+            // Row 3: Terminal states
+            ['stage_key' => 'on_hold', 'label' => 'On Hold', 'color' => '#a3a3a3', 'sort_order' => 11, 'row_group' => 3],
+            ['stage_key' => 'cancelled', 'label' => 'Cancelled', 'color' => '#dc2626', 'sort_order' => 12, 'row_group' => 3],
+            ['stage_key' => 'unqualified', 'label' => 'Unqualified', 'color' => '#737373', 'sort_order' => 13, 'row_group' => 3],
+        ];
+
+        foreach ($defaults as $stage) {
+            $wpdb->insert($table, array_merge($stage, [
+                'user_id' => null,
+                'is_system' => 1,
+                'is_active' => 1,
+                'created_at' => current_time('mysql'),
+            ]));
+        }
+    }
+
+    /**
      * Step 8: Migrate data from pit_guest_appearances to new tables
      */
     private static function step_8_migrate_appearances_data($dry_run) {
@@ -1135,6 +1246,7 @@ class PIT_Schema_Migration_V4 {
             'pit_opportunities' => null,
             'pit_engagements' => null,
             'pit_speaking_credits' => null,
+            'pit_pipeline_stages' => null,
         ];
 
         foreach ($tables_to_check as $table => $columns) {
@@ -1184,6 +1296,7 @@ class PIT_Schema_Migration_V4 {
             'pit_opportunities',
             'pit_engagements',
             'pit_speaking_credits',
+            'pit_pipeline_stages',
         ];
 
         foreach ($tables_to_drop as $table) {

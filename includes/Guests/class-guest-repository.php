@@ -3,10 +3,14 @@
  * Guest Repository
  *
  * Handles all database operations for guests.
- * Guests are user-owned records.
+ *
+ * In v4.0, guests are GLOBAL records with:
+ * - created_by_user_id: Who created this record (provenance)
+ * - claimed_by_user_id: Who this person IS (identity claiming)
  *
  * @package PodcastInfluenceTracker
  * @subpackage Guests
+ * @since 4.0.0
  */
 
 if (!defined('ABSPATH')) {
@@ -19,7 +23,7 @@ class PIT_Guest_Repository {
      * Get guest by ID (with optional user scoping)
      *
      * @param int $guest_id Guest ID
-     * @param int|null $user_id User ID for ownership check (null for admin)
+     * @param int|null $user_id User ID for creator check (null for admin)
      * @return object|null Guest object or null
      */
     public static function get($guest_id, $user_id = null) {
@@ -31,9 +35,9 @@ class PIT_Guest_Repository {
             $guest_id
         ));
 
-        // Check ownership if user_id provided
+        // Check creator ownership if user_id provided
         if ($guest && $user_id !== null && !PIT_User_Context::is_admin()) {
-            if ((int) $guest->user_id !== (int) $user_id) {
+            if ((int) $guest->created_by_user_id !== (int) $user_id) {
                 return null;
             }
         }
@@ -42,7 +46,7 @@ class PIT_Guest_Repository {
     }
 
     /**
-     * Check if user owns a guest record
+     * Check if user created a guest record
      *
      * @param int $guest_id Guest ID
      * @param int $user_id User ID
@@ -52,16 +56,16 @@ class PIT_Guest_Repository {
         global $wpdb;
         $table = $wpdb->prefix . 'pit_guests';
 
-        $owner_id = $wpdb->get_var($wpdb->prepare(
-            "SELECT user_id FROM $table WHERE id = %d",
+        $creator_id = $wpdb->get_var($wpdb->prepare(
+            "SELECT created_by_user_id FROM $table WHERE id = %d",
             $guest_id
         ));
 
-        return $owner_id !== null && (int) $owner_id === (int) $user_id;
+        return $creator_id !== null && (int) $creator_id === (int) $user_id;
     }
 
     /**
-     * Get guest by LinkedIn URL (scoped to user)
+     * Get guest by LinkedIn URL (scoped to creator)
      *
      * @param string $linkedin_url LinkedIn URL
      * @param int|null $user_id User ID for scoping
@@ -76,7 +80,7 @@ class PIT_Guest_Repository {
         $params = [$hash];
 
         if ($user_id !== null && !PIT_User_Context::is_admin()) {
-            $query .= " AND user_id = %d";
+            $query .= " AND created_by_user_id = %d";
             $params[] = $user_id;
         }
 
@@ -84,7 +88,7 @@ class PIT_Guest_Repository {
     }
 
     /**
-     * Get guest by email (scoped to user)
+     * Get guest by email (scoped to creator)
      *
      * @param string $email Email address
      * @param int|null $user_id User ID for scoping
@@ -99,7 +103,7 @@ class PIT_Guest_Repository {
         $params = [$hash];
 
         if ($user_id !== null && !PIT_User_Context::is_admin()) {
-            $query .= " AND user_id = %d";
+            $query .= " AND created_by_user_id = %d";
             $params[] = $user_id;
         }
 
@@ -116,9 +120,9 @@ class PIT_Guest_Repository {
         global $wpdb;
         $table = $wpdb->prefix . 'pit_guests';
 
-        // Set user_id if not provided
-        if (!isset($data['user_id'])) {
-            $data['user_id'] = PIT_User_Context::get_user_id();
+        // Set created_by_user_id if not provided
+        if (!isset($data['created_by_user_id'])) {
+            $data['created_by_user_id'] = PIT_User_Context::get_user_id();
         }
 
         // Generate hashes for deduplication
@@ -129,8 +133,8 @@ class PIT_Guest_Repository {
         $guest_id = $wpdb->insert_id ?: false;
 
         // Increment user's guest count
-        if ($guest_id && isset($data['user_id']) && $data['user_id'] > 0) {
-            PIT_User_Limits_Repository::increment_guests($data['user_id']);
+        if ($guest_id && isset($data['created_by_user_id']) && $data['created_by_user_id'] > 0) {
+            PIT_User_Limits_Repository::increment_guests($data['created_by_user_id']);
         }
 
         return $guest_id;
@@ -172,28 +176,28 @@ class PIT_Guest_Repository {
         global $wpdb;
         $table = $wpdb->prefix . 'pit_guests';
 
-        // Set user_id
+        // Set created_by_user_id
         if ($user_id === null) {
             $user_id = PIT_User_Context::get_user_id();
         }
-        $data['user_id'] = $user_id;
+        $data['created_by_user_id'] = $user_id;
         $data = self::add_hashes($data);
 
         $existing_id = null;
 
-        // Priority 1: LinkedIn URL (scoped to user)
+        // Priority 1: LinkedIn URL (scoped to creator)
         if (!empty($data['linkedin_url_hash'])) {
             $existing_id = $wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM $table WHERE linkedin_url_hash = %s AND user_id = %d AND is_merged = 0",
+                "SELECT id FROM $table WHERE linkedin_url_hash = %s AND created_by_user_id = %d AND is_merged = 0",
                 $data['linkedin_url_hash'],
                 $user_id
             ));
         }
 
-        // Priority 2: Email (scoped to user)
+        // Priority 2: Email (scoped to creator)
         if (!$existing_id && !empty($data['email_hash'])) {
             $existing_id = $wpdb->get_var($wpdb->prepare(
-                "SELECT id FROM $table WHERE email_hash = %s AND user_id = %d AND is_merged = 0",
+                "SELECT id FROM $table WHERE email_hash = %s AND created_by_user_id = %d AND is_merged = 0",
                 $data['email_hash'],
                 $user_id
             ));
@@ -249,14 +253,14 @@ class PIT_Guest_Repository {
         $where = [];
         $prepare_args = [];
 
-        // User scoping - non-admins can only see their own guests
+        // User scoping - non-admins can only see guests they created
         if (!PIT_User_Context::is_admin()) {
             $user_id = $args['user_id'] ?? PIT_User_Context::get_user_id();
-            $where[] = 'user_id = %d';
+            $where[] = 'created_by_user_id = %d';
             $prepare_args[] = $user_id;
         } elseif (!empty($args['user_id'])) {
             // Admin filtering by specific user
-            $where[] = 'user_id = %d';
+            $where[] = 'created_by_user_id = %d';
             $prepare_args[] = $args['user_id'];
         }
 
@@ -332,13 +336,13 @@ class PIT_Guest_Repository {
 
         $duplicates = [];
 
-        // Build user clause
+        // Build user clause (scoped to creator)
         $user_clause = '';
         if (!PIT_User_Context::is_admin()) {
             $user_id = $user_id ?? PIT_User_Context::get_user_id();
-            $user_clause = $wpdb->prepare(" AND g1.user_id = %d AND g2.user_id = %d", $user_id, $user_id);
+            $user_clause = $wpdb->prepare(" AND g1.created_by_user_id = %d AND g2.created_by_user_id = %d", $user_id, $user_id);
         } elseif ($user_id !== null) {
-            $user_clause = $wpdb->prepare(" AND g1.user_id = %d AND g2.user_id = %d", $user_id, $user_id);
+            $user_clause = $wpdb->prepare(" AND g1.created_by_user_id = %d AND g2.created_by_user_id = %d", $user_id, $user_id);
         }
 
         // LinkedIn URL duplicates
@@ -487,13 +491,13 @@ class PIT_Guest_Repository {
         global $wpdb;
         $table = $wpdb->prefix . 'pit_guests';
 
-        // Build user clause
+        // Build user clause (scoped to creator)
         $user_clause = '';
         if (!PIT_User_Context::is_admin()) {
             $user_id = $user_id ?? PIT_User_Context::get_user_id();
-            $user_clause = $wpdb->prepare(" AND user_id = %d", $user_id);
+            $user_clause = $wpdb->prepare(" AND created_by_user_id = %d", $user_id);
         } elseif ($user_id !== null) {
-            $user_clause = $wpdb->prepare(" AND user_id = %d", $user_id);
+            $user_clause = $wpdb->prepare(" AND created_by_user_id = %d", $user_id);
         }
 
         return [
