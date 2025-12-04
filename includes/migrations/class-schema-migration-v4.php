@@ -981,94 +981,68 @@ class PIT_Schema_Migration_V4 {
 
     /**
      * Create pit_guests table with v4 schema (including claiming columns)
+     * Uses direct query instead of dbDelta for reliability with complex schemas
      */
     private static function create_guests_table_v4() {
         global $wpdb;
         $table = $wpdb->prefix . 'pit_guests';
         $charset_collate = $wpdb->get_charset_collate();
 
-        $sql = "CREATE TABLE $table (
+        // Use direct SQL - dbDelta has issues with comments and ENUM
+        // Note: current_role needs backticks (reserved word in some MySQL versions)
+        $sql = "CREATE TABLE IF NOT EXISTS $table (
             id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-
-            -- Identity Claiming (v4)
             claimed_by_user_id bigint(20) UNSIGNED DEFAULT NULL,
-            claim_status ENUM('unclaimed', 'pending', 'verified', 'rejected') DEFAULT 'unclaimed',
-            claim_verified_at DATETIME DEFAULT NULL,
-            claim_verification_method VARCHAR(50) DEFAULT NULL,
-
-            -- Provenance (v4 renamed from user_id)
+            claim_status varchar(20) DEFAULT 'unclaimed',
+            claim_verified_at datetime DEFAULT NULL,
+            claim_verification_method varchar(50) DEFAULT NULL,
             created_by_user_id bigint(20) UNSIGNED DEFAULT NULL,
-
-            -- Identity
             full_name varchar(255) NOT NULL,
             first_name varchar(100) DEFAULT NULL,
             last_name varchar(100) DEFAULT NULL,
-
-            -- Deduplication Keys
             linkedin_url text DEFAULT NULL,
             linkedin_url_hash char(32) DEFAULT NULL,
             email varchar(255) DEFAULT NULL,
             email_hash char(32) DEFAULT NULL,
-
-            -- Professional Info
             current_company varchar(255) DEFAULT NULL,
-            current_role varchar(255) DEFAULT NULL,
+            `current_role` varchar(255) DEFAULT NULL,
             company_stage varchar(50) DEFAULT NULL,
             company_revenue varchar(50) DEFAULT NULL,
             industry varchar(100) DEFAULT NULL,
-
-            -- Background (JSON)
             expertise_areas text DEFAULT NULL,
             past_companies text DEFAULT NULL,
             education text DEFAULT NULL,
             notable_achievements text DEFAULT NULL,
-
-            -- Public Contact (Private contact goes to pit_guest_private_contacts)
             twitter_handle varchar(100) DEFAULT NULL,
             instagram_handle varchar(100) DEFAULT NULL,
             youtube_channel varchar(255) DEFAULT NULL,
             website_url text DEFAULT NULL,
-
-            -- Social Proof
             linkedin_connections int(11) DEFAULT NULL,
             twitter_followers int(11) DEFAULT NULL,
             instagram_followers int(11) DEFAULT NULL,
             youtube_subscribers int(11) DEFAULT NULL,
             verified_accounts text DEFAULT NULL,
-
-            -- Location
             city varchar(100) DEFAULT NULL,
             state_region varchar(100) DEFAULT NULL,
             country varchar(100) DEFAULT NULL,
             timezone varchar(50) DEFAULT NULL,
-
-            -- Enrichment
             enrichment_provider varchar(50) DEFAULT NULL,
             enrichment_level varchar(50) DEFAULT NULL,
             enriched_at datetime DEFAULT NULL,
             enrichment_cost decimal(10,4) DEFAULT 0,
             data_quality_score int(11) DEFAULT 0,
-
-            -- Verification
             is_verified tinyint(1) DEFAULT 0,
             verification_count int(11) DEFAULT 0,
             last_verified_by_user_id bigint(20) UNSIGNED DEFAULT NULL,
             last_verified_at datetime DEFAULT NULL,
             verification_notes text DEFAULT NULL,
-
-            -- Deduplication
             is_merged tinyint(1) DEFAULT 0,
             merged_into_guest_id bigint(20) UNSIGNED DEFAULT NULL,
             merge_history text DEFAULT NULL,
-
-            -- Source
             discovery_source varchar(50) DEFAULT NULL,
             source_podcast_id bigint(20) UNSIGNED DEFAULT NULL,
-
-            -- Timestamps
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
             PRIMARY KEY (id),
             KEY claimed_by_user_id_idx (claimed_by_user_id),
             KEY claim_status_idx (claim_status),
@@ -1079,10 +1053,9 @@ class PIT_Schema_Migration_V4 {
             KEY current_company_idx (current_company),
             KEY is_verified_idx (is_verified),
             KEY is_merged_idx (is_merged)
-        ) $charset_collate;";
+        ) $charset_collate";
 
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
+        $wpdb->query($sql);
 
         return $wpdb->get_var("SHOW TABLES LIKE '$table'") === $table;
     }

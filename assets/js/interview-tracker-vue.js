@@ -33,7 +33,7 @@
                 showArchived: false,
             },
             guestProfiles: [],
-            // Status columns matching Formidable field 8113 (Interview Status)
+            // Status columns for Interview Tracker
             statusColumns: [
                 { key: 'potential', label: 'Potential', color: '#6b7280' },
                 { key: 'active', label: 'Active', color: '#3b82f6' },
