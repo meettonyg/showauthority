@@ -2582,6 +2582,12 @@ button.cancel-button.custom-modal-close,
   color: #334155;
 }
 
+.search-spinner {
+  position: absolute;
+  right: 12px;
+  color: #0284c7;
+}
+
 .search-results-count {
   margin-top: 8px;
   font-size: 13px;

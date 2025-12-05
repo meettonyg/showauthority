@@ -126,7 +126,47 @@ class PIT_REST_Episode_Link {
             return new WP_Error('no_rss', 'This podcast does not have an RSS feed URL', ['status' => 400]);
         }
 
-        // Fetch episodes from RSS
+        // When searching, we need to search ALL episodes first, then paginate the results
+        // Otherwise we'd only search the current page of episodes
+        if (!empty($search)) {
+            // Fetch ALL episodes for searching (use high limit to get all cached episodes)
+            $result = PIT_RSS_Parser::parse_episodes(
+                $opportunity->rss_feed_url,
+                0,      // Start from beginning
+                10000,  // High limit to get all episodes
+                $refresh
+            );
+
+            if (is_wp_error($result)) {
+                return $result;
+            }
+
+            // Filter by search term
+            $search_lower = strtolower($search);
+            $filtered_episodes = array_filter($result['episodes'], function ($ep) use ($search_lower) {
+                return strpos(strtolower($ep['title']), $search_lower) !== false ||
+                       strpos(strtolower($ep['description']), $search_lower) !== false;
+            });
+            $filtered_episodes = array_values($filtered_episodes); // Re-index
+
+            // Apply pagination to filtered results
+            $total_filtered = count($filtered_episodes);
+            $paginated_episodes = array_slice($filtered_episodes, $offset, $limit);
+
+            return new WP_REST_Response([
+                'success' => true,
+                'podcast_name' => $opportunity->podcast_name,
+                'episodes' => $paginated_episodes,
+                'total_available' => $total_filtered,
+                'total_in_feed' => $result['total_available'],
+                'has_more' => ($offset + $limit) < $total_filtered,
+                'cached' => $result['cached'] ?? false,
+                'cache_expires' => $result['cache_expires'] ?? null,
+                'search_term' => $search,
+            ], 200);
+        }
+
+        // No search - use normal pagination
         $result = PIT_RSS_Parser::parse_episodes(
             $opportunity->rss_feed_url,
             $offset,
@@ -138,22 +178,10 @@ class PIT_REST_Episode_Link {
             return $result;
         }
 
-        $episodes = $result['episodes'];
-
-        // Filter by search term if provided
-        if (!empty($search)) {
-            $search_lower = strtolower($search);
-            $episodes = array_filter($episodes, function ($ep) use ($search_lower) {
-                return strpos(strtolower($ep['title']), $search_lower) !== false ||
-                       strpos(strtolower($ep['description']), $search_lower) !== false;
-            });
-            $episodes = array_values($episodes); // Re-index
-        }
-
         return new WP_REST_Response([
             'success' => true,
             'podcast_name' => $opportunity->podcast_name,
-            'episodes' => $episodes,
+            'episodes' => $result['episodes'],
             'total_available' => $result['total_available'],
             'has_more' => $result['has_more'],
             'cached' => $result['cached'] ?? false,

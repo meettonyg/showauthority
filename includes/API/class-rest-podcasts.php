@@ -148,6 +148,10 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
                     'default' => false,
                     'sanitize_callback' => 'rest_sanitize_boolean',
                 ],
+                'search' => [
+                    'default' => '',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
             ],
         ]);
 
@@ -509,6 +513,7 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
         $offset = (int) $request->get_param('offset');
         $limit = (int) $request->get_param('limit');
         $refresh = (bool) $request->get_param('refresh');
+        $search = $request->get_param('search');
 
         // Validate limit (max 50 per request)
         $limit = min($limit, 50);
@@ -527,7 +532,52 @@ class PIT_REST_Podcasts extends PIT_REST_Base {
             return self::error('no_rss_url', 'Podcast does not have an RSS feed URL configured', 400);
         }
 
-        // Parse episodes from RSS feed
+        // When searching, we need to search ALL episodes first, then paginate the results
+        if (!empty($search)) {
+            // Fetch ALL episodes for searching
+            $result = PIT_RSS_Parser::parse_episodes(
+                $podcast->rss_feed_url,
+                0,      // Start from beginning
+                10000,  // High limit to get all episodes
+                $refresh
+            );
+
+            if (is_wp_error($result)) {
+                return self::error(
+                    $result->get_error_code(),
+                    $result->get_error_message(),
+                    500
+                );
+            }
+
+            // Filter by search term (title and description)
+            $search_lower = strtolower($search);
+            $filtered_episodes = array_filter($result['episodes'], function ($ep) use ($search_lower) {
+                return strpos(strtolower($ep['title']), $search_lower) !== false ||
+                       strpos(strtolower($ep['description'] ?? ''), $search_lower) !== false;
+            });
+            $filtered_episodes = array_values($filtered_episodes); // Re-index
+
+            // Apply pagination to filtered results
+            $total_filtered = count($filtered_episodes);
+            $paginated_episodes = array_slice($filtered_episodes, $offset, $limit);
+
+            return rest_ensure_response([
+                'success' => true,
+                'episodes' => $paginated_episodes,
+                'total_available' => $total_filtered,
+                'total_in_feed' => $result['total_available'],
+                'has_more' => ($offset + $limit) < $total_filtered,
+                'cached' => $result['cached'] ?? false,
+                'cache_expires' => $result['cache_expires'] ?? null,
+                'search_term' => $search,
+                'podcast_id' => $podcast_id,
+                'podcast_name' => $podcast->title,
+                'podcast_artwork' => $podcast->artwork_url ?? '',
+            ]);
+        }
+
+        // No search - use normal pagination
         $result = PIT_RSS_Parser::parse_episodes(
             $podcast->rss_feed_url,
             $offset,

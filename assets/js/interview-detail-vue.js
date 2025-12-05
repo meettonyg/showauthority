@@ -503,7 +503,77 @@
              */
             async refreshEpisodes() {
                 this.episodesMeta.offset = 0;
+                this.episodeSearchTerm = ''; // Clear search when refreshing
                 await this.loadEpisodes(true);
+            },
+
+            /**
+             * Search episodes across the entire RSS feed
+             * Makes an API call with search parameter to search all cached episodes
+             *
+             * @param {string} searchTerm The search term
+             */
+            async searchEpisodes(searchTerm) {
+                if (!this.interview?.podcast_id) {
+                    return;
+                }
+
+                // If search term is empty, reload normal episodes
+                if (!searchTerm || searchTerm.trim() === '') {
+                    this.episodeSearchTerm = '';
+                    this.episodesMeta.offset = 0;
+                    await this.loadEpisodes(false);
+                    return;
+                }
+
+                this.episodesLoading = true;
+                this.episodesError = null;
+                this.episodeSearchTerm = searchTerm;
+
+                try {
+                    // Build API URL with search parameter
+                    const baseUrl = this.config.restUrl.replace('guestify/v1/', 'podcast-influence/v1/');
+                    const params = new URLSearchParams({
+                        offset: 0,
+                        limit: 50, // Get more results when searching
+                        search: searchTerm.trim(),
+                    });
+
+                    const response = await fetch(
+                        `${baseUrl}podcasts/${this.interview.podcast_id}/episodes?${params}`,
+                        {
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-WP-Nonce': this.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.message || 'Failed to search episodes');
+                    }
+
+                    const data = await response.json();
+
+                    // Replace episodes with search results
+                    this.episodes = data.episodes || [];
+
+                    // Update metadata
+                    this.episodesMeta = {
+                        totalAvailable: data.total_available || 0,
+                        totalInFeed: data.total_in_feed || 0,
+                        hasMore: data.has_more || false,
+                        cached: data.cached || false,
+                        cacheExpires: data.cache_expires || null,
+                        offset: this.episodes.length,
+                    };
+                } catch (err) {
+                    this.episodesError = err.message;
+                    console.error('Failed to search episodes:', err);
+                } finally {
+                    this.episodesLoading = false;
+                }
             },
 
             /**
@@ -1151,7 +1221,7 @@
                                     </div>
 
                                     <!-- Episode Search Filter -->
-                                    <div v-if="episodes.length > 0" class="episode-search-filter">
+                                    <div v-if="episodes.length > 0 || searchInputValue" class="episode-search-filter">
                                         <div class="search-input-wrapper">
                                             <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                 <circle cx="11" cy="11" r="8"></circle>
@@ -1159,14 +1229,18 @@
                                             </svg>
                                             <input
                                                 type="text"
-                                                v-model="store.episodeSearchTerm"
-                                                placeholder="Search episodes by name or keyword..."
+                                                :value="searchInputValue"
+                                                @input="handleSearchInput"
+                                                placeholder="Search all episodes by name or keyword..."
                                                 class="episode-search-input"
                                                 @keypress.enter.prevent>
+                                            <svg v-if="episodesLoading && searchInputValue" class="search-spinner spinning" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                                            </svg>
                                             <button
-                                                v-if="store.episodeSearchTerm"
+                                                v-else-if="searchInputValue"
                                                 class="search-clear-btn"
-                                                @click="store.episodeSearchTerm = ''"
+                                                @click="clearSearch"
                                                 title="Clear search">
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                     <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -1174,8 +1248,9 @@
                                                 </svg>
                                             </button>
                                         </div>
-                                        <div v-if="store.episodeSearchTerm" class="search-results-count">
-                                            {{ filteredEpisodes.length }} of {{ episodes.length }} episodes match "{{ store.episodeSearchTerm }}"
+                                        <div v-if="store.episodeSearchTerm && !episodesLoading" class="search-results-count">
+                                            Found {{ episodesMeta.totalAvailable }} episodes matching "{{ store.episodeSearchTerm }}"
+                                            <span v-if="episodesMeta.totalInFeed"> ({{ episodesMeta.totalInFeed }} total in feed)</span>
                                         </div>
                                     </div>
 
@@ -1197,8 +1272,8 @@
                                         <button class="button outline-button" @click="refreshEpisodes">Try Again</button>
                                     </div>
 
-                                    <!-- Empty State -->
-                                    <div v-else-if="episodes.length === 0" class="notes-empty">
+                                    <!-- Empty State (no episodes and not searching) -->
+                                    <div v-else-if="episodes.length === 0 && !store.episodeSearchTerm" class="notes-empty">
                                         <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                             <circle cx="12" cy="12" r="10"></circle>
                                             <polygon points="10 8 16 12 10 16 10 8"></polygon>
@@ -1208,19 +1283,20 @@
                                         <button class="button outline-button" @click="refreshEpisodes">Load Episodes</button>
                                     </div>
 
+                                    <!-- No Search Results -->
+                                    <div v-else-if="episodes.length === 0 && store.episodeSearchTerm" class="notes-empty">
+                                        <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <circle cx="11" cy="11" r="8"></circle>
+                                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                        </svg>
+                                        <h3 class="notes-empty-title">No Matching Episodes</h3>
+                                        <p class="notes-empty-text">No episodes match "{{ store.episodeSearchTerm }}" in the entire feed. Try a different search term.</p>
+                                        <button class="button outline-button" @click="clearSearch">Clear Search</button>
+                                    </div>
+
                                     <!-- Episodes List -->
                                     <div v-else class="episodes-list">
-                                        <!-- No results message when search returns empty -->
-                                        <div v-if="filteredEpisodes.length === 0 && store.episodeSearchTerm" class="notes-empty">
-                                            <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                                <circle cx="11" cy="11" r="8"></circle>
-                                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                                            </svg>
-                                            <h3 class="notes-empty-title">No Matching Episodes</h3>
-                                            <p class="notes-empty-text">No episodes match "{{ store.episodeSearchTerm }}". Try a different search term.</p>
-                                            <button class="button outline-button" @click="store.episodeSearchTerm = ''">Clear Search</button>
-                                        </div>
-                                        <div v-for="(episode, index) in filteredEpisodes" :key="episode.guid || index" class="episode-card">
+                                        <div v-for="(episode, index) in episodes" :key="episode.guid || index" class="episode-card">
                                             <!-- Episode Thumbnail -->
                                             <img 
                                                 v-if="episode.thumbnail_url" 
@@ -1325,8 +1401,8 @@
                                         </div>
 
                                         <!-- Episodes Count -->
-                                        <div v-if="filteredEpisodes.length > 0" class="episodes-meta">
-                                            <span v-if="store.episodeSearchTerm">Showing {{ filteredEpisodes.length }} filtered of {{ episodes.length }} loaded episodes</span>
+                                        <div v-if="episodes.length > 0" class="episodes-meta">
+                                            <span v-if="store.episodeSearchTerm">Showing {{ episodes.length }} of {{ episodesMeta.totalAvailable }} matching episodes</span>
                                             <span v-else>Showing {{ episodes.length }} of {{ episodesMeta.totalAvailable }} episodes</span>
                                             <span v-if="episodesMeta.cached" class="cache-indicator" :title="'Cached until ' + episodesMeta.cacheExpires">
                                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1821,7 +1897,7 @@
         
         setup() {
             const store = useDetailStore();
-            
+
             // Modal states
             const showTaskModal = ref(false);
             const showNoteModal = ref(false);
@@ -1830,6 +1906,33 @@
             const showDateModal = ref(false);
             const dateModalType = ref(''); // 'record' or 'air'
             const dateModalValue = ref('');
+
+            // Episode search with debounce
+            const searchInputValue = ref('');
+            let searchDebounceTimer = null;
+
+            const handleSearchInput = (event) => {
+                const value = event.target.value;
+                searchInputValue.value = value;
+
+                // Clear existing timer
+                if (searchDebounceTimer) {
+                    clearTimeout(searchDebounceTimer);
+                }
+
+                // Debounce: wait 300ms after user stops typing
+                searchDebounceTimer = setTimeout(() => {
+                    store.searchEpisodes(value);
+                }, 300);
+            };
+
+            const clearSearch = () => {
+                searchInputValue.value = '';
+                if (searchDebounceTimer) {
+                    clearTimeout(searchDebounceTimer);
+                }
+                store.searchEpisodes('');
+            };
             
             // Toast notification state
             const toastMessage = ref('');
@@ -2377,6 +2480,9 @@
                 toastMessage,
                 toastType,
                 showToast,
+                searchInputValue,
+                handleSearchInput,
+                clearSearch,
                 isDescriptionExpanded,
                 newTask,
                 newNote,
