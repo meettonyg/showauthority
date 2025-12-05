@@ -145,6 +145,11 @@
                     
                     this.interview = response;
                     
+                    // Load linked episode details if exists
+                    if (response.engagement_id) {
+                        await this.loadLinkedEpisode();
+                    }
+                    
                     await Promise.all([
                         this.loadTasks(),
                         this.loadNotes(),
@@ -354,6 +359,59 @@
             },
 
             /**
+             * Load linked episode details if opportunity has engagement_id
+             */
+            async loadLinkedEpisode() {
+                if (!this.interview?.engagement_id) {
+                    this.linkedEpisode = null;
+                    return;
+                }
+
+                try {
+                    // Fetch engagement details
+                    const baseUrl = this.config.restUrl.replace('guestify/v1/', 'guestify/v1/');
+                    const response = await fetch(
+                        `${baseUrl}engagements/${this.interview.engagement_id}`,
+                        {
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-WP-Nonce': this.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (!response.ok) {
+                        console.warn('Failed to load linked episode details');
+                        return;
+                    }
+
+                    const data = await response.json();
+                    
+                    if (data) {
+                        this.linkedEpisode = {
+                            id: data.id,
+                            title: data.title,
+                            guid: data.episode_guid,
+                            date: data.engagement_date,
+                            url: data.episode_url,
+                            duration: data.duration_seconds ? this.formatDuration(data.duration_seconds) : null,
+                        };
+                    }
+                } catch (err) {
+                    console.warn('Error loading linked episode:', err);
+                }
+            },
+
+            /**
+             * Format seconds to display duration
+             */
+            formatDuration(seconds) {
+                if (!seconds) return null;
+                const mins = Math.floor(seconds / 60);
+                return `${mins} min`;
+            },
+
+            /**
              * Load episodes from RSS feed via podcast-influence API
              * Uses the podcast_id from the interview/appearance record
              */
@@ -464,6 +522,7 @@
                     this.linkedEpisode = {
                         id: response.engagement_id,
                         title: episode.title,
+                        guid: episode.guid,
                         date: episode.date,
                         date_iso: episode.date_iso,
                         url: episode.episode_url || episode.audio_url,
@@ -1181,7 +1240,7 @@
 
                                                 <!-- Already Linked Indicator -->
                                                 <span
-                                                    v-else-if="linkedEpisode?.title === episode.title || interview?.engagement_id"
+                                                    v-else-if="isEpisodeLinked(episode)"
                                                     class="linked-badge"
                                                     title="This episode is linked to this interview">
                                                     <svg class="button-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2127,6 +2186,16 @@
                 }
             };
 
+            // Check if a specific episode is the linked one
+            const isEpisodeLinked = (episode) => {
+                // If we just linked an episode in this session, check by title/guid
+                if (store.linkedEpisode) {
+                    if (episode.guid && store.linkedEpisode.guid === episode.guid) return true;
+                    if (store.linkedEpisode.title === episode.title) return true;
+                }
+                return false;
+            };
+
             // Episode linking handlers
             const handleLinkEpisode = async (episode) => {
                 if (!confirm(`Link "${episode.title}" to this interview? This will mark the interview as "aired".`)) {
@@ -2301,6 +2370,7 @@
                 // Episode linking methods
                 handleLinkEpisode,
                 handleUnlinkEpisode,
+                isEpisodeLinked,
 
                 // Podcast metadata refresh
                 refreshPodcastMetadata: () => store.refreshPodcastMetadata(),

@@ -213,7 +213,7 @@ class PIT_REST_Episode_Link {
             'episode_guid' => $episode_guid,
             'duration_seconds' => $episode_duration ?: null,
             'description' => $episode_description,
-            'source' => 'prospector_link',
+            'discovery_source' => 'prospector_link',
             'discovered_by_user_id' => $user_id,
             'created_at' => current_time('mysql'),
             'updated_at' => current_time('mysql'),

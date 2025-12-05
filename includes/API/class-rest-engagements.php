@@ -329,6 +329,7 @@ class PIT_REST_Engagements {
         if ($full) {
             $data = array_merge($data, [
                 'episode_guid' => $row->episode_guid,
+                'episode_url' => $row->episode_url,
                 'description' => $row->description,
                 'embed_url' => $row->embed_url,
                 'audio_url' => $row->audio_url,
