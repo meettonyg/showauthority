@@ -44,7 +44,12 @@
                 cacheExpires: null,
                 offset: 0,
             },
-            
+
+            // Linked episode (engagement)
+            linkedEpisode: null,
+            linkingEpisode: false,
+            unlinkingEpisode: false,
+
             // UI state
             activeTab: 'about',
             loading: true,
@@ -78,6 +83,9 @@
             
             pinnedNotes: (state) => state.notes.filter(n => n.is_pinned),
             unpinnedNotes: (state) => state.notes.filter(n => !n.is_pinned),
+
+            // Check if an episode is linked to this opportunity
+            hasLinkedEpisode: (state) => !!state.interview?.engagement_id,
         },
 
         actions: {
@@ -422,6 +430,79 @@
             async refreshEpisodes() {
                 this.episodesMeta.offset = 0;
                 await this.loadEpisodes(true);
+            },
+
+            /**
+             * Link an episode to this opportunity
+             * Creates an engagement record and links it
+             *
+             * @param {Object} episode Episode data from RSS feed
+             */
+            async linkEpisode(episode) {
+                if (this.linkingEpisode) return;
+
+                this.linkingEpisode = true;
+                try {
+                    const response = await this.api(`appearances/${this.config.interviewId}/link-episode`, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            episode_title: episode.title,
+                            episode_date: episode.date_iso,
+                            episode_url: episode.episode_url || episode.audio_url,
+                            episode_guid: episode.guid,
+                            episode_duration: episode.duration_seconds,
+                            episode_description: episode.description,
+                        }),
+                    });
+
+                    // Update local state
+                    this.interview.engagement_id = response.engagement_id;
+                    this.interview.status = response.new_status || 'aired';
+                    this.interview.air_date = episode.date_iso || this.interview.air_date;
+
+                    // Store linked episode info for display
+                    this.linkedEpisode = {
+                        id: response.engagement_id,
+                        title: episode.title,
+                        date: episode.date,
+                        date_iso: episode.date_iso,
+                        url: episode.episode_url || episode.audio_url,
+                        duration: episode.duration_display,
+                        thumbnail: episode.thumbnail_url,
+                    };
+
+                    return response;
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                } finally {
+                    this.linkingEpisode = false;
+                }
+            },
+
+            /**
+             * Unlink episode from this opportunity
+             */
+            async unlinkEpisode() {
+                if (this.unlinkingEpisode) return;
+
+                this.unlinkingEpisode = true;
+                try {
+                    await this.api(`appearances/${this.config.interviewId}/unlink-episode`, {
+                        method: 'POST',
+                    });
+
+                    // Update local state
+                    this.interview.engagement_id = null;
+                    this.linkedEpisode = null;
+
+                    return true;
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                } finally {
+                    this.unlinkingEpisode = false;
+                }
             },
 
             /**
@@ -1070,13 +1151,45 @@
                                                 </div>
                                             </div>
 
-                                            <!-- Duration Badge -->
-                                            <div v-if="episode.duration_display" class="episode-duration">
-                                                <svg class="duration-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <circle cx="12" cy="12" r="10"></circle>
-                                                    <polyline points="12 6 12 12 16 14"></polyline>
-                                                </svg>
-                                                {{ episode.duration_display }}
+                                            <!-- Episode Actions -->
+                                            <div class="episode-actions">
+                                                <!-- Duration Badge -->
+                                                <div v-if="episode.duration_display" class="episode-duration">
+                                                    <svg class="duration-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <circle cx="12" cy="12" r="10"></circle>
+                                                        <polyline points="12 6 12 12 16 14"></polyline>
+                                                    </svg>
+                                                    {{ episode.duration_display }}
+                                                </div>
+
+                                                <!-- Link Episode Button -->
+                                                <button
+                                                    v-if="!hasLinkedEpisode"
+                                                    class="button small link-episode-btn"
+                                                    @click="handleLinkEpisode(episode)"
+                                                    :disabled="linkingEpisode"
+                                                    :title="'Link this episode to mark interview as aired'">
+                                                    <svg v-if="linkingEpisode" class="button-icon spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                                                    </svg>
+                                                    <svg v-else class="button-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                                                    </svg>
+                                                    {{ linkingEpisode ? 'Linking...' : 'Link Episode' }}
+                                                </button>
+
+                                                <!-- Already Linked Indicator -->
+                                                <span
+                                                    v-else-if="linkedEpisode?.title === episode.title || interview?.engagement_id"
+                                                    class="linked-badge"
+                                                    title="This episode is linked to this interview">
+                                                    <svg class="button-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                                    </svg>
+                                                    Linked
+                                                </span>
                                             </div>
                                         </div>
 
@@ -2013,7 +2126,34 @@
                     showDeleteModal.value = false;
                 }
             };
-            
+
+            // Episode linking handlers
+            const handleLinkEpisode = async (episode) => {
+                if (!confirm(`Link "${episode.title}" to this interview? This will mark the interview as "aired".`)) {
+                    return;
+                }
+                try {
+                    await store.linkEpisode(episode);
+                    showSuccessMessage('Episode linked successfully! Interview marked as aired.');
+                } catch (err) {
+                    console.error('Failed to link episode:', err);
+                    showErrorMessage('Failed to link episode: ' + err.message);
+                }
+            };
+
+            const handleUnlinkEpisode = async () => {
+                if (!confirm('Unlink this episode from the interview?')) {
+                    return;
+                }
+                try {
+                    await store.unlinkEpisode();
+                    showSuccessMessage('Episode unlinked successfully.');
+                } catch (err) {
+                    console.error('Failed to unlink episode:', err);
+                    showErrorMessage('Failed to unlink episode: ' + err.message);
+                }
+            };
+
             // Task table helper methods
             const formatTaskType = (type) => {
                 if (!type) return 'General';
@@ -2091,6 +2231,12 @@
                 profilesError: computed(() => store.profilesError),
                 stages: computed(() => store.stages),
 
+                // Episode linking state
+                linkedEpisode: computed(() => store.linkedEpisode),
+                linkingEpisode: computed(() => store.linkingEpisode),
+                unlinkingEpisode: computed(() => store.unlinkingEpisode),
+                hasLinkedEpisode: computed(() => store.hasLinkedEpisode),
+
                 // Local state
                 showTaskModal,
                 showNoteModal,
@@ -2151,7 +2297,11 @@
                 loadEpisodes: () => store.loadEpisodes(),
                 loadMoreEpisodes: () => store.loadMoreEpisodes(),
                 refreshEpisodes: () => store.refreshEpisodes(),
-                
+
+                // Episode linking methods
+                handleLinkEpisode,
+                handleUnlinkEpisode,
+
                 // Podcast metadata refresh
                 refreshPodcastMetadata: () => store.refreshPodcastMetadata(),
             };

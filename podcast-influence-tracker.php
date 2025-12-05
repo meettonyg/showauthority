@@ -136,6 +136,9 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-private-contacts.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-claim-requests.php';
 
+        // v4.1 PROSPECTOR INTEGRATION
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-episode-link.php';
+
         // MIGRATIONS
         require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
         require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-events-schema.php';
@@ -238,6 +241,9 @@ class Podcast_Influence_Tracker {
         PIT_REST_Speaking_Credits::register_routes();
         PIT_REST_Private_Contacts::register_routes();
         PIT_REST_Claim_Requests::register_routes();
+
+        // v4.1 Prospector Integration - Episode Linking
+        PIT_REST_Episode_Link::register_routes();
     }
 
     public function add_cron_schedules($schedules) {
