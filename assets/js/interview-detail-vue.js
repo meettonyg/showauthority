@@ -45,6 +45,9 @@
                 offset: 0,
             },
 
+            // Episode search filter
+            episodeSearchTerm: '',
+
             // Linked episode (engagement)
             linkedEpisode: null,
             linkingEpisode: false,
@@ -86,6 +89,19 @@
 
             // Check if an episode is linked to this opportunity
             hasLinkedEpisode: (state) => !!state.interview?.engagement_id,
+
+            // Filter episodes by search term (searches title and description)
+            filteredEpisodes: (state) => {
+                if (!state.episodeSearchTerm || state.episodeSearchTerm.trim() === '') {
+                    return state.episodes;
+                }
+                const searchLower = state.episodeSearchTerm.toLowerCase().trim();
+                return state.episodes.filter(episode => {
+                    const titleMatch = episode.title?.toLowerCase().includes(searchLower);
+                    const descMatch = episode.description?.toLowerCase().includes(searchLower);
+                    return titleMatch || descMatch;
+                });
+            },
         },
 
         actions: {
@@ -1119,8 +1135,8 @@
                                     <!-- Header with Refresh Button -->
                                     <div class="section-header">
                                         <h2 class="section-heading">Recent Episodes</h2>
-                                        <button 
-                                            class="button outline-button small" 
+                                        <button
+                                            class="button outline-button small"
                                             @click="refreshEpisodes"
                                             :disabled="episodesLoading">
                                             <svg v-if="episodesLoading" class="button-icon spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1132,6 +1148,35 @@
                                             </svg>
                                             {{ episodesLoading ? 'Loading...' : 'Refresh' }}
                                         </button>
+                                    </div>
+
+                                    <!-- Episode Search Filter -->
+                                    <div v-if="episodes.length > 0" class="episode-search-filter">
+                                        <div class="search-input-wrapper">
+                                            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="11" cy="11" r="8"></circle>
+                                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                            </svg>
+                                            <input
+                                                type="text"
+                                                v-model="store.episodeSearchTerm"
+                                                placeholder="Search episodes by name or keyword..."
+                                                class="episode-search-input"
+                                                @keypress.enter.prevent>
+                                            <button
+                                                v-if="store.episodeSearchTerm"
+                                                class="search-clear-btn"
+                                                @click="store.episodeSearchTerm = ''"
+                                                title="Clear search">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        <div v-if="store.episodeSearchTerm" class="search-results-count">
+                                            {{ filteredEpisodes.length }} of {{ episodes.length }} episodes match "{{ store.episodeSearchTerm }}"
+                                        </div>
                                     </div>
 
                                     <!-- Loading State -->
@@ -1165,7 +1210,17 @@
 
                                     <!-- Episodes List -->
                                     <div v-else class="episodes-list">
-                                        <div v-for="(episode, index) in episodes" :key="episode.guid || index" class="episode-card">
+                                        <!-- No results message when search returns empty -->
+                                        <div v-if="filteredEpisodes.length === 0 && store.episodeSearchTerm" class="notes-empty">
+                                            <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                <circle cx="11" cy="11" r="8"></circle>
+                                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                            </svg>
+                                            <h3 class="notes-empty-title">No Matching Episodes</h3>
+                                            <p class="notes-empty-text">No episodes match "{{ store.episodeSearchTerm }}". Try a different search term.</p>
+                                            <button class="button outline-button" @click="store.episodeSearchTerm = ''">Clear Search</button>
+                                        </div>
+                                        <div v-for="(episode, index) in filteredEpisodes" :key="episode.guid || index" class="episode-card">
                                             <!-- Episode Thumbnail -->
                                             <img 
                                                 v-if="episode.thumbnail_url" 
@@ -1270,8 +1325,9 @@
                                         </div>
 
                                         <!-- Episodes Count -->
-                                        <div class="episodes-meta">
-                                            <span>Showing {{ episodes.length }} of {{ episodesMeta.totalAvailable }} episodes</span>
+                                        <div v-if="filteredEpisodes.length > 0" class="episodes-meta">
+                                            <span v-if="store.episodeSearchTerm">Showing {{ filteredEpisodes.length }} filtered of {{ episodes.length }} loaded episodes</span>
+                                            <span v-else>Showing {{ episodes.length }} of {{ episodesMeta.totalAvailable }} episodes</span>
                                             <span v-if="episodesMeta.cached" class="cache-indicator" :title="'Cached until ' + episodesMeta.cacheExpires">
                                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                     <circle cx="12" cy="12" r="10"></circle>
@@ -2283,6 +2339,9 @@
             });
             
             return {
+                // Store reference (for v-model binding on episodeSearchTerm)
+                store,
+
                 // Store state
                 loading: computed(() => store.loading),
                 error: computed(() => store.error),
@@ -2305,6 +2364,7 @@
                 linkingEpisode: computed(() => store.linkingEpisode),
                 unlinkingEpisode: computed(() => store.unlinkingEpisode),
                 hasLinkedEpisode: computed(() => store.hasLinkedEpisode),
+                filteredEpisodes: computed(() => store.filteredEpisodes),
 
                 // Local state
                 showTaskModal,
