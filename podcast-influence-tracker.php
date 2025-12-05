@@ -49,6 +49,7 @@ class Podcast_Influence_Tracker {
     private function load_dependencies() {
         // CORE
         require_once PIT_PLUGIN_DIR . 'includes/Core/class-database-schema.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Core/class-database.php';
         require_once PIT_PLUGIN_DIR . 'includes/Core/class-user-context.php';
         require_once PIT_PLUGIN_DIR . 'includes/Core/class-user-limits-repository.php';
         require_once PIT_PLUGIN_DIR . 'includes/Core/class-user-podcasts-repository.php';
