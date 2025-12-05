@@ -92,14 +92,16 @@
 
             // Filter episodes by search term (searches title and description)
             filteredEpisodes: (state) => {
-                if (!state.episodeSearchTerm || state.episodeSearchTerm.trim() === '') {
+                const searchTerm = (state.episodeSearchTerm || '').trim();
+                if (!searchTerm) {
                     return state.episodes;
                 }
-                const searchLower = state.episodeSearchTerm.toLowerCase().trim();
+                const searchLower = searchTerm.toLowerCase();
                 return state.episodes.filter(episode => {
-                    const titleMatch = episode.title?.toLowerCase().includes(searchLower);
-                    const descMatch = episode.description?.toLowerCase().includes(searchLower);
-                    return titleMatch || descMatch;
+                    const title = episode.title || '';
+                    const description = episode.description || '';
+                    return title.toLowerCase().includes(searchLower) ||
+                           description.toLowerCase().includes(searchLower);
                 });
             },
         },
@@ -1248,8 +1250,8 @@
                                                 </svg>
                                             </button>
                                         </div>
-                                        <div v-if="store.episodeSearchTerm && !episodesLoading" class="search-results-count">
-                                            Found {{ episodesMeta.totalAvailable }} episodes matching "{{ store.episodeSearchTerm }}"
+                                        <div v-if="episodeSearchTerm && !episodesLoading" class="search-results-count">
+                                            Found {{ episodesMeta.totalAvailable }} episodes matching "{{ episodeSearchTerm }}"
                                             <span v-if="episodesMeta.totalInFeed"> ({{ episodesMeta.totalInFeed }} total in feed)</span>
                                         </div>
                                     </div>
@@ -1273,7 +1275,7 @@
                                     </div>
 
                                     <!-- Empty State (no episodes and not searching) -->
-                                    <div v-else-if="episodes.length === 0 && !store.episodeSearchTerm" class="notes-empty">
+                                    <div v-else-if="episodes.length === 0 && !episodeSearchTerm" class="notes-empty">
                                         <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                             <circle cx="12" cy="12" r="10"></circle>
                                             <polygon points="10 8 16 12 10 16 10 8"></polygon>
@@ -1284,13 +1286,13 @@
                                     </div>
 
                                     <!-- No Search Results -->
-                                    <div v-else-if="episodes.length === 0 && store.episodeSearchTerm" class="notes-empty">
+                                    <div v-else-if="episodes.length === 0 && episodeSearchTerm" class="notes-empty">
                                         <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                             <circle cx="11" cy="11" r="8"></circle>
                                             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                                         </svg>
                                         <h3 class="notes-empty-title">No Matching Episodes</h3>
-                                        <p class="notes-empty-text">No episodes match "{{ store.episodeSearchTerm }}" in the entire feed. Try a different search term.</p>
+                                        <p class="notes-empty-text">No episodes match "{{ episodeSearchTerm }}" in the entire feed. Try a different search term.</p>
                                         <button class="button outline-button" @click="clearSearch">Clear Search</button>
                                     </div>
 
@@ -1402,7 +1404,7 @@
 
                                         <!-- Episodes Count -->
                                         <div v-if="episodes.length > 0" class="episodes-meta">
-                                            <span v-if="store.episodeSearchTerm">Showing {{ episodes.length }} of {{ episodesMeta.totalAvailable }} matching episodes</span>
+                                            <span v-if="episodeSearchTerm">Showing {{ episodes.length }} of {{ episodesMeta.totalAvailable }} matching episodes</span>
                                             <span v-else>Showing {{ episodes.length }} of {{ episodesMeta.totalAvailable }} episodes</span>
                                             <span v-if="episodesMeta.cached" class="cache-indicator" :title="'Cached until ' + episodesMeta.cacheExpires">
                                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1933,7 +1935,13 @@
                 }
                 store.searchEpisodes('');
             };
-            
+
+            // Writable computed for episodeSearchTerm (avoids exposing entire store)
+            const episodeSearchTerm = computed({
+                get: () => store.episodeSearchTerm,
+                set: (value) => { store.episodeSearchTerm = value; }
+            });
+
             // Toast notification state
             const toastMessage = ref('');
             const toastType = ref('success'); // 'success' or 'error'
@@ -2442,9 +2450,6 @@
             });
             
             return {
-                // Store reference (for v-model binding on episodeSearchTerm)
-                store,
-
                 // Store state
                 loading: computed(() => store.loading),
                 error: computed(() => store.error),
@@ -2483,6 +2488,7 @@
                 searchInputValue,
                 handleSearchInput,
                 clearSearch,
+                episodeSearchTerm,
                 isDescriptionExpanded,
                 newTask,
                 newNote,
