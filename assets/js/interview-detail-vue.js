@@ -434,6 +434,11 @@
              * Uses the podcast_id from the interview/appearance record
              */
             async loadEpisodes(refresh = false) {
+                // Don't load unfiltered episodes if a search is active (unless refreshing)
+                if (this.episodeSearchTerm && !refresh) {
+                    return;
+                }
+
                 // Need podcast_id from interview
                 if (!this.interview?.podcast_id) {
                     this.episodesError = 'No podcast linked to this interview';
@@ -445,7 +450,14 @@
 
                 try {
                     // Build API URL - note: uses podcast-influence namespace
-                    const baseUrl = this.config.restUrl.replace('guestify/v1/', 'podcast-influence/v1/');
+                    // Handle both 'guestify/v1/' and 'guestify/v1' formats
+                    let baseUrl = this.config.restUrl.replace('guestify/v1/', 'podcast-influence/v1/');
+                    baseUrl = baseUrl.replace('guestify/v1', 'podcast-influence/v1');
+                    // Ensure trailing slash
+                    if (!baseUrl.endsWith('/')) {
+                        baseUrl += '/';
+                    }
+
                     const params = new URLSearchParams({
                         offset: refresh ? 0 : this.episodesMeta.offset,
                         limit: 10,
@@ -534,12 +546,21 @@
 
                 try {
                     // Build API URL with search parameter
-                    const baseUrl = this.config.restUrl.replace('guestify/v1/', 'podcast-influence/v1/');
+                    // Handle both 'guestify/v1/' and 'guestify/v1' formats
+                    let baseUrl = this.config.restUrl.replace('guestify/v1/', 'podcast-influence/v1/');
+                    baseUrl = baseUrl.replace('guestify/v1', 'podcast-influence/v1');
+                    // Ensure trailing slash
+                    if (!baseUrl.endsWith('/')) {
+                        baseUrl += '/';
+                    }
+
                     const params = new URLSearchParams({
                         offset: 0,
                         limit: 50, // Get more results when searching
                         search: searchTerm.trim(),
                     });
+
+                    console.log('Searching episodes:', { url: `${baseUrl}podcasts/${this.interview.podcast_id}/episodes`, search: searchTerm.trim() });
 
                     const response = await fetch(
                         `${baseUrl}podcasts/${this.interview.podcast_id}/episodes?${params}`,
@@ -557,6 +578,13 @@
                     }
 
                     const data = await response.json();
+
+                    console.log('Search response:', {
+                        searchTerm: data.search_term,
+                        totalAvailable: data.total_available,
+                        totalInFeed: data.total_in_feed,
+                        episodesCount: data.episodes?.length
+                    });
 
                     // Replace episodes with search results
                     this.episodes = data.episodes || [];
