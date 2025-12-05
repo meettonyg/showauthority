@@ -91,7 +91,8 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-youtube-api.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-apify-client.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-itunes-resolver.php';
-        require_once PIT_PLUGIN_DIR . 'includes/integrations/class-formidable-integration.php';
+        // DEPRECATED: Formidable integration removed in v4.1 - using Guest Intel direct import
+        // require_once PIT_PLUGIN_DIR . 'includes/integrations/class-formidable-integration.php';
 
         // ENRICHMENT PROVIDERS (Abstract Interface)
         require_once PIT_PLUGIN_DIR . 'includes/integrations/enrichment/interface-enrichment-provider.php';
@@ -107,7 +108,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-export.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-public.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-settings.php';
-        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-formidable.php';
+        // DEPRECATED: require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-formidable.php'; // Removed in v4.1
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-metrics.php';
 
         // ADMIN
@@ -211,7 +212,7 @@ class Podcast_Influence_Tracker {
         // PIT_Admin_Migration_V4::init(); // Migration complete - uncomment if rollback needed
         PIT_Shortcodes::init();
         PIT_Background_Refresh::init();
-        PIT_Formidable_Integration::init();
+        // DEPRECATED: PIT_Formidable_Integration::init(); // Removed in v4.1
         PIT_Interview_Tracker_Shortcode::init();
         PIT_Interview_Detail_Shortcode::init();
         PIT_Calendar_Shortcode::init();
@@ -228,7 +229,7 @@ class Podcast_Influence_Tracker {
         PIT_REST_Export::register_routes();
         PIT_REST_Public::register_routes();
         PIT_REST_Settings::register_routes();
-        PIT_REST_Formidable::register_routes();
+        // DEPRECATED: PIT_REST_Formidable::register_routes(); // Removed in v4.1
         PIT_REST_Metrics::register_routes();
         PIT_REST_Appearances::register_routes();
         PIT_REST_Appearance_Tasks::register_routes();

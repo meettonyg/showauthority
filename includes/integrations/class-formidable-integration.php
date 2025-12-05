@@ -18,18 +18,22 @@ class PIT_Formidable_Integration {
 
     /**
      * Initialize integration
+     * 
+     * @deprecated 4.1.0 Formidable integration disabled - using Guest Intelligence direct import
      */
     public static function init() {
-        // Hook into Formidable form submissions
-        add_action('frm_after_create_entry', [__CLASS__, 'sync_entry'], 30, 2);
-        add_action('frm_after_update_entry', [__CLASS__, 'sync_entry'], 30, 2);
-
-        // Bulk sync action (via admin or cron)
-        add_action('pit_formidable_bulk_sync', [__CLASS__, 'bulk_sync_entries']);
-
-        // Schedule daily sync if not already scheduled
-        if (!wp_next_scheduled('pit_formidable_bulk_sync')) {
-            wp_schedule_event(time(), 'daily', 'pit_formidable_bulk_sync');
+        // DISABLED: Formidable integration no longer needed
+        // Imports now go directly to pit_opportunities via Guest Intel import handler
+        // 
+        // To re-enable legacy Formidable sync, uncomment the hooks below:
+        // add_action('frm_after_create_entry', [__CLASS__, 'sync_entry'], 30, 2);
+        // add_action('frm_after_update_entry', [__CLASS__, 'sync_entry'], 30, 2);
+        // add_action('pit_formidable_bulk_sync', [__CLASS__, 'bulk_sync_entries']);
+        
+        // Clear any scheduled sync jobs
+        $timestamp = wp_next_scheduled('pit_formidable_bulk_sync');
+        if ($timestamp) {
+            wp_unschedule_event($timestamp, 'pit_formidable_bulk_sync');
         }
     }
 
