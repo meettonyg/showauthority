@@ -62,7 +62,20 @@
             episodesError: null,
             profilesLoading: false,
             profilesError: null,
-            
+
+            // Email integration state (Guestify Outreach Bridge)
+            emailAvailable: false,
+            emailConfigured: false,
+            emailTemplates: [],
+            messages: [],
+            messagesLoading: false,
+            sendingEmail: false,
+            emailStats: {
+                total_sent: 0,
+                opened: 0,
+                clicked: 0,
+            },
+
             // Config from WordPress
             config: {
                 restUrl: '',
@@ -804,6 +817,94 @@
                     throw err;
                 } finally {
                     this.saving = false;
+                }
+            },
+
+            // =================================================================
+            // EMAIL INTEGRATION (Guestify Outreach Bridge)
+            // =================================================================
+
+            /**
+             * Check if email integration is available
+             */
+            async checkEmailIntegration() {
+                try {
+                    const response = await this.api('pit-bridge/status');
+                    this.emailAvailable = response.available;
+                    this.emailConfigured = response.configured;
+                } catch (err) {
+                    console.warn('Email integration not available:', err);
+                    this.emailAvailable = false;
+                    this.emailConfigured = false;
+                }
+            },
+
+            /**
+             * Load email templates from Guestify Outreach
+             */
+            async loadTemplates() {
+                if (!this.emailAvailable) return;
+                try {
+                    const response = await this.api('pit-bridge/templates');
+                    this.emailTemplates = response.data || [];
+                } catch (err) {
+                    console.error('Failed to load templates:', err);
+                }
+            },
+
+            /**
+             * Load messages for this appearance
+             */
+            async loadMessages() {
+                if (!this.emailAvailable) return;
+                this.messagesLoading = true;
+                try {
+                    const response = await this.api(`pit-bridge/appearances/${this.config.interviewId}/messages`);
+                    this.messages = response.data || [];
+                } catch (err) {
+                    console.error('Failed to load messages:', err);
+                } finally {
+                    this.messagesLoading = false;
+                }
+            },
+
+            /**
+             * Load email stats for this appearance
+             */
+            async loadEmailStats() {
+                if (!this.emailAvailable) return;
+                try {
+                    const response = await this.api(`pit-bridge/appearances/${this.config.interviewId}/stats`);
+                    this.emailStats = response.data || { total_sent: 0, opened: 0, clicked: 0 };
+                } catch (err) {
+                    console.error('Failed to load email stats:', err);
+                }
+            },
+
+            /**
+             * Send an email via Guestify Outreach
+             */
+            async sendEmail(payload) {
+                this.sendingEmail = true;
+                try {
+                    const response = await this.api(`pit-bridge/appearances/${this.config.interviewId}/send`, {
+                        method: 'POST',
+                        body: JSON.stringify(payload),
+                    });
+                    if (response.success) {
+                        // Refresh messages and notes (activity feed)
+                        await Promise.all([
+                            this.loadMessages(),
+                            this.loadEmailStats(),
+                            this.loadNotes(),
+                        ]);
+                    }
+                    return response;
+                } catch (err) {
+                    console.error('Failed to send email:', err);
+                    throw err;
+                } finally {
+                    this.sendingEmail = false;
                 }
             }
         }
@@ -1581,13 +1682,94 @@
                         <!-- Message Tab -->
                         <div class="tab-content message" :style="{ display: activeTab === 'message' ? 'block' : 'none' }">
                             <div class="tab-content-full">
-                                <div class="notes-empty">
+                                <!-- Not Available State -->
+                                <div v-if="!emailAvailable" class="notes-empty">
                                     <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                         <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
                                         <polyline points="22,6 12,13 2,6"></polyline>
                                     </svg>
-                                    <h3 class="notes-empty-title">Pitch Templates Coming Soon</h3>
-                                    <p class="notes-empty-text">Email templates and pitch generation will be available in a future update.</p>
+                                    <h3 class="notes-empty-title">Email Integration Required</h3>
+                                    <p class="notes-empty-text">Install and activate the Guestify Outreach plugin to send emails from here.</p>
+                                </div>
+
+                                <!-- Not Configured State -->
+                                <div v-else-if="!emailConfigured" class="notes-empty">
+                                    <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                    </svg>
+                                    <h3 class="notes-empty-title">Email Not Configured</h3>
+                                    <p class="notes-empty-text">Please configure your Brevo API key in Guestify Outreach settings.</p>
+                                </div>
+
+                                <!-- Email Interface -->
+                                <div v-else class="email-interface">
+                                    <!-- Email Stats -->
+                                    <div class="email-stats-bar">
+                                        <div class="email-stat">
+                                            <span class="email-stat-number">{{ emailStats.total_sent }}</span>
+                                            <span class="email-stat-label">Sent</span>
+                                        </div>
+                                        <div class="email-stat">
+                                            <span class="email-stat-number">{{ emailStats.opened }}</span>
+                                            <span class="email-stat-label">Opened</span>
+                                        </div>
+                                        <div class="email-stat">
+                                            <span class="email-stat-number">{{ emailStats.clicked }}</span>
+                                            <span class="email-stat-label">Clicked</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Compose Email Button -->
+                                    <div class="email-actions-header">
+                                        <h3 class="section-heading">Messages</h3>
+                                        <button class="button add-button" @click="showComposeModal = true">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+                                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                            </svg>
+                                            Compose Email
+                                        </button>
+                                    </div>
+
+                                    <!-- Messages List -->
+                                    <div v-if="messagesLoading" class="email-loading">
+                                        <div class="pit-loading-spinner"></div>
+                                        <span>Loading messages...</span>
+                                    </div>
+
+                                    <div v-else-if="messages.length === 0" class="notes-empty" style="padding: 40px 20px;">
+                                        <svg class="notes-empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                            <polyline points="22,6 12,13 2,6"></polyline>
+                                        </svg>
+                                        <h3 class="notes-empty-title">No Messages Yet</h3>
+                                        <p class="notes-empty-text">Click "Compose Email" to send your first message to this contact.</p>
+                                    </div>
+
+                                    <div v-else class="messages-list">
+                                        <div v-for="msg in messages" :key="msg.id" class="message-item">
+                                            <div class="message-header">
+                                                <div class="message-recipient">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                                        <polyline points="22,6 12,13 2,6"></polyline>
+                                                    </svg>
+                                                    <span>{{ msg.to_email }}</span>
+                                                </div>
+                                                <span class="message-time">{{ msg.sent_at_human }}</span>
+                                            </div>
+                                            <div class="message-subject">{{ msg.subject }}</div>
+                                            <div class="message-status-badges">
+                                                <span class="message-badge sent">Sent</span>
+                                                <span v-if="msg.is_opened" class="message-badge opened">
+                                                    Opened {{ msg.open_count > 1 ? '(' + msg.open_count + 'x)' : '' }}
+                                                </span>
+                                                <span v-if="msg.is_clicked" class="message-badge clicked">Clicked</span>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1905,8 +2087,55 @@
                     </div>
                 </div>
 
+                <!-- Compose Email Modal -->
+                <div id="composeModal" class="custom-modal compose-modal" :class="{ active: showComposeModal }">
+                    <div class="custom-modal-content">
+                        <div class="custom-modal-header">
+                            <h2 id="modal-title">Compose Email</h2>
+                            <span class="custom-modal-close" @click="closeComposeModal">&times;</span>
+                        </div>
+                        <div class="custom-modal-body">
+                            <!-- Template Selector -->
+                            <div class="form-group" v-if="emailTemplates.length > 0">
+                                <label>Template (optional)</label>
+                                <select v-model="composeEmail.templateId" @change="applyTemplate" class="field-input">
+                                    <option :value="null">-- No Template --</option>
+                                    <option v-for="t in emailTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+                                </select>
+                            </div>
 
-                
+                            <div class="form-group">
+                                <label>To <span class="required">*</span></label>
+                                <input type="email" v-model="composeEmail.toEmail" class="field-input" placeholder="recipient@example.com" />
+                            </div>
+
+                            <div class="form-group">
+                                <label>Recipient Name</label>
+                                <input type="text" v-model="composeEmail.toName" class="field-input" placeholder="John Doe" />
+                            </div>
+
+                            <div class="form-group">
+                                <label>Subject <span class="required">*</span></label>
+                                <input type="text" v-model="composeEmail.subject" class="field-input" placeholder="Subject line..." />
+                            </div>
+
+                            <div class="form-group">
+                                <label>Message <span class="required">*</span></label>
+                                <textarea v-model="composeEmail.body" class="field-input email-body-textarea" rows="8" placeholder="Write your message here..."></textarea>
+                            </div>
+
+                            <div class="custom-modal-actions">
+                                <button class="cancel-button" @click="closeComposeModal">Cancel</button>
+                                <button class="confirm-button" @click="handleSendEmail" :disabled="sendingEmail || !isComposeValid">
+                                    <span v-if="sendingEmail">Sending...</span>
+                                    <span v-else>Send Email</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
                 <!-- Toast Notification -->
                 <transition name="toast">
                     <div v-if="showToast" class="toast-notification" :class="toastType">
@@ -1936,6 +2165,21 @@
             const showDateModal = ref(false);
             const dateModalType = ref(''); // 'record' or 'air'
             const dateModalValue = ref('');
+
+            // Compose email modal state
+            const showComposeModal = ref(false);
+            const composeEmail = reactive({
+                templateId: null,
+                toEmail: '',
+                toName: '',
+                subject: '',
+                body: '',
+            });
+
+            // Computed for compose validation
+            const isComposeValid = computed(() => {
+                return composeEmail.toEmail && composeEmail.subject && composeEmail.body;
+            });
 
             // Episode search with debounce
             const searchInputValue = ref('');
@@ -2381,6 +2625,67 @@
                 }
             };
 
+            // =================================================================
+            // EMAIL COMPOSE METHODS
+            // =================================================================
+
+            const openComposeModal = () => {
+                // Pre-fill recipient from host email if available
+                if (store.interview?.host_email) {
+                    composeEmail.toEmail = store.interview.host_email;
+                }
+                if (store.interview?.host_name) {
+                    composeEmail.toName = store.interview.host_name;
+                }
+                showComposeModal.value = true;
+            };
+
+            const closeComposeModal = () => {
+                showComposeModal.value = false;
+                // Reset form
+                composeEmail.templateId = null;
+                composeEmail.toEmail = '';
+                composeEmail.toName = '';
+                composeEmail.subject = '';
+                composeEmail.body = '';
+            };
+
+            const applyTemplate = () => {
+                if (!composeEmail.templateId) return;
+                const template = store.emailTemplates.find(t => t.id === composeEmail.templateId);
+                if (template) {
+                    composeEmail.subject = template.subject || '';
+                    // Convert HTML body to plain text for textarea
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = template.body_html || '';
+                    composeEmail.body = tempDiv.textContent || tempDiv.innerText || '';
+                }
+            };
+
+            const handleSendEmail = async () => {
+                if (!isComposeValid.value) return;
+
+                try {
+                    const result = await store.sendEmail({
+                        to_email: composeEmail.toEmail,
+                        to_name: composeEmail.toName,
+                        subject: composeEmail.subject,
+                        body: composeEmail.body,
+                        template_id: composeEmail.templateId,
+                    });
+
+                    if (result.success) {
+                        showSuccessMessage('Email sent successfully!');
+                        closeComposeModal();
+                    } else {
+                        showErrorMessage(result.message || 'Failed to send email');
+                    }
+                } catch (err) {
+                    console.error('Failed to send email:', err);
+                    showErrorMessage('Failed to send email: ' + err.message);
+                }
+            };
+
             // Check if a specific episode is the linked one
             const isEpisodeLinked = (episode) => {
                 // If we just linked an episode in this session, check by title/guid
@@ -2470,11 +2775,20 @@
             };
             
             // Lifecycle
-            onMounted(() => {
+            onMounted(async () => {
                 if (typeof guestifyDetailData !== 'undefined') {
                     store.initConfig(guestifyDetailData);
                 }
                 store.loadInterview();
+
+                // Initialize email integration (non-blocking)
+                store.checkEmailIntegration().then(() => {
+                    if (store.emailAvailable && store.emailConfigured) {
+                        store.loadTemplates();
+                        store.loadMessages();
+                        store.loadEmailStats();
+                    }
+                });
             });
             
             return {
@@ -2574,6 +2888,26 @@
 
                 // Podcast metadata refresh
                 refreshPodcastMetadata: () => store.refreshPodcastMetadata(),
+
+                // Email integration state
+                emailAvailable: computed(() => store.emailAvailable),
+                emailConfigured: computed(() => store.emailConfigured),
+                emailTemplates: computed(() => store.emailTemplates),
+                messages: computed(() => store.messages),
+                messagesLoading: computed(() => store.messagesLoading),
+                sendingEmail: computed(() => store.sendingEmail),
+                emailStats: computed(() => store.emailStats),
+
+                // Email compose modal state
+                showComposeModal,
+                composeEmail,
+                isComposeValid,
+
+                // Email methods
+                openComposeModal,
+                closeComposeModal,
+                applyTemplate,
+                handleSendEmail,
             };
         }
     };

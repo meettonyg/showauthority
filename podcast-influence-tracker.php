@@ -141,6 +141,10 @@ class Podcast_Influence_Tracker {
         // v4.1 PROSPECTOR INTEGRATION
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-episode-link.php';
 
+        // v4.2 GUESTIFY OUTREACH BRIDGE (Email Integration)
+        require_once PIT_PLUGIN_DIR . 'includes/Integrations/class-guestify-outreach-bridge.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-guestify-bridge.php';
+
         // MIGRATIONS
         require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
         require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-events-schema.php';
@@ -246,6 +250,9 @@ class Podcast_Influence_Tracker {
 
         // v4.1 Prospector Integration - Episode Linking
         PIT_REST_Episode_Link::register_routes();
+
+        // v4.2 Guestify Outreach Bridge - Email Integration
+        PIT_REST_Guestify_Bridge::register_routes();
     }
 
     public function add_cron_schedules($schedules) {
