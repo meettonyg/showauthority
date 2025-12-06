@@ -144,8 +144,10 @@ class PIT_REST_Episode_Link {
             // Filter by search term
             $search_lower = strtolower($search);
             $filtered_episodes = array_filter($result['episodes'], function ($ep) use ($search_lower) {
-                return strpos(strtolower($ep['title']), $search_lower) !== false ||
-                       strpos(strtolower($ep['description']), $search_lower) !== false;
+                $title = $ep['title'] ?? '';
+                $description = $ep['description'] ?? '';
+                return strpos(strtolower($title), $search_lower) !== false ||
+                       strpos(strtolower($description), $search_lower) !== false;
             });
             $filtered_episodes = array_values($filtered_episodes); // Re-index
 
