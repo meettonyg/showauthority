@@ -110,11 +110,10 @@ class PIT_Guestify_Outreach_Bridge {
                 id,
                 recipient_email,
                 recipient_name,
-                subject_line,
+                subject,
                 status,
                 sent_at,
-                brevo_message_id,
-                tracking_id
+                brevo_message_id
              FROM {$table}
              WHERE interview_entry_id = %d
              ORDER BY sent_at DESC
@@ -163,7 +162,7 @@ class PIT_Guestify_Outreach_Bridge {
                 'id'              => (int) $msg->id,
                 'to_email'        => $msg->recipient_email,
                 'to_name'         => $msg->recipient_name,
-                'subject'         => $msg->subject_line,
+                'subject'         => $msg->subject,
                 'status'          => $msg->status,
                 'sent_at'         => $msg->sent_at,
                 'sent_at_human'   => human_time_diff(strtotime($msg->sent_at)) . ' ago',

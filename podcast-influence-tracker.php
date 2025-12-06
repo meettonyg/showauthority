@@ -142,7 +142,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-episode-link.php';
 
         // v4.2 GUESTIFY OUTREACH BRIDGE (Email Integration)
-        require_once PIT_PLUGIN_DIR . 'includes/Integrations/class-guestify-outreach-bridge.php';
+        require_once PIT_PLUGIN_DIR . 'includes/integrations/class-guestify-outreach-bridge.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-guestify-bridge.php';
 
         // MIGRATIONS
