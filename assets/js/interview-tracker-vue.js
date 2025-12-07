@@ -39,6 +39,19 @@
             // Pipeline stages loaded from database
             statusColumns: [],
             stagesAreCustom: false,
+            // Portfolio state (Phase 5)
+            portfolio: [],
+            portfolioLoading: false,
+            portfolioTotal: 0,
+            portfolioPage: 1,
+            portfolioPerPage: 20,
+            portfolioPodcasts: [],
+            portfolioFilters: {
+                search: '',
+                podcast_id: '',
+                date_from: '',
+                date_to: '',
+            },
         }),
 
         getters: {
@@ -229,6 +242,96 @@
                 }
             },
 
+            // Portfolio methods (Phase 5)
+            async fetchPortfolio(page = 1) {
+                this.portfolioLoading = true;
+
+                try {
+                    const params = new URLSearchParams({
+                        page: page.toString(),
+                        per_page: this.portfolioPerPage.toString(),
+                    });
+
+                    // Apply filters
+                    if (this.portfolioFilters.search) {
+                        params.append('search', this.portfolioFilters.search);
+                    }
+                    if (this.portfolioFilters.podcast_id) {
+                        params.append('podcast_id', this.portfolioFilters.podcast_id);
+                    }
+                    if (this.portfolioFilters.date_from) {
+                        params.append('date_from', this.portfolioFilters.date_from);
+                    }
+                    if (this.portfolioFilters.date_to) {
+                        params.append('date_to', this.portfolioFilters.date_to);
+                    }
+
+                    const response = await fetch(
+                        `${guestifyData.restUrl}portfolio?${params}`,
+                        {
+                            headers: {
+                                'X-WP-Nonce': guestifyData.nonce,
+                            },
+                        }
+                    );
+
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch portfolio');
+                    }
+
+                    const data = await response.json();
+                    this.portfolio = data.data || [];
+                    this.portfolioTotal = data.total || 0;
+                    this.portfolioPage = data.page || 1;
+                    this.portfolioPodcasts = data.podcasts || [];
+                } catch (err) {
+                    console.error('Failed to fetch portfolio:', err);
+                } finally {
+                    this.portfolioLoading = false;
+                }
+            },
+
+            setPortfolioFilter(key, value) {
+                this.portfolioFilters[key] = value;
+            },
+
+            applyPortfolioFilters() {
+                this.fetchPortfolio(1);
+            },
+
+            async exportPortfolio() {
+                try {
+                    const response = await fetch(
+                        `${guestifyData.restUrl}portfolio/export`,
+                        {
+                            headers: {
+                                'X-WP-Nonce': guestifyData.nonce,
+                            },
+                        }
+                    );
+
+                    if (!response.ok) {
+                        throw new Error('Failed to export portfolio');
+                    }
+
+                    const data = await response.json();
+
+                    // Create and download the CSV file
+                    const blob = new Blob([data.content], { type: 'text/csv' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = data.filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                } catch (err) {
+                    console.error('Failed to export portfolio:', err);
+                    alert('Failed to export portfolio: ' + err.message);
+                }
+            },
+
             async updateStatus(id, newStatus) {
                 const interview = this.interviews.find(i => i.id === id);
                 if (!interview) return;
@@ -315,6 +418,10 @@
 
             setView(view) {
                 this.currentView = view;
+                // Fetch portfolio data when switching to portfolio view
+                if (view === 'portfolio' && this.portfolio.length === 0) {
+                    this.fetchPortfolio();
+                }
             },
 
             setFilter(key, value) {
@@ -420,17 +527,24 @@
     const ViewToggle = {
         template: `
             <div class="pit-view-toggle">
-                <button 
+                <button
                     :class="{ active: store.currentView === 'kanban' }"
                     @click="store.setView('kanban')"
                 >
                     Kanban
                 </button>
-                <button 
+                <button
                     :class="{ active: store.currentView === 'table' }"
                     @click="store.setView('table')"
                 >
                     Table
+                </button>
+                <button
+                    :class="{ active: store.currentView === 'portfolio' }"
+                    @click="store.setView('portfolio')"
+                    title="View all episodes where you appeared as a guest"
+                >
+                    Portfolio
                 </button>
             </div>
         `,
@@ -693,6 +807,214 @@
         },
     };
 
+    // Portfolio View Component (Phase 5)
+    const PortfolioView = {
+        template: `
+            <div class="pit-portfolio-view">
+                <!-- Portfolio Toolbar -->
+                <div class="pit-portfolio-toolbar" style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; background: white; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <input
+                        type="text"
+                        v-model="searchQuery"
+                        placeholder="Search episodes..."
+                        @keyup.enter="store.applyPortfolioFilters()"
+                        style="padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 8px; min-width: 200px; flex: 1; max-width: 300px;"
+                    >
+
+                    <select v-model="podcastFilter" style="padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                        <option value="">All Podcasts</option>
+                        <option v-for="podcast in store.portfolioPodcasts" :key="podcast.id" :value="podcast.id">
+                            {{ podcast.title }}
+                        </option>
+                    </select>
+
+                    <input
+                        type="date"
+                        v-model="dateFrom"
+                        style="padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 8px;"
+                        title="From date"
+                    >
+                    <span style="color: #64748b;">to</span>
+                    <input
+                        type="date"
+                        v-model="dateTo"
+                        style="padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 8px;"
+                        title="To date"
+                    >
+
+                    <button
+                        @click="store.applyPortfolioFilters()"
+                        style="padding: 10px 20px; background: #3b9edd; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500;"
+                    >
+                        Filter
+                    </button>
+
+                    <button
+                        @click="store.exportPortfolio()"
+                        style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; margin-left: auto;"
+                        title="Export to CSV"
+                    >
+                        Export CSV
+                    </button>
+                </div>
+
+                <!-- Stats Summary -->
+                <div style="margin-bottom: 20px; color: #64748b; font-size: 14px;">
+                    {{ store.portfolioTotal }} episode{{ store.portfolioTotal !== 1 ? 's' : '' }} in your portfolio
+                </div>
+
+                <!-- Loading State -->
+                <div v-if="store.portfolioLoading" class="pit-loading">
+                    <p>Loading your portfolio...</p>
+                </div>
+
+                <!-- Empty State -->
+                <div v-else-if="store.portfolio.length === 0" style="text-align: center; padding: 60px 40px; background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <svg style="width: 64px; height: 64px; color: #cbd5e1; margin-bottom: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                    </svg>
+                    <h3 style="margin: 0 0 8px; color: #1f2937; font-size: 18px;">No episodes in your portfolio yet</h3>
+                    <p style="margin: 0; color: #6b7280;">Link episodes to your interviews to build your speaking portfolio.</p>
+                </div>
+
+                <!-- Portfolio Cards Grid -->
+                <div v-else class="pit-portfolio-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;">
+                    <div
+                        v-for="item in store.portfolio"
+                        :key="item.id"
+                        class="pit-portfolio-card"
+                        style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: box-shadow 0.2s, transform 0.2s;"
+                        @mouseenter="$event.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'"
+                        @mouseleave="$event.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)'"
+                    >
+                        <!-- Card Header with Podcast Image -->
+                        <div style="display: flex; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid #f1f5f9;">
+                            <img
+                                :src="item.podcast_image || 'https://via.placeholder.com/60?text=🎙️'"
+                                :alt="item.podcast_name"
+                                style="width: 60px; height: 60px; border-radius: 8px; object-fit: cover;"
+                            >
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-weight: 600; color: #1f2937; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    {{ item.podcast_name || 'Unknown Podcast' }}
+                                </div>
+                                <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
+                                    {{ formatDate(item.engagement_date) }}
+                                    <span v-if="item.episode_number" style="margin-left: 8px;">• Ep {{ item.episode_number }}</span>
+                                </div>
+                            </div>
+                            <span
+                                v-if="item.is_verified"
+                                style="background: #dcfce7; color: #16a34a; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500;"
+                                title="Verified appearance"
+                            >
+                                ✓ Verified
+                            </span>
+                        </div>
+
+                        <!-- Card Body -->
+                        <div style="padding: 16px;">
+                            <h4 style="margin: 0 0 8px; font-size: 15px; color: #1f2937; line-height: 1.4;">
+                                {{ item.episode_title || 'Untitled Episode' }}
+                            </h4>
+
+                            <div style="display: flex; gap: 16px; font-size: 13px; color: #64748b; margin-bottom: 12px;">
+                                <span v-if="item.duration_display" style="display: flex; align-items: center; gap: 4px;">
+                                    <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <polyline points="12 6 12 12 16 14"/>
+                                    </svg>
+                                    {{ item.duration_display }}
+                                </span>
+                                <span style="display: flex; align-items: center; gap: 4px; text-transform: capitalize;">
+                                    <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                                        <circle cx="12" cy="7" r="4"/>
+                                    </svg>
+                                    {{ item.role }}
+                                </span>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div style="display: flex; gap: 8px; margin-top: 12px;">
+                                <a
+                                    v-if="item.episode_url"
+                                    :href="item.episode_url"
+                                    target="_blank"
+                                    style="flex: 1; padding: 8px 12px; background: #f1f5f9; color: #475569; border-radius: 6px; text-align: center; text-decoration: none; font-size: 13px; font-weight: 500; transition: background 0.2s;"
+                                    @mouseenter="$event.target.style.background = '#e2e8f0'"
+                                    @mouseleave="$event.target.style.background = '#f1f5f9'"
+                                >
+                                    Listen
+                                </a>
+                                <a
+                                    v-if="item.opportunity_id"
+                                    :href="'/app/interview/detail/?id=' + item.opportunity_id"
+                                    style="flex: 1; padding: 8px 12px; background: #3b9edd; color: white; border-radius: 6px; text-align: center; text-decoration: none; font-size: 13px; font-weight: 500; transition: background 0.2s;"
+                                    @mouseenter="$event.target.style.background = '#2b8ecd'"
+                                    @mouseleave="$event.target.style.background = '#3b9edd'"
+                                >
+                                    View Details
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pagination -->
+                <div v-if="store.portfolioTotal > store.portfolioPerPage" style="display: flex; justify-content: center; gap: 8px; margin-top: 24px;">
+                    <button
+                        v-for="page in Math.ceil(store.portfolioTotal / store.portfolioPerPage)"
+                        :key="page"
+                        @click="store.fetchPortfolio(page)"
+                        :style="{
+                            padding: '8px 14px',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: '500',
+                            background: page === store.portfolioPage ? '#3b9edd' : '#f1f5f9',
+                            color: page === store.portfolioPage ? 'white' : '#475569',
+                        }"
+                    >
+                        {{ page }}
+                    </button>
+                </div>
+            </div>
+        `,
+        setup() {
+            const store = useInterviewStore();
+
+            const searchQuery = computed({
+                get: () => store.portfolioFilters.search,
+                set: (val) => store.setPortfolioFilter('search', val),
+            });
+
+            const podcastFilter = computed({
+                get: () => store.portfolioFilters.podcast_id,
+                set: (val) => store.setPortfolioFilter('podcast_id', val),
+            });
+
+            const dateFrom = computed({
+                get: () => store.portfolioFilters.date_from,
+                set: (val) => store.setPortfolioFilter('date_from', val),
+            });
+
+            const dateTo = computed({
+                get: () => store.portfolioFilters.date_to,
+                set: (val) => store.setPortfolioFilter('date_to', val),
+            });
+
+            const formatDate = (dateStr) => {
+                if (!dateStr) return 'No date';
+                const date = new Date(dateStr);
+                return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            };
+
+            return { store, searchQuery, podcastFilter, dateFrom, dateTo, formatDate };
+        },
+    };
+
     // Selection Bar Component
     const SelectionBar = {
         template: `
@@ -851,6 +1173,7 @@
             ViewToggle,
             KanbanBoard,
             TableView,
+            PortfolioView,
             SelectionBar,
             BulkEditPanel,
         },
@@ -920,7 +1243,8 @@
                 
                 <template v-else>
                     <KanbanBoard v-if="store.currentView === 'kanban'" />
-                    <TableView v-else />
+                    <TableView v-else-if="store.currentView === 'table'" />
+                    <PortfolioView v-else-if="store.currentView === 'portfolio'" />
                 </template>
                 
                 <SelectionBar />
@@ -967,7 +1291,7 @@
                 
                 // Check localStorage for saved view preference
                 const savedView = localStorage.getItem('pit_interview_view');
-                if (savedView && (savedView === 'kanban' || savedView === 'table')) {
+                if (savedView && (savedView === 'kanban' || savedView === 'table' || savedView === 'portfolio')) {
                     store.setView(savedView);
                 } else {
                     // Fallback to data attribute

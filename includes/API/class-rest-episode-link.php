@@ -249,7 +249,10 @@ class PIT_REST_Episode_Link {
             'updated_at' => current_time('mysql'),
         ];
 
-        $engagement_id = PIT_Engagement_Repository::create($engagement_data);
+        // Use upsert to prevent duplicate engagement records (engagements are global facts)
+        $engagement_result = PIT_Engagement_Repository::upsert($engagement_data);
+        $engagement_id = $engagement_result['id'];
+        $engagement_created = $engagement_result['created'];
 
         if (!$engagement_id) {
             return new WP_Error('create_failed', 'Failed to create engagement record', ['status' => 500]);
@@ -275,6 +278,24 @@ class PIT_REST_Episode_Link {
             PIT_Opportunity_Repository::update($opportunity_id, ['air_date' => $episode_date]);
         }
 
+        // Phase 2.6: Get or create user's guest profile
+        // This creates the user's record in pit_guests if it doesn't exist
+        $user = wp_get_current_user();
+        $guest_id = PIT_Guest_Repository::upsert([
+            'full_name' => $user->display_name,
+            'email' => $user->user_email,
+            'first_name' => get_user_meta($user->ID, 'first_name', true),
+            'last_name' => get_user_meta($user->ID, 'last_name', true),
+        ], $user_id);
+
+        // Phase 2.7: Create speaking credit (links guest to engagement)
+        // This is the crucial link that says "This user was a guest on this episode"
+        // Required for Portfolio View (Phase 5) to work
+        $credit_id = null;
+        if ($guest_id && $engagement_id) {
+            $credit_id = PIT_Speaking_Credit_Repository::link($guest_id, $engagement_id, 'guest');
+        }
+
         /**
          * Fires when an episode is linked to an opportunity.
          *
@@ -295,6 +316,9 @@ class PIT_REST_Episode_Link {
             'message' => 'Episode linked successfully',
             'opportunity_id' => $opportunity_id,
             'engagement_id' => $engagement_id,
+            'engagement_created' => $engagement_created,
+            'guest_id' => $guest_id,
+            'credit_id' => $credit_id,
             'new_status' => 'aired',
         ], 200);
     }
