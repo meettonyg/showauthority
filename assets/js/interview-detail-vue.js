@@ -426,6 +426,9 @@
                             date: data.engagement_date,
                             url: data.episode_url,
                             duration: data.duration_seconds ? this.formatDuration(data.duration_seconds) : null,
+                            thumbnail: data.thumbnail_url,
+                            description: data.description,
+                            audio_url: data.audio_url,
                         };
                     }
                 } catch (err) {
@@ -657,6 +660,8 @@
                         url: episode.episode_url || episode.audio_url,
                         duration: episode.duration_display,
                         thumbnail: episode.thumbnail_url,
+                        description: episode.description,
+                        audio_url: episode.audio_url,
                     };
 
                     return response;
@@ -1100,6 +1105,56 @@
                                             <span v-if="interview?.metadata_updated_at" style="font-size: 11px; color: #64748b; margin-left: 8px;">
                                                 Last updated: {{ formatDate(interview.metadata_updated_at) }}
                                             </span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Linked Episode Section (only shown when an episode is linked) -->
+                                    <div v-if="linkedEpisode" class="panel linked-episode-panel">
+                                        <div class="panel-header">
+                                            <h3 class="panel-title">Linked Episode</h3>
+                                            <a v-if="linkedEpisode.url" :href="linkedEpisode.url" target="_blank" class="button small outline-button" style="font-size: 12px;">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                                                </svg>
+                                                View Episode
+                                            </a>
+                                        </div>
+                                        <div class="panel-content">
+                                            <div class="linked-episode-card">
+                                                <div class="linked-episode-thumbnail">
+                                                    <img v-if="linkedEpisode.thumbnail" :src="linkedEpisode.thumbnail" :alt="linkedEpisode.title" class="episode-thumbnail">
+                                                    <div v-else class="episode-thumbnail-placeholder">
+                                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                            <path d="M9 18V5l12-2v13"></path>
+                                                            <circle cx="6" cy="18" r="3"></circle>
+                                                            <circle cx="18" cy="16" r="3"></circle>
+                                                        </svg>
+                                                    </div>
+                                                </div>
+                                                <div class="linked-episode-info">
+                                                    <div class="linked-episode-meta">
+                                                        <span class="linked-episode-date">{{ formatDate(linkedEpisode.date) }}</span>
+                                                        <span v-if="linkedEpisode.duration" class="linked-episode-duration">
+                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                                <circle cx="12" cy="12" r="10"></circle>
+                                                                <polyline points="12 6 12 12 16 14"></polyline>
+                                                            </svg>
+                                                            {{ linkedEpisode.duration }}
+                                                        </span>
+                                                    </div>
+                                                    <h4 class="linked-episode-title">{{ linkedEpisode.title }}</h4>
+                                                    <p v-if="linkedEpisode.description" class="linked-episode-description">
+                                                        {{ truncateDescription(linkedEpisode.description) }}
+                                                    </p>
+                                                    <div v-if="linkedEpisode.audio_url" class="linked-episode-player">
+                                                        <audio controls preload="none" :src="linkedEpisode.audio_url">
+                                                            Your browser does not support the audio element.
+                                                        </audio>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -2371,7 +2426,15 @@
                 };
                 return ratingMap[rating.toLowerCase()] || rating;
             };
-            
+
+            const truncateDescription = (text, maxLength = 200) => {
+                if (!text) return '';
+                // Strip HTML tags
+                const plainText = text.replace(/<[^>]*>/g, '');
+                if (plainText.length <= maxLength) return plainText;
+                return plainText.substring(0, maxLength).trim() + '...';
+            };
+
             const getInitials = (name) => {
                 if (!name) return '?';
                 return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
@@ -2865,6 +2928,7 @@
                 formatTaskType,
                 formatFoundedDate,
                 formatContentRating,
+                truncateDescription,
                 isOverdue,
                 capitalize,
                 getInitials,
