@@ -1116,6 +1116,28 @@
                                     <div v-if="linkedEpisode" class="panel linked-episode-panel">
                                         <div class="panel-header">
                                             <h3 class="panel-title">Linked Episode</h3>
+                                            <div class="linked-actions">
+                                                <span class="linked-badge" title="This episode is linked to this interview">
+                                                    <svg class="button-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                                    </svg>
+                                                    Linked
+                                                </span>
+                                                <button
+                                                    class="button small outline-button unlink-btn"
+                                                    @click="handleUnlinkEpisode"
+                                                    :disabled="unlinkingEpisode"
+                                                    title="Unlink this episode from the interview">
+                                                    <svg v-if="unlinkingEpisode" class="button-icon spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                                                    </svg>
+                                                    <svg v-else class="button-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M18 6L6 18M6 6l12 12"></path>
+                                                    </svg>
+                                                    {{ unlinkingEpisode ? 'Unlinking...' : 'Unlink' }}
+                                                </button>
+                                            </div>
                                         </div>
                                         <div class="panel-content">
                                             <div class="linked-episode-card">

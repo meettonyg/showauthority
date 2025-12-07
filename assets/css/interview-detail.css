@@ -3538,6 +3538,22 @@ button.cancel-button.custom-modal-close,
   border-left: 3px solid #10b981;
 }
 
+.linked-episode-panel .linked-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.linked-episode-panel .unlink-btn {
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.linked-episode-panel .unlink-btn:hover {
+  background-color: #fef2f2;
+  border-color: #fca5a5;
+}
+
 .linked-episode-card {
   display: grid;
   grid-template-columns: 80px 1fr;
