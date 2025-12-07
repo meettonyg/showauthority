@@ -70,17 +70,31 @@ class PIT_Interview_Tracker_Shortcode {
                 padding: 20px;
             }
             
-            /* Toolbar - Filters Row */
+            /* Toolbar - Filters Row 1 */
             .pit-toolbar {
                 background: white;
-                border-radius: 12px;
+                border-radius: 12px 12px 0 0;
                 padding: 16px 20px;
                 display: flex;
                 align-items: center;
                 gap: 12px;
                 flex-wrap: wrap;
                 box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+                margin-bottom: 0;
+            }
+
+            /* Toolbar - Row 2 (Options & View Toggle) */
+            .pit-toolbar-row2 {
+                background: #f8fafc;
+                border-radius: 0 0 12px 12px;
+                padding: 12px 20px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                flex-wrap: wrap;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.08);
                 margin-bottom: 24px;
+                border-top: 1px solid #e2e8f0;
             }
             
             /* Search Wrapper with Icon */
@@ -98,15 +112,18 @@ class PIT_Interview_Tracker_Shortcode {
                 color: #94a3b8;
                 width: 18px;
                 height: 18px;
+                pointer-events: none;
+                z-index: 1;
             }
             .pit-search-input {
                 width: 100%;
-                padding: 10px 12px 10px 40px;
+                padding: 10px 12px 10px 40px !important;
                 border: 1px solid #e2e8f0;
                 border-radius: 8px;
                 font-size: 14px;
                 transition: all 0.2s;
                 background: #f8fafc;
+                box-sizing: border-box;
             }
             .pit-search-input:focus {
                 outline: none;

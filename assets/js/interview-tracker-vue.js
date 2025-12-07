@@ -1184,56 +1184,57 @@
                     <button @click="store.error = null" style="margin-left: 8px;">×</button>
                 </div>
                 
+                <!-- Toolbar Row 1: Search and Filters -->
                 <div class="pit-toolbar">
                     <div class="pit-search-wrapper">
                         <svg class="pit-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
                         </svg>
-                        <input 
-                            type="text" 
+                        <input
+                            type="text"
                             v-model="searchQuery"
                             placeholder="Search podcasts..."
                             class="pit-search-input"
                         >
                     </div>
-                    
-                    <div class="pit-filter-group">
-                        <select v-model="statusFilter" class="pit-select">
-                            <option value="">All Statuses</option>
-                            <option v-for="col in store.statusColumns" :key="col.key" :value="col.key">
-                                {{ col.label }}
-                            </option>
-                        </select>
-                        <select v-model="priorityFilter" class="pit-select">
-                            <option value="">All Priorities</option>
-                            <option value="high">High</option>
-                            <option value="medium">Medium</option>
-                            <option value="low">Low</option>
-                        </select>
-                        <select v-model="sourceFilter" class="pit-select">
-                            <option value="">All Sources</option>
-                            <option v-for="source in store.uniqueSources" :key="source" :value="source">
-                                {{ source }}
-                            </option>
-                        </select>
 
-                        <select v-model="guestProfileFilter" class="pit-select">
-                            <option value="">All Profiles</option>
-                            <option v-for="profile in store.guestProfiles" :key="profile.id" :value="profile.id">
-                                {{ profile.name }}
-                            </option>
-                        </select>
-                    </div>
-                    
-                    <div class="pit-divider"></div>
-                    
+                    <select v-model="statusFilter" class="pit-select">
+                        <option value="">All Statuses</option>
+                        <option v-for="col in store.statusColumns" :key="col.key" :value="col.key">
+                            {{ col.label }}
+                        </option>
+                    </select>
+                    <select v-model="priorityFilter" class="pit-select">
+                        <option value="">All Priorities</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                    <select v-model="sourceFilter" class="pit-select">
+                        <option value="">All Sources</option>
+                        <option v-for="source in store.uniqueSources" :key="source" :value="source">
+                            {{ source }}
+                        </option>
+                    </select>
+                    <select v-model="guestProfileFilter" class="pit-select">
+                        <option value="">All Profiles</option>
+                        <option v-for="profile in store.guestProfiles" :key="profile.id" :value="profile.id">
+                            {{ profile.name }}
+                        </option>
+                    </select>
+                </div>
+
+                <!-- Toolbar Row 2: Options and View Toggle -->
+                <div class="pit-toolbar-row2">
                     <label class="pit-checkbox-label">
                         <input type="checkbox" v-model="showArchived">
-                        <span>Archived</span>
+                        <span>Show Archived</span>
                     </label>
-                    
-                    <button class="pit-filter-submit" @click="store.fetchInterviews()">Filter Interviews</button>
-                    
+
+                    <button class="pit-filter-submit" @click="store.fetchInterviews()">Apply Filters</button>
+
+                    <div style="flex: 1;"></div>
+
                     <ViewToggle />
                 </div>
                 
