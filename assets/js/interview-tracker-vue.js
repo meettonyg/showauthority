@@ -1184,7 +1184,7 @@
                     <button @click="store.error = null" style="margin-left: 8px;">×</button>
                 </div>
                 
-                <!-- Toolbar Row 1: Search and Filters -->
+                <!-- Search Toolbar (Prospector-style) -->
                 <div class="pit-toolbar">
                     <div class="pit-search-wrapper">
                         <svg class="pit-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1193,49 +1193,80 @@
                         <input
                             type="text"
                             v-model="searchQuery"
-                            placeholder="Search podcasts..."
+                            placeholder="Enter name to find podcasts..."
                             class="pit-search-input"
                         >
                     </div>
 
-                    <select v-model="statusFilter" class="pit-select">
-                        <option value="">All Statuses</option>
-                        <option v-for="col in store.statusColumns" :key="col.key" :value="col.key">
-                            {{ col.label }}
-                        </option>
-                    </select>
-                    <select v-model="priorityFilter" class="pit-select">
-                        <option value="">All Priorities</option>
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
-                    </select>
-                    <select v-model="sourceFilter" class="pit-select">
-                        <option value="">All Sources</option>
-                        <option v-for="source in store.uniqueSources" :key="source" :value="source">
-                            {{ source }}
-                        </option>
-                    </select>
-                    <select v-model="guestProfileFilter" class="pit-select">
-                        <option value="">All Profiles</option>
-                        <option v-for="profile in store.guestProfiles" :key="profile.id" :value="profile.id">
-                            {{ profile.name }}
-                        </option>
-                    </select>
-                </div>
-
-                <!-- Toolbar Row 2: Options and View Toggle -->
-                <div class="pit-toolbar-row2">
-                    <label class="pit-checkbox-label">
-                        <input type="checkbox" v-model="showArchived">
-                        <span>Show Archived</span>
-                    </label>
-
-                    <button class="pit-filter-submit" @click="store.fetchInterviews()">Apply Filters</button>
-
-                    <div style="flex: 1;"></div>
+                    <button
+                        class="pit-filter-btn"
+                        :class="{ 'is-active': showFilters }"
+                        @click="showFilters = !showFilters"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="4" y1="6" x2="20" y2="6"></line>
+                            <line x1="8" y1="12" x2="16" y2="12"></line>
+                            <line x1="10" y1="18" x2="14" y2="18"></line>
+                        </svg>
+                        Filters
+                    </button>
 
                     <ViewToggle />
+                </div>
+
+                <!-- Filter Panel (expandable) -->
+                <div v-if="showFilters" class="pit-filter-panel">
+                    <div class="pit-filter-grid">
+                        <div class="pit-filter-field">
+                            <label class="pit-filter-label">Status</label>
+                            <select v-model="statusFilter" class="pit-select">
+                                <option value="">All Statuses</option>
+                                <option v-for="col in store.statusColumns" :key="col.key" :value="col.key">
+                                    {{ col.label }}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="pit-filter-field">
+                            <label class="pit-filter-label">Priority</label>
+                            <select v-model="priorityFilter" class="pit-select">
+                                <option value="">All Priorities</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
+                        <div class="pit-filter-field">
+                            <label class="pit-filter-label">Source</label>
+                            <select v-model="sourceFilter" class="pit-select">
+                                <option value="">All Sources</option>
+                                <option v-for="source in store.uniqueSources" :key="source" :value="source">
+                                    {{ source }}
+                                </option>
+                            </select>
+                        </div>
+                        <div class="pit-filter-field">
+                            <label class="pit-filter-label">Profile</label>
+                            <select v-model="guestProfileFilter" class="pit-select">
+                                <option value="">All Profiles</option>
+                                <option v-for="profile in store.guestProfiles" :key="profile.id" :value="profile.id">
+                                    {{ profile.name }}
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="pit-filter-footer">
+                        <label class="pit-checkbox-label">
+                            <input type="checkbox" v-model="showArchived">
+                            <span>Show Archived</span>
+                        </label>
+                        <button class="pit-reset-filters" @click="resetFilters">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                            Reset Filters
+                        </button>
+                    </div>
                 </div>
                 
                 <div v-if="store.loading || store.stagesLoading" class="pit-loading">
@@ -1254,6 +1285,7 @@
         `,
         setup() {
             const store = useInterviewStore();
+            const showFilters = ref(false);
 
             const searchQuery = computed({
                 get: () => store.filters.search,
@@ -1283,6 +1315,16 @@
                 },
             });
 
+            const resetFilters = () => {
+                store.setFilter('search', '');
+                store.setFilter('status', '');
+                store.setFilter('priority', '');
+                store.setFilter('source', '');
+                store.setFilter('guestProfileId', '');
+                store.setFilter('showArchived', false);
+                store.fetchInterviews();
+            };
+
             onMounted(async () => {
                 // Load pipeline stages first (required for columns)
                 await store.fetchPipelineStages();
@@ -1311,7 +1353,7 @@
                 localStorage.setItem('pit_interview_view', newView);
             });
 
-            return { store, searchQuery, statusFilter, priorityFilter, sourceFilter, guestProfileFilter, showArchived };
+            return { store, searchQuery, statusFilter, priorityFilter, sourceFilter, guestProfileFilter, showArchived, showFilters, resetFilters };
         },
     };
 

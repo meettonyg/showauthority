@@ -70,66 +70,154 @@ class PIT_Interview_Tracker_Shortcode {
                 padding: 20px;
             }
             
-            /* Toolbar - Filters Row 1 */
+            /* Search Toolbar (single row) */
             .pit-toolbar {
                 background: white;
-                border-radius: 12px 12px 0 0;
-                padding: 16px 20px;
+                border-radius: 12px;
+                padding: 12px 16px;
                 display: flex;
                 align-items: center;
                 gap: 12px;
-                flex-wrap: wrap;
                 box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-                margin-bottom: 0;
+                margin-bottom: 16px;
+                border: 1px solid #e2e8f0;
             }
 
-            /* Toolbar - Row 2 (Options & View Toggle) */
-            .pit-toolbar-row2 {
-                background: #f8fafc;
-                border-radius: 0 0 12px 12px;
-                padding: 12px 20px;
+            /* Filter Button (Prospector-style) */
+            .pit-filter-btn {
                 display: flex;
                 align-items: center;
-                gap: 12px;
-                flex-wrap: wrap;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-                margin-bottom: 24px;
-                border-top: 1px solid #e2e8f0;
+                gap: 8px;
+                height: 44px;
+                padding: 0 16px;
+                font-size: 14px;
+                font-weight: 500;
+                color: #0ea5e9;
+                background: white;
+                border: 1px solid #0ea5e9;
+                border-radius: 8px;
+                cursor: pointer;
+                transition: all 0.15s ease;
+            }
+            .pit-filter-btn:hover {
+                background: #f0f9ff;
+                border-color: #0284c7;
+                color: #0284c7;
+            }
+            .pit-filter-btn.is-active {
+                background: #f0f9ff;
+                border-color: #0ea5e9;
+                color: #0284c7;
+            }
+            .pit-filter-btn svg {
+                flex-shrink: 0;
+            }
+
+            /* Filter Panel (expandable) - Prospector-style blue background */
+            .pit-filter-panel {
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 16px;
+                animation: fadeSlideIn 0.2s ease-out;
+            }
+            @keyframes fadeSlideIn {
+                from { opacity: 0; transform: translateY(-8px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            .pit-filter-grid {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 16px 24px;
+            }
+            @media (max-width: 1024px) {
+                .pit-filter-grid {
+                    grid-template-columns: repeat(2, 1fr);
+                }
+            }
+            @media (max-width: 640px) {
+                .pit-filter-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
+            .pit-filter-field {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            .pit-filter-label {
+                font-size: 11px;
+                font-weight: 500;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                color: #64748b;
+            }
+            .pit-filter-footer {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-top: 16px;
+                padding-top: 16px;
+                border-top: 1px solid #f1f5f9;
+            }
+            /* Reset Filters Button - Prospector outline-primary style */
+            .pit-reset-filters {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 8px 14px;
+                font-size: 13px;
+                font-weight: 500;
+                color: #0ea5e9;
+                background: transparent;
+                border: 1px solid #0ea5e9;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: all 0.15s ease;
+            }
+            .pit-reset-filters:hover {
+                background: #f0f9ff;
+                border-color: #0284c7;
+                color: #0284c7;
+            }
+            .pit-reset-filters svg {
+                width: 14px;
+                height: 14px;
             }
             
             /* Search Wrapper with Icon */
             .pit-search-wrapper {
                 position: relative;
                 flex: 1;
-                min-width: 200px;
-                max-width: 320px;
+                min-width: 250px;
             }
             .pit-search-icon {
                 position: absolute;
-                left: 12px;
+                left: 14px;
                 top: 50%;
                 transform: translateY(-50%);
                 color: #94a3b8;
-                width: 18px;
-                height: 18px;
+                width: 20px;
+                height: 20px;
                 pointer-events: none;
                 z-index: 1;
             }
             .pit-search-input {
                 width: 100%;
-                padding: 10px 12px 10px 40px !important;
+                height: 44px;
+                padding: 0 16px 0 44px !important;
                 border: 1px solid #e2e8f0;
                 border-radius: 8px;
                 font-size: 14px;
-                transition: all 0.2s;
-                background: #f8fafc;
+                transition: all 0.15s ease;
+                background: white;
                 box-sizing: border-box;
             }
             .pit-search-input:focus {
                 outline: none;
-                border-color: #3b9edd;
-                background: white;
-                box-shadow: 0 0 0 3px rgba(59, 158, 221, 0.1);
+                border-color: #0ea5e9;
+                box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
             }
             .pit-search-input::placeholder {
                 color: #94a3b8;
