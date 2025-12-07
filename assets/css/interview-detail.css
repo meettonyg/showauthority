@@ -1573,6 +1573,33 @@ a.show-detail-link:hover {
   color: #0ea5e9;
 }
 
+/* Editable Collaboration Items */
+.collab-item-editable {
+  cursor: pointer;
+  position: relative;
+}
+
+.collab-item-editable .edit-button-container {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  color: #94a3b8;
+  margin-left: auto;
+  padding-left: 12px;
+}
+
+.collab-item-editable:hover .edit-button-container {
+  opacity: 1;
+}
+
+.collab-item-editable:hover {
+  background-color: #f1f5f9;
+}
+
+.collab-value.not-set {
+  color: #94a3b8;
+  font-style: italic;
+}
+
 /* Show Quick Info */
 .show-quick-info {
   display: grid;

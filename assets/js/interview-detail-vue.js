@@ -1187,7 +1187,7 @@
                                         </div>
                                         <div class="panel-content">
                                             <ul class="collab-list">
-                                                <li class="collab-item">
+                                                <li class="collab-item collab-item-editable" @click="openCollabModal('audience')">
                                                     <svg class="collab-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                                                         <circle cx="9" cy="7" r="4"></circle>
@@ -1196,17 +1196,29 @@
                                                     </svg>
                                                     <div class="collab-content">
                                                         <div class="collab-label">Audience</div>
-                                                        <div class="collab-value">{{ interview?.audience || 'Not specified' }}</div>
+                                                        <div class="collab-value" :class="{ 'not-set': !interview?.audience }">{{ interview?.audience || 'Not specified' }}</div>
+                                                    </div>
+                                                    <div class="edit-button-container">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                        </svg>
                                                     </div>
                                                 </li>
-                                                <li class="collab-item">
+                                                <li class="collab-item collab-item-editable" @click="openCollabModal('commission')">
                                                     <svg class="collab-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <line x1="12" y1="1" x2="12" y2="23"></line>
                                                         <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
                                                     </svg>
                                                     <div class="collab-content">
                                                         <div class="collab-label">Commission</div>
-                                                        <div class="collab-value">{{ interview?.commission || 'Not specified' }}</div>
+                                                        <div class="collab-value" :class="{ 'not-set': !interview?.commission }">{{ interview?.commission || 'Not specified' }}</div>
+                                                    </div>
+                                                    <div class="edit-button-container">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                        </svg>
                                                     </div>
                                                 </li>
                                             </ul>
@@ -2162,6 +2174,36 @@
                     </div>
                 </div>
 
+                <!-- Collaboration Modal -->
+                <div id="collabModal" class="custom-modal" :class="{ active: showCollabModal }">
+                    <div class="custom-modal-content">
+                        <div class="custom-modal-header">
+                            <h2 id="modal-title">
+                                {{ collabModalType === 'audience' ? 'Edit Audience' : 'Edit Commission' }}
+                            </h2>
+                            <span class="custom-modal-close" @click="closeCollabModal">&times;</span>
+                        </div>
+                        <div class="custom-modal-body">
+                            <p style="margin-bottom: 12px;">
+                                {{ collabModalType === 'audience' ? 'Describe the target audience for this podcast.' : 'Specify any commission or payment terms.' }}
+                            </p>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500;">
+                                    {{ collabModalType === 'audience' ? 'Audience' : 'Commission' }}
+                                </label>
+                                <input v-model="collabModalValue" type="text" class="field-input"
+                                    :placeholder="collabModalType === 'audience' ? 'e.g., Entrepreneurs, Marketing professionals' : 'e.g., 10% affiliate, $500 flat fee'">
+                            </div>
+                            <div class="custom-modal-actions">
+                                <button type="button" class="cancel-button" @click="closeCollabModal">Cancel</button>
+                                <button type="button" class="confirm-button" style="background-color: #0ea5e9;" @click="saveCollabModal">
+                                    Save
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Delete Modal -->
                 <div id="deleteModal" class="custom-modal delete-modal" :class="{ active: showDeleteModal }">
                     <div class="custom-modal-content small">
@@ -2257,6 +2299,11 @@
             const showDateModal = ref(false);
             const dateModalType = ref(''); // 'record' or 'air'
             const dateModalValue = ref('');
+
+            // Collaboration modal state
+            const showCollabModal = ref(false);
+            const collabModalType = ref(''); // 'audience' or 'commission'
+            const collabModalValue = ref('');
 
             // Compose email modal state
             const showComposeModal = ref(false);
@@ -2585,7 +2632,45 @@
                     showErrorMessage(err.message || 'Failed to save date');
                 }
             };
-            
+
+            // Collaboration modal functions
+            const openCollabModal = (type) => {
+                collabModalType.value = type; // 'audience' or 'commission'
+
+                // Pre-populate with existing value
+                const fieldMap = {
+                    'audience': store.interview?.audience,
+                    'commission': store.interview?.commission
+                };
+
+                collabModalValue.value = fieldMap[type] || '';
+                showCollabModal.value = true;
+            };
+
+            const closeCollabModal = () => {
+                showCollabModal.value = false;
+                collabModalValue.value = '';
+                collabModalType.value = '';
+            };
+
+            const saveCollabModal = async () => {
+                try {
+                    const field = collabModalType.value; // 'audience' or 'commission'
+                    if (!field) {
+                        throw new Error('Invalid field type');
+                    }
+
+                    await store.updateInterview(field, collabModalValue.value);
+
+                    const label = collabModalType.value === 'audience' ? 'Audience' : 'Commission';
+                    showSuccessMessage(`${label} updated successfully`);
+                    closeCollabModal();
+                } catch (err) {
+                    console.error('Failed to save collaboration detail:', err);
+                    showErrorMessage(err.message || 'Failed to save');
+                }
+            };
+
             const resetTaskForm = () => {
                 newTask.id = null;
                 newTask.title = '';
@@ -2948,6 +3033,9 @@
                 showDateModal,
                 dateModalType,
                 dateModalValue,
+                showCollabModal,
+                collabModalType,
+                collabModalValue,
                 toastMessage,
                 toastType,
                 showToast,
@@ -2985,6 +3073,9 @@
                 openDateModal,
                 closeDateModal,
                 saveDateModal,
+                openCollabModal,
+                closeCollabModal,
+                saveCollabModal,
                 openProfileModal,
                 closeProfileModal,
                 saveProfileSelection,
