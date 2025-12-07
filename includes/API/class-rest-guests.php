@@ -95,6 +95,13 @@ class PIT_REST_Guests extends PIT_REST_Base {
             'permission_callback' => [__CLASS__, 'check_logged_in'],
         ]);
 
+        // Get guest metrics
+        register_rest_route(self::NAMESPACE, '/guests/metrics', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_metrics'],
+            'permission_callback' => [__CLASS__, 'check_logged_in'],
+        ]);
+
         // Get duplicates
         register_rest_route(self::NAMESPACE, '/guests/duplicates', [
             'methods' => 'GET',
@@ -384,6 +391,130 @@ class PIT_REST_Guests extends PIT_REST_Base {
         }
 
         return rest_ensure_response(['success' => true]);
+    }
+
+    /**
+     * Get guest metrics
+     */
+    public static function get_metrics($request) {
+        global $wpdb;
+        $user_id = get_current_user_id();
+        $table = $wpdb->prefix . 'pit_guests';
+        $appearances_table = $wpdb->prefix . 'pit_guest_appearances';
+        $topics_table = $wpdb->prefix . 'pit_topics';
+        $guest_topics_table = $wpdb->prefix . 'pit_guest_topics';
+
+        // Total guests
+        $total_guests = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $table WHERE user_id = %d",
+            $user_id
+        ));
+
+        // Verified guests
+        $verified_guests = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $table WHERE user_id = %d AND is_verified = 1",
+            $user_id
+        ));
+
+        // Enriched guests
+        $enriched_guests = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $table WHERE user_id = %d AND enrichment_level IS NOT NULL AND enrichment_level != 'none'",
+            $user_id
+        ));
+
+        // Guests with LinkedIn
+        $guests_with_linkedin = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $table WHERE user_id = %d AND linkedin_url IS NOT NULL AND linkedin_url != ''",
+            $user_id
+        ));
+
+        // Guests with email
+        $guests_with_email = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $table WHERE user_id = %d AND email IS NOT NULL AND email != ''",
+            $user_id
+        ));
+
+        // Total appearances
+        $total_appearances = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $appearances_table a
+             INNER JOIN $table g ON a.guest_id = g.id
+             WHERE g.user_id = %d",
+            $user_id
+        ));
+
+        // Total topics
+        $total_topics = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(DISTINCT gt.topic_id) FROM $guest_topics_table gt
+             INNER JOIN $table g ON gt.guest_id = g.id
+             WHERE g.user_id = %d",
+            $user_id
+        ));
+
+        // New guests this month
+        $first_day_of_month = date('Y-m-01');
+        $new_guests_this_month = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $table WHERE user_id = %d AND created_at >= %s",
+            $user_id,
+            $first_day_of_month
+        ));
+
+        // By status
+        $status_results = $wpdb->get_results($wpdb->prepare(
+            "SELECT status, COUNT(*) as count FROM $table WHERE user_id = %d AND status IS NOT NULL GROUP BY status",
+            $user_id
+        ));
+        $by_status = [];
+        foreach ($status_results as $row) {
+            $by_status[$row->status] = (int) $row->count;
+        }
+
+        // Top topics
+        $top_topics = $wpdb->get_results($wpdb->prepare(
+            "SELECT t.id, t.name, COUNT(gt.guest_id) as guest_count
+             FROM $topics_table t
+             INNER JOIN $guest_topics_table gt ON t.id = gt.topic_id
+             INNER JOIN $table g ON gt.guest_id = g.id
+             WHERE g.user_id = %d
+             GROUP BY t.id
+             ORDER BY guest_count DESC
+             LIMIT 10",
+            $user_id
+        ));
+
+        // Top companies
+        $top_companies = $wpdb->get_results($wpdb->prepare(
+            "SELECT company as name, COUNT(*) as count
+             FROM $table
+             WHERE user_id = %d AND company IS NOT NULL AND company != ''
+             GROUP BY company
+             ORDER BY count DESC
+             LIMIT 10",
+            $user_id
+        ));
+
+        // Recent guests
+        $recent_guests = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, full_name, created_at FROM $table
+             WHERE user_id = %d
+             ORDER BY created_at DESC
+             LIMIT 5",
+            $user_id
+        ));
+
+        return rest_ensure_response([
+            'totalGuests' => $total_guests,
+            'verifiedGuests' => $verified_guests,
+            'enrichedGuests' => $enriched_guests,
+            'guestsWithLinkedin' => $guests_with_linkedin,
+            'guestsWithEmail' => $guests_with_email,
+            'totalAppearances' => $total_appearances,
+            'totalTopics' => $total_topics,
+            'newGuestsThisMonth' => $new_guests_this_month,
+            'byStatus' => $by_status,
+            'topTopics' => $top_topics,
+            'topCompanies' => $top_companies,
+            'recentGuests' => $recent_guests
+        ]);
     }
 
     /**

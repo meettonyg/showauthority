@@ -4,6 +4,7 @@ import Podcasts from '../views/Podcasts.vue'
 import PodcastDetail from '../views/PodcastDetail.vue'
 import Guests from '../views/Guests.vue'
 import GuestDetail from '../views/GuestDetail.vue'
+import GuestMetrics from '../views/GuestMetrics.vue'
 
 const routes = [
   {
@@ -25,6 +26,11 @@ const routes = [
     path: '/guests',
     name: 'Guests',
     component: Guests
+  },
+  {
+    path: '/guests/metrics',
+    name: 'GuestMetrics',
+    component: GuestMetrics
   },
   {
     path: '/guests/:id',
