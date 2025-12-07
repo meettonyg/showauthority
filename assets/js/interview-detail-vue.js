@@ -642,6 +642,8 @@
                             episode_guid: episode.guid,
                             episode_duration: episode.duration_seconds,
                             episode_description: episode.description,
+                            episode_thumbnail: episode.thumbnail_url,
+                            episode_audio_url: episode.audio_url,
                         }),
                     });
 
@@ -1112,26 +1114,21 @@
                                     <div v-if="linkedEpisode" class="panel linked-episode-panel">
                                         <div class="panel-header">
                                             <h3 class="panel-title">Linked Episode</h3>
-                                            <a v-if="linkedEpisode.url" :href="linkedEpisode.url" target="_blank" class="button small outline-button" style="font-size: 12px;">
-                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                                                    <polyline points="15 3 21 3 21 9"></polyline>
-                                                    <line x1="10" y1="14" x2="21" y2="3"></line>
-                                                </svg>
-                                                View Episode
-                                            </a>
                                         </div>
                                         <div class="panel-content">
                                             <div class="linked-episode-card">
-                                                <div class="linked-episode-thumbnail">
-                                                    <img v-if="linkedEpisode.thumbnail" :src="linkedEpisode.thumbnail" :alt="linkedEpisode.title" class="episode-thumbnail">
-                                                    <div v-else class="episode-thumbnail-placeholder">
-                                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                            <path d="M9 18V5l12-2v13"></path>
-                                                            <circle cx="6" cy="18" r="3"></circle>
-                                                            <circle cx="18" cy="16" r="3"></circle>
-                                                        </svg>
-                                                    </div>
+                                                <img
+                                                    v-if="linkedEpisode.thumbnail || interview?.podcast_image"
+                                                    :src="linkedEpisode.thumbnail || interview?.podcast_image"
+                                                    :alt="linkedEpisode.title"
+                                                    class="episode-thumbnail"
+                                                    loading="lazy"
+                                                    @error="$event.target.style.display='none'">
+                                                <div v-else class="episode-thumbnail-placeholder">
+                                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                        <circle cx="12" cy="12" r="10"></circle>
+                                                        <polygon points="10 8 16 12 10 16 10 8"></polygon>
+                                                    </svg>
                                                 </div>
                                                 <div class="linked-episode-info">
                                                     <div class="linked-episode-meta">
@@ -1148,9 +1145,10 @@
                                                     <p v-if="linkedEpisode.description" class="linked-episode-description">
                                                         {{ truncateDescription(linkedEpisode.description) }}
                                                     </p>
-                                                    <div v-if="linkedEpisode.audio_url" class="linked-episode-player">
-                                                        <audio controls preload="none" :src="linkedEpisode.audio_url">
-                                                            Your browser does not support the audio element.
+                                                    <div v-if="linkedEpisode.audio_url" class="episode-player">
+                                                        <audio controls preload="none">
+                                                            <source :src="linkedEpisode.audio_url" type="audio/mpeg">
+                                                            Your browser does not support audio.
                                                         </audio>
                                                     </div>
                                                 </div>

@@ -212,6 +212,8 @@ class PIT_REST_Episode_Link {
         $episode_guid = sanitize_text_field($request->get_param('episode_guid') ?? '');
         $episode_duration = (int) ($request->get_param('episode_duration') ?? 0);
         $episode_description = sanitize_textarea_field($request->get_param('episode_description') ?? '');
+        $episode_thumbnail = esc_url_raw($request->get_param('episode_thumbnail') ?? '');
+        $episode_audio_url = esc_url_raw($request->get_param('episode_audio_url') ?? '');
 
         if (empty($episode_title)) {
             return new WP_Error('missing_title', 'Episode title is required', ['status' => 400]);
@@ -243,6 +245,8 @@ class PIT_REST_Episode_Link {
             'episode_guid' => $episode_guid,
             'duration_seconds' => $episode_duration ?: null,
             'description' => $episode_description,
+            'thumbnail_url' => $episode_thumbnail ?: null,
+            'audio_url' => $episode_audio_url ?: null,
             'discovery_source' => 'prospector_link',
             'discovered_by_user_id' => $user_id,
             'created_at' => current_time('mysql'),
