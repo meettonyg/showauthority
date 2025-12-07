@@ -179,8 +179,10 @@
                     // Load linked episode details if exists
                     if (response.engagement_id) {
                         await this.loadLinkedEpisode();
+                        // Also load episodes from RSS so we can enrich the linked episode data
+                        this.loadEpisodes();
                     }
-                    
+
                     await Promise.all([
                         this.loadTasks(),
                         this.loadNotes(),
@@ -2886,7 +2888,31 @@
                 stages: computed(() => store.stages),
 
                 // Episode linking state
-                linkedEpisode: computed(() => store.linkedEpisode),
+                // Enrich linkedEpisode with RSS feed data when available
+                linkedEpisode: computed(() => {
+                    const linked = store.linkedEpisode;
+                    if (!linked) return null;
+
+                    // Try to find matching episode from RSS feed for full data
+                    const rssEpisode = store.episodes.find(ep => {
+                        if (ep.guid && linked.guid && ep.guid === linked.guid) return true;
+                        if (ep.title === linked.title) return true;
+                        return false;
+                    });
+
+                    // Merge RSS data with linked episode data (RSS takes priority for media)
+                    if (rssEpisode) {
+                        return {
+                            ...linked,
+                            thumbnail: rssEpisode.thumbnail_url || linked.thumbnail,
+                            audio_url: rssEpisode.audio_url || linked.audio_url,
+                            description: rssEpisode.description || linked.description,
+                            duration: rssEpisode.duration_display || linked.duration,
+                        };
+                    }
+
+                    return linked;
+                }),
                 linkingEpisode: computed(() => store.linkingEpisode),
                 unlinkingEpisode: computed(() => store.unlinkingEpisode),
                 hasLinkedEpisode: computed(() => store.hasLinkedEpisode),
