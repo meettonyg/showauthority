@@ -2429,8 +2429,8 @@
 
             const truncateDescription = (text, maxLength = 200) => {
                 if (!text) return '';
-                // Strip HTML tags
-                const plainText = text.replace(/<[^>]*>/g, '');
+                // Strip HTML tags using DOMParser for robust handling
+                const plainText = (new DOMParser()).parseFromString(text, 'text/html').body.textContent || '';
                 if (plainText.length <= maxLength) return plainText;
                 return plainText.substring(0, maxLength).trim() + '...';
             };
