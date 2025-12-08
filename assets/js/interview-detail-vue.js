@@ -179,8 +179,10 @@
                     // Load linked episode details if exists
                     if (response.engagement_id) {
                         await this.loadLinkedEpisode();
+                        // Also load episodes from RSS so we can enrich the linked episode data
+                        this.loadEpisodes();
                     }
-                    
+
                     await Promise.all([
                         this.loadTasks(),
                         this.loadNotes(),
@@ -426,6 +428,9 @@
                             date: data.engagement_date,
                             url: data.episode_url,
                             duration: data.duration_seconds ? this.formatDuration(data.duration_seconds) : null,
+                            thumbnail: data.thumbnail_url,
+                            description: data.description,
+                            audio_url: data.audio_url,
                         };
                     }
                 } catch (err) {
@@ -639,6 +644,8 @@
                             episode_guid: episode.guid,
                             episode_duration: episode.duration_seconds,
                             episode_description: episode.description,
+                            episode_thumbnail: episode.thumbnail_url,
+                            episode_audio_url: episode.audio_url,
                         }),
                     });
 
@@ -657,6 +664,8 @@
                         url: episode.episode_url || episode.audio_url,
                         duration: episode.duration_display,
                         thumbnail: episode.thumbnail_url,
+                        description: episode.description,
+                        audio_url: episode.audio_url,
                     };
 
                     return response;
@@ -1103,6 +1112,74 @@
                                         </div>
                                     </div>
 
+                                    <!-- Linked Episode Section (only shown when an episode is linked) -->
+                                    <div v-if="linkedEpisode" class="panel linked-episode-panel">
+                                        <div class="panel-header">
+                                            <h3 class="panel-title">Linked Episode</h3>
+                                            <div class="linked-actions">
+                                                <span class="linked-badge" title="This episode is linked to this interview">
+                                                    <svg class="button-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                                    </svg>
+                                                    Linked
+                                                </span>
+                                                <button
+                                                    class="button small outline-button unlink-btn"
+                                                    @click="handleUnlinkEpisode"
+                                                    :disabled="unlinkingEpisode"
+                                                    title="Unlink this episode from the interview">
+                                                    <svg v-if="unlinkingEpisode" class="button-icon spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                                                    </svg>
+                                                    <svg v-else class="button-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M18 6L6 18M6 6l12 12"></path>
+                                                    </svg>
+                                                    {{ unlinkingEpisode ? 'Unlinking...' : 'Unlink' }}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="panel-content">
+                                            <div class="linked-episode-card">
+                                                <img
+                                                    v-if="linkedEpisode.thumbnail || interview?.podcast_image"
+                                                    :src="linkedEpisode.thumbnail || interview?.podcast_image"
+                                                    :alt="linkedEpisode.title"
+                                                    class="episode-thumbnail"
+                                                    loading="lazy"
+                                                    @error="$event.target.style.display='none'">
+                                                <div v-else class="episode-thumbnail-placeholder">
+                                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                        <circle cx="12" cy="12" r="10"></circle>
+                                                        <polygon points="10 8 16 12 10 16 10 8"></polygon>
+                                                    </svg>
+                                                </div>
+                                                <div class="linked-episode-info">
+                                                    <div class="linked-episode-meta">
+                                                        <span class="linked-episode-date">{{ formatDate(linkedEpisode.date) }}</span>
+                                                        <span v-if="linkedEpisode.duration" class="linked-episode-duration">
+                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                                <circle cx="12" cy="12" r="10"></circle>
+                                                                <polyline points="12 6 12 12 16 14"></polyline>
+                                                            </svg>
+                                                            {{ linkedEpisode.duration }}
+                                                        </span>
+                                                    </div>
+                                                    <h4 class="linked-episode-title">{{ linkedEpisode.title }}</h4>
+                                                    <p v-if="linkedEpisode.description" class="linked-episode-description">
+                                                        {{ truncateDescription(linkedEpisode.description) }}
+                                                    </p>
+                                                    <div v-if="linkedEpisode.audio_url" class="episode-player">
+                                                        <audio controls preload="none">
+                                                            <source :src="linkedEpisode.audio_url" type="audio/mpeg">
+                                                            Your browser does not support audio.
+                                                        </audio>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <!-- Collaboration Section -->
                                     <div class="panel">
                                         <div class="panel-header">
@@ -1110,7 +1187,7 @@
                                         </div>
                                         <div class="panel-content">
                                             <ul class="collab-list">
-                                                <li class="collab-item">
+                                                <li class="collab-item collab-item-editable" @click="openCollabModal('audience')">
                                                     <svg class="collab-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                                                         <circle cx="9" cy="7" r="4"></circle>
@@ -1119,17 +1196,29 @@
                                                     </svg>
                                                     <div class="collab-content">
                                                         <div class="collab-label">Audience</div>
-                                                        <div class="collab-value">{{ interview?.audience || 'Not specified' }}</div>
+                                                        <div class="collab-value" :class="{ 'not-set': !interview?.audience }">{{ interview?.audience || 'Not specified' }}</div>
+                                                    </div>
+                                                    <div class="edit-button-container">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                        </svg>
                                                     </div>
                                                 </li>
-                                                <li class="collab-item">
+                                                <li class="collab-item collab-item-editable" @click="openCollabModal('commission')">
                                                     <svg class="collab-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <line x1="12" y1="1" x2="12" y2="23"></line>
                                                         <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
                                                     </svg>
                                                     <div class="collab-content">
                                                         <div class="collab-label">Commission</div>
-                                                        <div class="collab-value">{{ interview?.commission || 'Not specified' }}</div>
+                                                        <div class="collab-value" :class="{ 'not-set': !interview?.commission }">{{ interview?.commission || 'Not specified' }}</div>
+                                                    </div>
+                                                    <div class="edit-button-container">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                        </svg>
                                                     </div>
                                                 </li>
                                             </ul>
@@ -2085,6 +2174,36 @@
                     </div>
                 </div>
 
+                <!-- Collaboration Modal -->
+                <div id="collabModal" class="custom-modal" :class="{ active: showCollabModal }">
+                    <div class="custom-modal-content">
+                        <div class="custom-modal-header">
+                            <h2 id="modal-title">
+                                {{ collabModalType === 'audience' ? 'Edit Audience' : 'Edit Commission' }}
+                            </h2>
+                            <span class="custom-modal-close" @click="closeCollabModal">&times;</span>
+                        </div>
+                        <div class="custom-modal-body">
+                            <p style="margin-bottom: 12px;">
+                                {{ collabModalType === 'audience' ? 'Describe the target audience for this podcast.' : 'Specify any commission or payment terms.' }}
+                            </p>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500;">
+                                    {{ collabModalType === 'audience' ? 'Audience' : 'Commission' }}
+                                </label>
+                                <input v-model="collabModalValue" type="text" class="field-input"
+                                    :placeholder="collabModalType === 'audience' ? 'e.g., Entrepreneurs, Marketing professionals' : 'e.g., 10% affiliate, $500 flat fee'">
+                            </div>
+                            <div class="custom-modal-actions">
+                                <button type="button" class="cancel-button" @click="closeCollabModal">Cancel</button>
+                                <button type="button" class="confirm-button" style="background-color: #0ea5e9;" @click="saveCollabModal">
+                                    Save
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Delete Modal -->
                 <div id="deleteModal" class="custom-modal delete-modal" :class="{ active: showDeleteModal }">
                     <div class="custom-modal-content small">
@@ -2180,6 +2299,11 @@
             const showDateModal = ref(false);
             const dateModalType = ref(''); // 'record' or 'air'
             const dateModalValue = ref('');
+
+            // Collaboration modal state
+            const showCollabModal = ref(false);
+            const collabModalType = ref(''); // 'audience' or 'commission'
+            const collabModalValue = ref('');
 
             // Compose email modal state
             const showComposeModal = ref(false);
@@ -2371,7 +2495,15 @@
                 };
                 return ratingMap[rating.toLowerCase()] || rating;
             };
-            
+
+            const truncateDescription = (text, maxLength = 200) => {
+                if (!text) return '';
+                // Strip HTML tags using DOMParser for robust handling
+                const plainText = (new DOMParser()).parseFromString(text, 'text/html').body.textContent || '';
+                if (plainText.length <= maxLength) return plainText;
+                return plainText.substring(0, maxLength).trim() + '...';
+            };
+
             const getInitials = (name) => {
                 if (!name) return '?';
                 return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
@@ -2500,7 +2632,45 @@
                     showErrorMessage(err.message || 'Failed to save date');
                 }
             };
-            
+
+            // Collaboration modal functions
+            const openCollabModal = (type) => {
+                collabModalType.value = type; // 'audience' or 'commission'
+
+                // Pre-populate with existing value
+                const fieldMap = {
+                    'audience': store.interview?.audience,
+                    'commission': store.interview?.commission
+                };
+
+                collabModalValue.value = fieldMap[type] || '';
+                showCollabModal.value = true;
+            };
+
+            const closeCollabModal = () => {
+                showCollabModal.value = false;
+                collabModalValue.value = '';
+                collabModalType.value = '';
+            };
+
+            const saveCollabModal = async () => {
+                try {
+                    const field = collabModalType.value; // 'audience' or 'commission'
+                    if (!field) {
+                        throw new Error('Invalid field type');
+                    }
+
+                    await store.updateInterview(field, collabModalValue.value);
+
+                    const label = collabModalType.value === 'audience' ? 'Audience' : 'Commission';
+                    showSuccessMessage(`${label} updated successfully`);
+                    closeCollabModal();
+                } catch (err) {
+                    console.error('Failed to save collaboration detail:', err);
+                    showErrorMessage(err.message || 'Failed to save');
+                }
+            };
+
             const resetTaskForm = () => {
                 newTask.id = null;
                 newTask.title = '';
@@ -2825,7 +2995,31 @@
                 stages: computed(() => store.stages),
 
                 // Episode linking state
-                linkedEpisode: computed(() => store.linkedEpisode),
+                // Enrich linkedEpisode with RSS feed data when available
+                linkedEpisode: computed(() => {
+                    const linked = store.linkedEpisode;
+                    if (!linked) return null;
+
+                    // Try to find matching episode from RSS feed for full data
+                    const rssEpisode = store.episodes.find(ep => {
+                        if (ep.guid && linked.guid && ep.guid === linked.guid) return true;
+                        if (ep.title === linked.title) return true;
+                        return false;
+                    });
+
+                    // Merge RSS data with linked episode data (RSS takes priority for media)
+                    if (rssEpisode) {
+                        return {
+                            ...linked,
+                            thumbnail: rssEpisode.thumbnail_url || linked.thumbnail,
+                            audio_url: rssEpisode.audio_url || linked.audio_url,
+                            description: rssEpisode.description || linked.description,
+                            duration: rssEpisode.duration_display || linked.duration,
+                        };
+                    }
+
+                    return linked;
+                }),
                 linkingEpisode: computed(() => store.linkingEpisode),
                 unlinkingEpisode: computed(() => store.unlinkingEpisode),
                 hasLinkedEpisode: computed(() => store.hasLinkedEpisode),
@@ -2839,6 +3033,9 @@
                 showDateModal,
                 dateModalType,
                 dateModalValue,
+                showCollabModal,
+                collabModalType,
+                collabModalValue,
                 toastMessage,
                 toastType,
                 showToast,
@@ -2865,6 +3062,7 @@
                 formatTaskType,
                 formatFoundedDate,
                 formatContentRating,
+                truncateDescription,
                 isOverdue,
                 capitalize,
                 getInitials,
@@ -2875,6 +3073,9 @@
                 openDateModal,
                 closeDateModal,
                 saveDateModal,
+                openCollabModal,
+                closeCollabModal,
+                saveCollabModal,
                 openProfileModal,
                 closeProfileModal,
                 saveProfileSelection,
