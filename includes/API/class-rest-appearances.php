@@ -267,7 +267,7 @@ class PIT_REST_Appearances {
         // Allowed fields
         $allowed = ['status', 'priority', 'source', 'is_archived', 'guest_profile_id', 
                     'record_date', 'air_date', 'promotion_date', 'notes', 'internal_notes',
-                    'estimated_value', 'actual_value'];
+                    'estimated_value', 'actual_value', 'audience', 'commission'];
         
         $data = [];
         foreach ($allowed as $field) {
@@ -435,8 +435,8 @@ class PIT_REST_Appearances {
                 'episode_date' => '',
                 'episode_url' => '',
                 'interview_topic' => '',
-                'audience' => '',
-                'commission' => '',
+                'audience' => $row->audience ?? '',
+                'commission' => $row->commission ?? '',
             ]);
         }
 
