@@ -529,6 +529,47 @@ class PIT_RSS_Parser {
     }
 
     /**
+     * Find a specific episode by GUID or title from cached RSS data
+     *
+     * @param string $rss_url RSS feed URL
+     * @param string $episode_guid Episode GUID to find
+     * @param string $episode_title Episode title (fallback if GUID not found)
+     * @return array|null Episode data or null if not found
+     */
+    public static function find_episode($rss_url, $episode_guid = '', $episode_title = '') {
+        if (empty($episode_guid) && empty($episode_title)) {
+            return null;
+        }
+
+        // Get all episodes from cache or fetch
+        $result = self::parse_episodes($rss_url, 0, 10000, false);
+
+        if (is_wp_error($result) || empty($result['episodes'])) {
+            return null;
+        }
+
+        // Search by GUID first (most reliable)
+        if (!empty($episode_guid)) {
+            foreach ($result['episodes'] as $episode) {
+                if (!empty($episode['guid']) && $episode['guid'] === $episode_guid) {
+                    return $episode;
+                }
+            }
+        }
+
+        // Fallback to title match
+        if (!empty($episode_title)) {
+            foreach ($result['episodes'] as $episode) {
+                if (!empty($episode['title']) && $episode['title'] === $episode_title) {
+                    return $episode;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Parse episodes from RSS feed
      *
      * Fetches and parses individual episodes from a podcast RSS feed.

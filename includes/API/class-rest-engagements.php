@@ -129,6 +129,8 @@ class PIT_REST_Engagements {
      * Get single engagement
      */
     public static function get_engagement($request) {
+        global $wpdb;
+
         $id = (int) $request->get_param('id');
         $engagement = PIT_Engagement_Repository::get($id);
 
@@ -149,6 +151,27 @@ class PIT_REST_Engagements {
                 'is_primary' => (bool) $credit->is_primary,
             ];
         }, $credits);
+
+        // Enrich with fresh RSS data - episode image takes priority over stored data
+        if (!empty($engagement->podcast_id) && class_exists('PIT_RSS_Parser')) {
+            $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+            $podcast = $wpdb->get_row($wpdb->prepare(
+                "SELECT rss_feed_url FROM $podcasts_table WHERE id = %d",
+                $engagement->podcast_id
+            ));
+
+            if ($podcast && !empty($podcast->rss_feed_url)) {
+                $rss_episode = PIT_RSS_Parser::find_episode(
+                    $podcast->rss_feed_url,
+                    $engagement->episode_guid ?? '',
+                    $engagement->title ?? ''
+                );
+
+                if ($rss_episode && !empty($rss_episode['thumbnail_url'])) {
+                    $data['thumbnail_url'] = $rss_episode['thumbnail_url'];
+                }
+            }
+        }
 
         return new WP_REST_Response($data, 200);
     }
