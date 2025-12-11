@@ -604,18 +604,18 @@ function guestify_outreach_check_upgrade() {
 
 ```
 guestify-email-outreach/
-├── guestify-email-outreach.php          # Main plugin file with constants
-├── includes/
-│   ├── class-public-api.php             # NEW: Public API class
-│   ├── class-email-sender.php           # Updated sender class
-│   ├── class-email-tracker.php          # Tracking pixel/webhooks
-│   ├── class-template-manager.php       # Template CRUD
-│   └── migrations/
-│       └── class-migration-v2.php       # NEW: v2.0 migration
-├── admin/
-│   └── ...
-└── assets/
-    └── ...
++-- guestify-email-outreach.php          # Main plugin file with constants
++-- includes/
+|   +-- class-public-api.php             # NEW: Public API class
+|   +-- class-email-sender.php           # Updated sender class
+|   +-- class-email-tracker.php          # Tracking pixel/webhooks
+|   +-- class-template-manager.php       # Template CRUD
+|   +-- migrations/
+|       +-- class-migration-v2.php       # NEW: v2.0 migration
++-- admin/
+|   +-- ...
++-- assets/
+    +-- ...
 ```
 
 ---
