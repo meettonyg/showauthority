@@ -1,12 +1,19 @@
 <?php
 /**
- * Bridge between Interview Tracker and Guestify Outreach Plugin
+ * Bridge between ShowAuthority and Guestify Outreach Plugin
  *
- * This class provides a THIN wrapper that calls existing Guestify Outreach
- * classes directly. It does NOT duplicate any functionality.
+ * This class provides a clean interface for email messaging functionality.
+ * It supports two modes:
  *
- * @package Podcast_Influence_Tracker
+ * 1. Public API Mode (preferred): Uses Guestify_Outreach_Public_API class
+ *    when available (Outreach plugin v2.0+)
+ *
+ * 2. Legacy Mode: Direct database queries for backward compatibility
+ *    with older Outreach plugin versions
+ *
+ * @package ShowAuthority
  * @since 4.2.0
+ * @updated 5.0.0 - Added Public API support, entity_type support
  */
 
 if (!defined('ABSPATH')) {
@@ -16,9 +23,27 @@ if (!defined('ABSPATH')) {
 class PIT_Guestify_Outreach_Bridge {
 
     /**
+     * Minimum version of Outreach plugin that supports Public API
+     */
+    const MIN_API_VERSION = '2.0.0';
+
+    /**
+     * Entity type identifier for ShowAuthority appearances
+     */
+    const ENTITY_TYPE = 'appearance';
+
+    /**
      * Check if Guestify Outreach plugin is active
+     *
+     * Prefers version constant check over class_exists for reliability.
      */
     public static function is_active(): bool {
+        // Preferred: Check for version constant (Outreach v2.0+)
+        if (defined('GUESTIFY_OUTREACH_VERSION')) {
+            return true;
+        }
+
+        // Fallback: Check for sender class (legacy)
         return class_exists('Guestify_Outreach_Email_Sender');
     }
 
@@ -30,16 +55,44 @@ class PIT_Guestify_Outreach_Bridge {
             return false;
         }
 
+        // Use Public API if available
+        if (self::has_public_api()) {
+            return Guestify_Outreach_Public_API::is_configured();
+        }
+
+        // Fallback: Check settings directly
         $settings = get_option('guestify_outreach_settings', []);
         return !empty($settings['brevo_api_key']);
     }
 
     /**
-     * Send email using Guestify Outreach's existing sender
+     * Check if Public API is available
+     */
+    public static function has_public_api(): bool {
+        if (!defined('GUESTIFY_OUTREACH_VERSION')) {
+            return false;
+        }
+
+        return version_compare(GUESTIFY_OUTREACH_VERSION, self::MIN_API_VERSION, '>=')
+            && class_exists('Guestify_Outreach_Public_API');
+    }
+
+    /**
+     * Get the Outreach plugin version
+     */
+    public static function get_version(): ?string {
+        if (defined('GUESTIFY_OUTREACH_VERSION')) {
+            return GUESTIFY_OUTREACH_VERSION;
+        }
+        return null;
+    }
+
+    /**
+     * Send email using Guestify Outreach
      *
-     * @param int   $appearance_id  PIT appearance/opportunity ID
+     * @param int   $appearance_id  ShowAuthority appearance/opportunity ID
      * @param array $args           Email arguments
-     * @return array Result from Guestify Outreach sender
+     * @return array Result with success, message, and optional tracking_id
      */
     public static function send_email(int $appearance_id, array $args): array {
         if (!self::is_active()) {
@@ -56,26 +109,23 @@ class PIT_Guestify_Outreach_Bridge {
             ];
         }
 
-        // Instantiate the EXISTING sender from Guestify Outreach
-        $sender = new Guestify_Outreach_Email_Sender();
+        // Use Public API if available
+        if (self::has_public_api()) {
+            $result = Guestify_Outreach_Public_API::send_email([
+                'entity_id'    => $appearance_id,
+                'entity_type'  => self::ENTITY_TYPE,
+                'to_email'     => sanitize_email($args['to_email']),
+                'to_name'      => sanitize_text_field($args['to_name'] ?? ''),
+                'subject'      => sanitize_text_field($args['subject']),
+                'html_content' => wp_kses_post($args['html_content']),
+                'template_id'  => absint($args['template_id'] ?? 0) ?: null,
+            ]);
+        } else {
+            // Legacy: Direct sender instantiation
+            $result = self::send_email_legacy($appearance_id, $args);
+        }
 
-        // Call send_email with interview_entry_id mapped to appearance_id
-        // The existing sender already:
-        // - Adds tracking pixel
-        // - Saves to guestify_messages table
-        // - Returns tracking_id
-        $result = $sender->send_email([
-            'to_email'           => sanitize_email($args['to_email']),
-            'to_name'            => sanitize_text_field($args['to_name'] ?? ''),
-            'subject'            => sanitize_text_field($args['subject']),
-            'html_content'       => wp_kses_post($args['html_content']),
-            'template_id'        => absint($args['template_id'] ?? 0) ?: null,
-            'interview_entry_id' => $appearance_id,  // THIS IS THE LINK
-            'campaign_id'        => null,            // Ad-hoc email, not campaign
-            'campaign_step'      => null,
-        ]);
-
-        // Log to PIT Activity Feed (for UI convenience only)
+        // Log to activity feed on success
         if (!empty($result['success'])) {
             self::log_to_activity_feed($appearance_id, $args['subject'], $args['to_email']);
         }
@@ -84,19 +134,60 @@ class PIT_Guestify_Outreach_Bridge {
     }
 
     /**
-     * Get message history from Guestify Outreach's existing table
+     * Legacy email sending via direct class instantiation
+     */
+    private static function send_email_legacy(int $appearance_id, array $args): array {
+        if (!class_exists('Guestify_Outreach_Email_Sender')) {
+            return [
+                'success' => false,
+                'message' => 'Email sender class not found.'
+            ];
+        }
+
+        $sender = new Guestify_Outreach_Email_Sender();
+
+        return $sender->send_email([
+            'to_email'           => sanitize_email($args['to_email']),
+            'to_name'            => sanitize_text_field($args['to_name'] ?? ''),
+            'subject'            => sanitize_text_field($args['subject']),
+            'html_content'       => wp_kses_post($args['html_content']),
+            'template_id'        => absint($args['template_id'] ?? 0) ?: null,
+            // Legacy field name - will be migrated to entity_id in Outreach v2.0
+            'interview_entry_id' => $appearance_id,
+            'campaign_id'        => null,
+            'campaign_step'      => null,
+        ]);
+    }
+
+    /**
+     * Get message history for an appearance
      *
-     * @param int $appearance_id PIT appearance/opportunity ID
-     * @return array Messages
+     * @param int $appearance_id ShowAuthority appearance/opportunity ID
+     * @return array Messages with tracking data
      */
     public static function get_messages(int $appearance_id): array {
         if (!self::is_active()) {
             return [];
         }
 
+        // Use Public API if available
+        if (self::has_public_api()) {
+            return Guestify_Outreach_Public_API::get_messages(
+                $appearance_id,
+                self::ENTITY_TYPE
+            );
+        }
+
+        // Legacy: Direct database query
+        return self::get_messages_legacy($appearance_id);
+    }
+
+    /**
+     * Legacy message retrieval via direct database query
+     */
+    private static function get_messages_legacy(int $appearance_id): array {
         global $wpdb;
 
-        // Query the EXISTING guestify_messages table
         $table = $wpdb->prefix . 'guestify_messages';
 
         // Check if table exists
@@ -104,6 +195,9 @@ class PIT_Guestify_Outreach_Bridge {
         if (!$table_exists) {
             return [];
         }
+
+        // Try entity_id first (v2.0 schema), fall back to interview_entry_id
+        $id_column = self::get_entity_id_column($table);
 
         $messages = $wpdb->get_results($wpdb->prepare(
             "SELECT
@@ -115,7 +209,7 @@ class PIT_Guestify_Outreach_Bridge {
                 sent_at,
                 brevo_message_id
              FROM {$table}
-             WHERE interview_entry_id = %d
+             WHERE {$id_column} = %d
              ORDER BY sent_at DESC
              LIMIT 50",
             $appearance_id
@@ -125,7 +219,7 @@ class PIT_Guestify_Outreach_Bridge {
             return [];
         }
 
-        // Get open/click events from guestify_message_events
+        // Get open/click events
         $events_table = $wpdb->prefix . 'guestify_message_events';
         $events_table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $events_table));
 
@@ -135,7 +229,6 @@ class PIT_Guestify_Outreach_Bridge {
             $first_opened = null;
             $clicked = false;
 
-            // Get events for this message if events table exists
             if ($events_table_exists) {
                 $events = $wpdb->get_results($wpdb->prepare(
                     "SELECT event_type, event_timestamp
@@ -177,7 +270,7 @@ class PIT_Guestify_Outreach_Bridge {
     }
 
     /**
-     * Get templates from Guestify Outreach's existing table
+     * Get templates available to current user
      *
      * @return array Templates
      */
@@ -186,10 +279,22 @@ class PIT_Guestify_Outreach_Bridge {
             return [];
         }
 
+        // Use Public API if available
+        if (self::has_public_api()) {
+            return Guestify_Outreach_Public_API::get_templates();
+        }
+
+        // Legacy: Direct database query
+        return self::get_templates_legacy();
+    }
+
+    /**
+     * Legacy template retrieval via direct database query
+     */
+    private static function get_templates_legacy(): array {
         global $wpdb;
         $table = $wpdb->prefix . 'guestify_email_templates';
 
-        // Check if table exists
         $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
         if (!$table_exists) {
             return [];
@@ -197,7 +302,6 @@ class PIT_Guestify_Outreach_Bridge {
 
         $user_id = get_current_user_id();
 
-        // Get user's templates and default templates
         $templates = $wpdb->get_results($wpdb->prepare(
             "SELECT
                 id,
@@ -234,22 +338,39 @@ class PIT_Guestify_Outreach_Bridge {
     /**
      * Get email statistics for an appearance
      *
-     * @param int $appearance_id PIT appearance/opportunity ID
-     * @return array Stats
+     * @param int $appearance_id ShowAuthority appearance/opportunity ID
+     * @return array Stats with total_sent, opened, clicked
      */
     public static function get_stats(int $appearance_id): array {
+        $default_stats = [
+            'total_sent' => 0,
+            'opened' => 0,
+            'clicked' => 0,
+        ];
+
         if (!self::is_active()) {
-            return [
-                'total_sent' => 0,
-                'opened' => 0,
-                'clicked' => 0,
-            ];
+            return $default_stats;
         }
 
+        // Use Public API if available
+        if (self::has_public_api()) {
+            return Guestify_Outreach_Public_API::get_stats(
+                $appearance_id,
+                self::ENTITY_TYPE
+            );
+        }
+
+        // Legacy: Direct database query
+        return self::get_stats_legacy($appearance_id);
+    }
+
+    /**
+     * Legacy stats retrieval via direct database query
+     */
+    private static function get_stats_legacy(int $appearance_id): array {
         global $wpdb;
         $table = $wpdb->prefix . 'guestify_messages';
 
-        // Check if table exists
         $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
         if (!$table_exists) {
             return [
@@ -259,12 +380,13 @@ class PIT_Guestify_Outreach_Bridge {
             ];
         }
 
+        $id_column = self::get_entity_id_column($table);
+
         $total_sent = (int) $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM {$table} WHERE interview_entry_id = %d",
+            "SELECT COUNT(*) FROM {$table} WHERE {$id_column} = %d",
             $appearance_id
         ));
 
-        // Get opened/clicked counts from events table
         $events_table = $wpdb->prefix . 'guestify_message_events';
         $events_table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $events_table));
 
@@ -276,7 +398,7 @@ class PIT_Guestify_Outreach_Bridge {
                 "SELECT COUNT(DISTINCT m.id)
                  FROM {$table} m
                  INNER JOIN {$events_table} e ON m.id = e.message_id
-                 WHERE m.interview_entry_id = %d AND e.event_type = 'open'",
+                 WHERE m.{$id_column} = %d AND e.event_type = 'open'",
                 $appearance_id
             ));
 
@@ -284,7 +406,7 @@ class PIT_Guestify_Outreach_Bridge {
                 "SELECT COUNT(DISTINCT m.id)
                  FROM {$table} m
                  INNER JOIN {$events_table} e ON m.id = e.message_id
-                 WHERE m.interview_entry_id = %d AND e.event_type = 'click'",
+                 WHERE m.{$id_column} = %d AND e.event_type = 'click'",
                 $appearance_id
             ));
         }
@@ -297,14 +419,33 @@ class PIT_Guestify_Outreach_Bridge {
     }
 
     /**
-     * Log email send to PIT activity feed (for UI convenience only)
-     * This is NOT for tracking - that's handled by Guestify Outreach
+     * Determine which ID column to use in the messages table
+     *
+     * Supports both legacy (interview_entry_id) and new (entity_id) schemas.
+     */
+    private static function get_entity_id_column(string $table): string {
+        global $wpdb;
+
+        // Check if entity_id column exists (v2.0 schema)
+        $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table}");
+        $column_names = array_map(fn($col) => $col->Field, $columns);
+
+        if (in_array('entity_id', $column_names)) {
+            return 'entity_id';
+        }
+
+        // Fallback to legacy column
+        return 'interview_entry_id';
+    }
+
+    /**
+     * Log email send to activity feed (for UI convenience only)
+     * Tracking is handled by Guestify Outreach, not here.
      */
     private static function log_to_activity_feed(int $appearance_id, string $subject, string $to_email): void {
         global $wpdb;
         $table = $wpdb->prefix . 'pit_appearance_notes';
 
-        // Check if notes table exists
         $exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
         if (!$exists) {
             return;
