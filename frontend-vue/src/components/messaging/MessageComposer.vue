@@ -119,7 +119,7 @@
  * @since 5.0.0
  */
 
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import TemplateSelector from './TemplateSelector.vue'
 
 const props = defineProps({
@@ -211,6 +211,21 @@ function resetForm() {
   form.subject = ''
   form.body = ''
 }
+
+// Handle Escape key to close modal
+function handleKeydown(e) {
+  if (e.key === 'Escape' && props.show) {
+    handleClose()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
 
 // Expose reset for parent
 defineExpose({ resetForm })

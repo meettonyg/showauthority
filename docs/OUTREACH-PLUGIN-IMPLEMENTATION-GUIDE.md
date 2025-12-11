@@ -115,6 +115,9 @@ Create a migration to rename the column and add entity_type:
  * Database migration: v1.x to v2.0
  *
  * File: includes/migrations/class-migration-v2.php
+ *
+ * IMPORTANT: Each step is idempotent - safe to run multiple times.
+ * If migration is interrupted, it will resume from where it left off.
  */
 
 class Guestify_Outreach_Migration_V2 {
@@ -123,43 +126,64 @@ class Guestify_Outreach_Migration_V2 {
         global $wpdb;
         $table = $wpdb->prefix . 'guestify_messages';
 
-        // Check if migration is needed
-        $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table}");
-        $column_names = array_column($columns, 'Field');
+        // Get current column state (refreshed after each step)
+        $columns = self::get_columns($table);
 
-        // Already migrated?
-        if (in_array('entity_id', $column_names)) {
-            return true;
+        // Step 1: Add entity_id column if missing
+        if (!in_array('entity_id', $columns)) {
+            $wpdb->query("ALTER TABLE {$table}
+                ADD COLUMN entity_id BIGINT UNSIGNED AFTER id");
+            $columns = self::get_columns($table);
         }
 
-        // Step 1: Add new columns
-        $wpdb->query("ALTER TABLE {$table}
-            ADD COLUMN entity_id BIGINT UNSIGNED AFTER id,
-            ADD COLUMN entity_type VARCHAR(50) DEFAULT 'formidable_entry' AFTER entity_id");
+        // Step 2: Add entity_type column if missing
+        if (!in_array('entity_type', $columns)) {
+            $wpdb->query("ALTER TABLE {$table}
+                ADD COLUMN entity_type VARCHAR(50) DEFAULT 'formidable_entry' AFTER entity_id");
+        }
 
-        // Step 2: Copy data from old column
-        if (in_array('interview_entry_id', $column_names)) {
+        // Step 3: Copy data from old column (only rows with NULL entity_id)
+        if (in_array('interview_entry_id', $columns)) {
             $wpdb->query("UPDATE {$table}
                 SET entity_id = interview_entry_id,
                     entity_type = 'formidable_entry'
-                WHERE entity_id IS NULL");
+                WHERE entity_id IS NULL AND interview_entry_id IS NOT NULL");
         }
 
-        // Step 3: Make entity_id NOT NULL
-        $wpdb->query("ALTER TABLE {$table}
-            MODIFY COLUMN entity_id BIGINT UNSIGNED NOT NULL");
+        // Step 4: Make entity_id NOT NULL (only if currently nullable)
+        $column_info = $wpdb->get_row(
+            $wpdb->prepare("SHOW COLUMNS FROM {$table} WHERE Field = %s", 'entity_id')
+        );
+        if ($column_info && $column_info->Null === 'YES') {
+            $wpdb->query("ALTER TABLE {$table}
+                MODIFY COLUMN entity_id BIGINT UNSIGNED NOT NULL");
+        }
 
-        // Step 4: Add index
-        $wpdb->query("ALTER TABLE {$table}
-            ADD INDEX idx_entity (entity_id, entity_type)");
+        // Step 5: Add index if not exists
+        $indexes = $wpdb->get_results("SHOW INDEX FROM {$table} WHERE Key_name = 'idx_entity'");
+        if (empty($indexes)) {
+            $wpdb->query("ALTER TABLE {$table}
+                ADD INDEX idx_entity (entity_id, entity_type)");
+        }
 
-        // Step 5: Drop old column (optional - keep for rollback safety)
-        // $wpdb->query("ALTER TABLE {$table} DROP COLUMN interview_entry_id");
+        // Step 6: Drop old column (optional - uncomment when ready)
+        // if (in_array('interview_entry_id', self::get_columns($table))) {
+        //     $wpdb->query("ALTER TABLE {$table} DROP COLUMN interview_entry_id");
+        // }
 
-        // Update version option
+        // Mark migration complete
         update_option('guestify_outreach_db_version', '2.0.0');
 
         return true;
+    }
+
+    /**
+     * Helper to get current column names
+     */
+    private static function get_columns(string $table): array {
+        global $wpdb;
+        $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table}");
+        return array_column($columns, 'Field');
     }
 }
 ```
