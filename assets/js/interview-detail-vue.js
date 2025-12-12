@@ -18,7 +18,7 @@
 (function() {
     'use strict';
 
-    const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
+    const { createApp, ref, reactive, computed, onMounted, onUnmounted, watch } = Vue;
     const { createPinia, defineStore } = Pinia;
 
     // ==========================================================================
@@ -2959,6 +2959,19 @@
                 showTaskModal.value = true;
             };
             
+            // Handle Escape key to close modals
+            const handleKeydown = (e) => {
+                if (e.key === 'Escape') {
+                    if (showComposeModal.value) {
+                        closeComposeModal();
+                    } else if (showTaskModal.value) {
+                        showTaskModal.value = false;
+                    } else if (showNoteModal.value) {
+                        showNoteModal.value = false;
+                    }
+                }
+            };
+
             // Lifecycle
             onMounted(async () => {
                 if (typeof guestifyDetailData !== 'undefined') {
@@ -2974,6 +2987,13 @@
                         store.loadEmailStats();
                     }
                 });
+
+                // Add keyboard listener for Escape key
+                window.addEventListener('keydown', handleKeydown);
+            });
+
+            onUnmounted(() => {
+                window.removeEventListener('keydown', handleKeydown);
             });
             
             return {
