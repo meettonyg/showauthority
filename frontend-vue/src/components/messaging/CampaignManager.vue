@@ -192,6 +192,55 @@
         </div>
       </Transition>
     </Teleport>
+
+    <!-- Cancel Confirmation Modal -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="showCancelConfirmModal" class="modal-overlay" @click.self="closeCancelConfirmModal">
+          <div class="modal-container modal-confirm">
+            <div class="modal-header">
+              <h3 class="modal-title">Cancel Campaign</h3>
+              <button class="modal-close" @click="closeCancelConfirmModal" :disabled="actionLoading">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+
+            <div class="modal-body">
+              <div class="confirm-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+              </div>
+              <p class="confirm-message">Are you sure you want to cancel this campaign?</p>
+              <p class="confirm-warning">This action cannot be undone.</p>
+            </div>
+
+            <div class="modal-footer">
+              <button
+                class="btn btn-secondary"
+                @click="closeCancelConfirmModal"
+                :disabled="actionLoading"
+              >
+                Keep Campaign
+              </button>
+              <button
+                class="btn btn-danger"
+                @click="confirmCancelCampaign"
+                :disabled="actionLoading"
+              >
+                <span v-if="actionLoading" class="btn-spinner"></span>
+                {{ actionLoading ? 'Cancelling...' : 'Cancel Campaign' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -233,6 +282,8 @@ const messagesStore = useMessagesStore()
 
 // Local state
 const showCreateModal = ref(false)
+const showCancelConfirmModal = ref(false)
+const campaignToCancel = ref(null)
 const newCampaign = ref({
   name: '',
   template_id: null
@@ -331,13 +382,25 @@ async function handleResume(campaignId) {
   }
 }
 
-async function handleCancel(campaignId) {
-  if (!confirm('Are you sure you want to cancel this campaign? This cannot be undone.')) {
-    return
-  }
+function handleCancel(campaignId) {
+  campaignToCancel.value = campaignId
+  showCancelConfirmModal.value = true
+}
 
+function closeCancelConfirmModal() {
+  if (actionLoading.value) return
+  showCancelConfirmModal.value = false
+  campaignToCancel.value = null
+}
+
+async function confirmCancelCampaign() {
+  if (!campaignToCancel.value) return
+
+  const campaignId = campaignToCancel.value
   const result = await messagesStore.cancelCampaign(campaignId, props.appearanceId)
+
   if (result.success) {
+    closeCancelConfirmModal()
     emit('campaign-updated', { action: 'cancelled', campaignId })
   }
 }
@@ -437,6 +500,15 @@ defineExpose({
 
 .btn-primary:hover:not(:disabled) {
   background: var(--color-primary-dark, #4f46e5);
+}
+
+.btn-danger {
+  background: var(--color-error, #ef4444);
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--color-error-dark, #dc2626);
 }
 
 .btn-spinner {
@@ -702,6 +774,33 @@ defineExpose({
 
 .modal-close:hover:not(:disabled) {
   background: var(--color-surface, #f8f9fa);
+}
+
+.modal-confirm {
+  max-width: 380px;
+}
+
+.modal-confirm .modal-body {
+  text-align: center;
+  padding: 24px 20px;
+}
+
+.confirm-icon {
+  color: var(--color-warning, #f59e0b);
+  margin-bottom: 16px;
+}
+
+.confirm-message {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text-primary, #1a1a1a);
+  margin: 0 0 8px;
+}
+
+.confirm-warning {
+  font-size: 13px;
+  color: var(--color-text-secondary, #6b7280);
+  margin: 0;
 }
 
 .modal-body {

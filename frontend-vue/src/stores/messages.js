@@ -127,6 +127,36 @@ export const useMessagesStore = defineStore('messages', {
 
   actions: {
     /**
+     * Helper to handle API errors consistently
+     * @private
+     * @param {Error} error - The error object
+     * @param {string} stateProperty - The state property to set error on
+     * @param {string} defaultMessage - Default error message
+     * @returns {{success: boolean, message: string}}
+     */
+    _handleApiError(error, stateProperty, defaultMessage) {
+      console.error(`${defaultMessage}:`, error)
+      const errorMessage = error.response?.data?.message || error.message || defaultMessage
+      this[stateProperty] = errorMessage
+      return { success: false, message: errorMessage }
+    },
+
+    /**
+     * Find the appearanceId for a given campaignId from state
+     * @private
+     * @param {number} campaignId - The campaign ID
+     * @returns {number|null} The appearance ID or null if not found
+     */
+    _findAppearanceIdForCampaign(campaignId) {
+      for (const [appearanceId, campaigns] of Object.entries(this.campaignsByAppearance)) {
+        if (campaigns.some(c => c.id === campaignId)) {
+          return parseInt(appearanceId, 10)
+        }
+      }
+      return null
+    },
+
+    /**
      * Check if Outreach plugin is available and configured
      * Uses extended status to get version and feature info
      */
@@ -148,7 +178,8 @@ export const useMessagesStore = defineStore('messages', {
           }
           this.statusChecked = true
           return extended
-        } catch {
+        } catch (error) {
+          console.warn('Failed to get extended status, falling back to basic status check.', error)
           // Fallback to basic status
           const result = await outreachApi.getStatus()
           this.available = result.available
@@ -277,13 +308,7 @@ export const useMessagesStore = defineStore('messages', {
 
         return result
       } catch (error) {
-        console.error('Failed to send email:', error)
-        const errorMessage = error.response?.data?.message || error.message || 'Failed to send email'
-        this.sendError = errorMessage
-        return {
-          success: false,
-          message: errorMessage
-        }
+        return this._handleApiError(error, 'sendError', 'Failed to send email')
       } finally {
         this.sending = false
       }
@@ -385,13 +410,7 @@ export const useMessagesStore = defineStore('messages', {
 
         return result
       } catch (error) {
-        console.error('Failed to start campaign:', error)
-        const errorMessage = error.response?.data?.message || error.message || 'Failed to start campaign'
-        this.campaignActionError = errorMessage
-        return {
-          success: false,
-          message: errorMessage
-        }
+        return this._handleApiError(error, 'campaignActionError', 'Failed to start campaign')
       } finally {
         this.campaignActionLoading = false
       }
@@ -400,10 +419,10 @@ export const useMessagesStore = defineStore('messages', {
     /**
      * Pause a campaign
      * @param {number} campaignId
-     * @param {number} appearanceId - For refreshing the campaign list
+     * @param {number} [appearanceId] - Optional, will be auto-detected from state if not provided
      * @returns {Promise<{success: boolean, message: string}>}
      */
-    async pauseCampaign(campaignId, appearanceId) {
+    async pauseCampaign(campaignId, appearanceId = null) {
       if (!this.hasCampaigns) {
         return {
           success: false,
@@ -417,19 +436,16 @@ export const useMessagesStore = defineStore('messages', {
       try {
         const result = await outreachApi.pauseCampaign(campaignId)
 
-        if (result.success && appearanceId) {
-          await this.loadCampaigns(appearanceId, true)
+        if (result.success) {
+          const resolvedAppearanceId = appearanceId || this._findAppearanceIdForCampaign(campaignId)
+          if (resolvedAppearanceId) {
+            await this.loadCampaigns(resolvedAppearanceId, true)
+          }
         }
 
         return result
       } catch (error) {
-        console.error('Failed to pause campaign:', error)
-        const errorMessage = error.response?.data?.message || error.message || 'Failed to pause campaign'
-        this.campaignActionError = errorMessage
-        return {
-          success: false,
-          message: errorMessage
-        }
+        return this._handleApiError(error, 'campaignActionError', 'Failed to pause campaign')
       } finally {
         this.campaignActionLoading = false
       }
@@ -438,10 +454,10 @@ export const useMessagesStore = defineStore('messages', {
     /**
      * Resume a paused campaign
      * @param {number} campaignId
-     * @param {number} appearanceId - For refreshing the campaign list
+     * @param {number} [appearanceId] - Optional, will be auto-detected from state if not provided
      * @returns {Promise<{success: boolean, message: string}>}
      */
-    async resumeCampaign(campaignId, appearanceId) {
+    async resumeCampaign(campaignId, appearanceId = null) {
       if (!this.hasCampaigns) {
         return {
           success: false,
@@ -455,19 +471,16 @@ export const useMessagesStore = defineStore('messages', {
       try {
         const result = await outreachApi.resumeCampaign(campaignId)
 
-        if (result.success && appearanceId) {
-          await this.loadCampaigns(appearanceId, true)
+        if (result.success) {
+          const resolvedAppearanceId = appearanceId || this._findAppearanceIdForCampaign(campaignId)
+          if (resolvedAppearanceId) {
+            await this.loadCampaigns(resolvedAppearanceId, true)
+          }
         }
 
         return result
       } catch (error) {
-        console.error('Failed to resume campaign:', error)
-        const errorMessage = error.response?.data?.message || error.message || 'Failed to resume campaign'
-        this.campaignActionError = errorMessage
-        return {
-          success: false,
-          message: errorMessage
-        }
+        return this._handleApiError(error, 'campaignActionError', 'Failed to resume campaign')
       } finally {
         this.campaignActionLoading = false
       }
@@ -476,10 +489,10 @@ export const useMessagesStore = defineStore('messages', {
     /**
      * Cancel a campaign
      * @param {number} campaignId
-     * @param {number} appearanceId - For refreshing the campaign list
+     * @param {number} [appearanceId] - Optional, will be auto-detected from state if not provided
      * @returns {Promise<{success: boolean, message: string}>}
      */
-    async cancelCampaign(campaignId, appearanceId) {
+    async cancelCampaign(campaignId, appearanceId = null) {
       if (!this.hasCampaigns) {
         return {
           success: false,
@@ -493,19 +506,16 @@ export const useMessagesStore = defineStore('messages', {
       try {
         const result = await outreachApi.cancelCampaign(campaignId)
 
-        if (result.success && appearanceId) {
-          await this.loadCampaigns(appearanceId, true)
+        if (result.success) {
+          const resolvedAppearanceId = appearanceId || this._findAppearanceIdForCampaign(campaignId)
+          if (resolvedAppearanceId) {
+            await this.loadCampaigns(resolvedAppearanceId, true)
+          }
         }
 
         return result
       } catch (error) {
-        console.error('Failed to cancel campaign:', error)
-        const errorMessage = error.response?.data?.message || error.message || 'Failed to cancel campaign'
-        this.campaignActionError = errorMessage
-        return {
-          success: false,
-          message: errorMessage
-        }
+        return this._handleApiError(error, 'campaignActionError', 'Failed to cancel campaign')
       } finally {
         this.campaignActionLoading = false
       }

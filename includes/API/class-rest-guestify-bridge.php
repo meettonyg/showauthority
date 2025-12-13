@@ -99,44 +99,44 @@ class PIT_REST_Guestify_Bridge {
             ],
         ]);
 
-        // Get campaigns for an appearance
+        // Get/Start campaigns for an appearance (consolidated GET + POST)
         register_rest_route(self::NAMESPACE, '/pit-bridge/appearances/(?P<id>\d+)/campaigns', [
-            'methods'             => 'GET',
-            'callback'            => [__CLASS__, 'get_campaigns'],
-            'permission_callback' => [__CLASS__, 'check_permission'],
-            'args' => [
-                'id' => [
-                    'required'          => true,
-                    'type'              => 'integer',
-                    'sanitize_callback' => 'absint',
+            [
+                'methods'             => 'GET',
+                'callback'            => [__CLASS__, 'get_campaigns'],
+                'permission_callback' => [__CLASS__, 'check_permission'],
+                'args' => [
+                    'id' => [
+                        'required'          => true,
+                        'type'              => 'integer',
+                        'sanitize_callback' => 'absint',
+                    ],
                 ],
             ],
-        ]);
-
-        // Start a new campaign for an appearance
-        register_rest_route(self::NAMESPACE, '/pit-bridge/appearances/(?P<id>\d+)/campaigns', [
-            'methods'             => 'POST',
-            'callback'            => [__CLASS__, 'start_campaign'],
-            'permission_callback' => [__CLASS__, 'check_permission'],
-            'args' => [
-                'id' => [
-                    'required'          => true,
-                    'type'              => 'integer',
-                    'sanitize_callback' => 'absint',
-                ],
-                'name' => [
-                    'required'          => true,
-                    'type'              => 'string',
-                    'sanitize_callback' => 'sanitize_text_field',
-                ],
-                'template_id' => [
-                    'type'              => 'integer',
-                    'sanitize_callback' => 'absint',
-                    'default'           => 0,
-                ],
-                'steps' => [
-                    'type'    => 'array',
-                    'default' => [],
+            [
+                'methods'             => 'POST',
+                'callback'            => [__CLASS__, 'start_campaign'],
+                'permission_callback' => [__CLASS__, 'check_permission'],
+                'args' => [
+                    'id' => [
+                        'required'          => true,
+                        'type'              => 'integer',
+                        'sanitize_callback' => 'absint',
+                    ],
+                    'name' => [
+                        'required'          => true,
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                    'template_id' => [
+                        'type'              => 'integer',
+                        'sanitize_callback' => 'absint',
+                        'default'           => 0,
+                    ],
+                    'steps' => [
+                        'type'    => 'array',
+                        'default' => [],
+                    ],
                 ],
             ],
         ]);

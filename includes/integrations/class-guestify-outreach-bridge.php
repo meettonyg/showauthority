@@ -77,19 +77,18 @@ class PIT_Guestify_Outreach_Bridge {
      * Checks both version constant and API version constant for compatibility.
      */
     public static function has_public_api(): bool {
-        if (!defined('GUESTIFY_OUTREACH_VERSION')) {
+        // Check class existence upfront to avoid repetition
+        if (!class_exists('Guestify_Outreach_Public_API') || !defined('GUESTIFY_OUTREACH_VERSION')) {
             return false;
         }
 
         // Check API version constant (preferred method)
         if (defined('GUESTIFY_OUTREACH_API_VERSION')) {
-            return GUESTIFY_OUTREACH_API_VERSION >= self::MIN_API_VERSION_CONST
-                && class_exists('Guestify_Outreach_Public_API');
+            return GUESTIFY_OUTREACH_API_VERSION >= self::MIN_API_VERSION_CONST;
         }
 
         // Fallback to version string comparison
-        return version_compare(GUESTIFY_OUTREACH_VERSION, self::MIN_API_VERSION, '>=')
-            && class_exists('Guestify_Outreach_Public_API');
+        return version_compare(GUESTIFY_OUTREACH_VERSION, self::MIN_API_VERSION, '>=');
     }
 
     /**
@@ -522,12 +521,12 @@ class PIT_Guestify_Outreach_Bridge {
     // =========================================================================
 
     /**
-     * Start a new email campaign
+     * Check if campaign management is available
      *
-     * @param array $args Campaign arguments
-     * @return array Result with success, message, and optional campaign_id
+     * @param bool $require_configured Whether to also check if Brevo is configured
+     * @return array|null Error response if not available, null if OK
      */
-    public static function start_campaign(array $args): array {
+    private static function check_campaign_availability(bool $require_configured = false): ?array {
         if (!self::has_public_api()) {
             return [
                 'success' => false,
@@ -535,11 +534,26 @@ class PIT_Guestify_Outreach_Bridge {
             ];
         }
 
-        if (!self::is_configured()) {
+        if ($require_configured && !self::is_configured()) {
             return [
                 'success' => false,
                 'message' => 'Brevo API key not configured in Guestify Outreach settings.'
             ];
+        }
+
+        return null;
+    }
+
+    /**
+     * Start a new email campaign
+     *
+     * @param array $args Campaign arguments
+     * @return array Result with success, message, and optional campaign_id
+     */
+    public static function start_campaign(array $args): array {
+        $error = self::check_campaign_availability(true);
+        if ($error !== null) {
+            return $error;
         }
 
         // Validate entity type
@@ -578,11 +592,9 @@ class PIT_Guestify_Outreach_Bridge {
      * @return array Result with success and message
      */
     public static function pause_campaign(int $campaign_id): array {
-        if (!self::has_public_api()) {
-            return [
-                'success' => false,
-                'message' => 'Campaign management requires Guestify Outreach v2.0 or later.'
-            ];
+        $error = self::check_campaign_availability();
+        if ($error !== null) {
+            return $error;
         }
 
         $result = Guestify_Outreach_Public_API::pause_campaign($campaign_id);
@@ -601,11 +613,9 @@ class PIT_Guestify_Outreach_Bridge {
      * @return array Result with success and message
      */
     public static function resume_campaign(int $campaign_id): array {
-        if (!self::has_public_api()) {
-            return [
-                'success' => false,
-                'message' => 'Campaign management requires Guestify Outreach v2.0 or later.'
-            ];
+        $error = self::check_campaign_availability();
+        if ($error !== null) {
+            return $error;
         }
 
         $result = Guestify_Outreach_Public_API::resume_campaign($campaign_id);
@@ -624,11 +634,9 @@ class PIT_Guestify_Outreach_Bridge {
      * @return array Result with success and message
      */
     public static function cancel_campaign(int $campaign_id): array {
-        if (!self::has_public_api()) {
-            return [
-                'success' => false,
-                'message' => 'Campaign management requires Guestify Outreach v2.0 or later.'
-            ];
+        $error = self::check_campaign_availability();
+        if ($error !== null) {
+            return $error;
         }
 
         $result = Guestify_Outreach_Public_API::cancel_campaign($campaign_id);
