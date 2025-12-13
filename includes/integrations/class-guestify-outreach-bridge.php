@@ -160,11 +160,18 @@ class PIT_Guestify_Outreach_Bridge {
 
         // Use Public API if available
         if (self::has_public_api()) {
+            // Get sender info from Guestify Outreach settings
+            $settings = get_option('guestify_outreach_settings', []);
+            $from_email = $settings['from_email'] ?? '';
+            $from_name = $settings['from_name'] ?? '';
+
             $result = Guestify_Outreach_Public_API::send_email([
                 'entity_id'    => $appearance_id,
                 'entity_type'  => self::ENTITY_TYPE,
                 'to_email'     => sanitize_email($args['to_email']),
                 'to_name'      => sanitize_text_field($args['to_name'] ?? ''),
+                'from_email'   => sanitize_email($from_email),
+                'from_name'    => sanitize_text_field($from_name),
                 'subject'      => sanitize_text_field($args['subject']),
                 'html_content' => wp_kses_post($args['html_content']),
                 'template_id'  => absint($args['template_id'] ?? 0) ?: null,
