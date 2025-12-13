@@ -44,6 +44,24 @@ export default {
     return response.data
   },
 
+  async getGuestAppearances(guestId) {
+    const response = await api.get(`/guests/${guestId}/appearances`)
+    return response.data
+  },
+
+  async getGuestNetwork(guestId, maxDegree = 2) {
+    const response = await api.get(`/guests/${guestId}/network`, {
+      params: { max_degree: maxDegree }
+    })
+    return response.data
+  },
+
+  // Topics
+  async getTopics(params = {}) {
+    const response = await api.get('/topics', { params })
+    return response.data
+  },
+
   // Search
   async search(query, type = 'all') {
     const response = await api.get('/search', {

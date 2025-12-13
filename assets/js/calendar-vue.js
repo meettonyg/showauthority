@@ -608,8 +608,8 @@
                                 </div>
                             </div>
 
-                            <!-- Outlook Section (Coming Soon) -->
-                            <div class="sync-provider disabled">
+                            <!-- Outlook Section -->
+                            <div class="sync-provider" :class="{ connected: syncStatus.outlook?.connected }">
                                 <div class="sync-provider-header">
                                     <div class="sync-provider-icon outlook">
                                         <svg width="20" height="20" viewBox="0 0 24 24">
@@ -619,7 +619,61 @@
                                     </div>
                                     <div class="sync-provider-info">
                                         <h3>Microsoft Outlook</h3>
-                                        <p class="coming-soon">Coming soon</p>
+                                        <p v-if="syncStatus.outlook?.connected" class="connected-email">{{ syncStatus.outlook.email }}</p>
+                                        <p v-else-if="!syncStatus.outlook?.configured" class="not-configured">Not configured</p>
+                                        <p v-else class="not-connected">Not connected</p>
+                                    </div>
+                                    <div class="sync-provider-actions">
+                                        <button v-if="!syncStatus.outlook?.connected && syncStatus.outlook?.configured" class="btn-connect outlook" @click="connectOutlook">
+                                            Connect Outlook
+                                        </button>
+                                        <button v-if="syncStatus.outlook?.connected" class="btn-disconnect" @click="disconnectOutlook">
+                                            Disconnect
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Outlook Calendar Selection -->
+                                <div v-if="syncStatus.outlook?.connected" class="sync-provider-body">
+                                    <div v-if="!syncStatus.outlook.calendar_id" class="calendar-selection">
+                                        <label>Select calendar to sync:</label>
+                                        <div class="calendar-list" v-if="outlookCalendars.length > 0">
+                                            <div
+                                                v-for="cal in outlookCalendars"
+                                                :key="cal.id"
+                                                class="calendar-item"
+                                                :class="{ selected: selectedOutlookCalendarId === cal.id }"
+                                                @click="selectedOutlookCalendarId = cal.id"
+                                            >
+                                                <span class="calendar-color" :style="{ background: cal.color }"></span>
+                                                <span class="calendar-name">{{ cal.name }}</span>
+                                                <span v-if="cal.primary" class="calendar-primary">Primary</span>
+                                            </div>
+                                        </div>
+                                        <button class="btn-primary" @click="selectOutlookCalendar" :disabled="!selectedOutlookCalendarId">
+                                            Use Selected Calendar
+                                        </button>
+                                    </div>
+
+                                    <div v-else class="sync-status">
+                                        <div class="selected-calendar">
+                                            <span>Syncing with:</span>
+                                            <strong>{{ syncStatus.outlook.calendar_name }}</strong>
+                                        </div>
+
+                                        <div v-if="syncStatus.outlook.sync_error" class="sync-error">
+                                            <span class="error-icon">!</span>
+                                            {{ syncStatus.outlook.sync_error }}
+                                        </div>
+
+                                        <div class="sync-actions">
+                                            <button class="btn-sync" @click="triggerOutlookSync" :disabled="outlookSyncLoading || !syncStatus.outlook.calendar_id">
+                                                {{ outlookSyncLoading ? 'Syncing...' : 'Sync Now' }}
+                                            </button>
+                                            <span v-if="syncStatus.outlook.last_sync_at" class="last-sync">
+                                                Last synced: {{ formatLastSync(syncStatus.outlook.last_sync_at) }}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -652,8 +706,11 @@
             // Sync state
             const syncStatus = ref({ google: null, outlook: null });
             const syncLoading = ref(false);
+            const outlookSyncLoading = ref(false);
             const googleCalendars = ref([]);
+            const outlookCalendars = ref([]);
             const selectedCalendarId = ref('');
+            const selectedOutlookCalendarId = ref('');
             const syncDirection = ref('both');
             const syncEnabled = ref(true);
 
@@ -993,11 +1050,26 @@
                         const data = await response.json();
                         syncStatus.value = data.data;
 
-                        // Update local state from server
+                        // Update local Google state from server
                         if (data.data.google) {
                             selectedCalendarId.value = data.data.google.calendar_id || '';
                             syncDirection.value = data.data.google.sync_direction || 'both';
                             syncEnabled.value = data.data.google.sync_enabled ?? true;
+
+                            // Load Google calendars if connected but no calendar selected
+                            if (data.data.google.connected && !data.data.google.calendar_id) {
+                                loadGoogleCalendars();
+                            }
+                        }
+
+                        // Update local Outlook state from server
+                        if (data.data.outlook) {
+                            selectedOutlookCalendarId.value = data.data.outlook.calendar_id || '';
+
+                            // Load Outlook calendars if connected but no calendar selected
+                            if (data.data.outlook.connected && !data.data.outlook.calendar_id) {
+                                loadOutlookCalendars();
+                            }
                         }
                     }
                 } catch (err) {
@@ -1157,6 +1229,151 @@
                 }
             };
 
+            // =====================
+            // Outlook Calendar Methods
+            // =====================
+
+            const connectOutlook = async () => {
+                outlookSyncLoading.value = true;
+                try {
+                    const response = await fetch(
+                        `${store.config.restUrl}calendar-sync/outlook/auth`,
+                        {
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        // Redirect to Microsoft OAuth
+                        window.location.href = data.data.auth_url;
+                    }
+                } catch (err) {
+                    console.error('Failed to get Outlook auth URL:', err);
+                } finally {
+                    outlookSyncLoading.value = false;
+                }
+            };
+
+            const disconnectOutlook = async () => {
+                if (!confirm('Are you sure you want to disconnect Outlook Calendar?')) {
+                    return;
+                }
+
+                outlookSyncLoading.value = true;
+                try {
+                    await fetch(
+                        `${store.config.restUrl}calendar-sync/outlook/disconnect`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    await fetchSyncStatus();
+                    outlookCalendars.value = [];
+                } catch (err) {
+                    console.error('Failed to disconnect Outlook:', err);
+                } finally {
+                    outlookSyncLoading.value = false;
+                }
+            };
+
+            const loadOutlookCalendars = async () => {
+                try {
+                    const response = await fetch(
+                        `${store.config.restUrl}calendar-sync/outlook/calendars`,
+                        {
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        outlookCalendars.value = data.data || [];
+
+                        // Pre-select primary calendar
+                        const primary = outlookCalendars.value.find(c => c.primary);
+                        if (primary) {
+                            selectedOutlookCalendarId.value = primary.id;
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to load Outlook calendars:', err);
+                }
+            };
+
+            const selectOutlookCalendar = async () => {
+                if (!selectedOutlookCalendarId.value) return;
+
+                outlookSyncLoading.value = true;
+                try {
+                    const selectedCal = outlookCalendars.value.find(
+                        c => c.id === selectedOutlookCalendarId.value
+                    );
+
+                    const response = await fetch(
+                        `${store.config.restUrl}calendar-sync/outlook/select-calendar`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                            body: JSON.stringify({
+                                calendar_id: selectedOutlookCalendarId.value,
+                                calendar_name: selectedCal?.name || 'Calendar',
+                            }),
+                        }
+                    );
+
+                    if (response.ok) {
+                        await fetchSyncStatus();
+                    }
+                } catch (err) {
+                    console.error('Failed to select Outlook calendar:', err);
+                } finally {
+                    outlookSyncLoading.value = false;
+                }
+            };
+
+            const triggerOutlookSync = async () => {
+                outlookSyncLoading.value = true;
+                try {
+                    const response = await fetch(
+                        `${store.config.restUrl}calendar-sync/outlook/sync`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (response.ok) {
+                        await fetchSyncStatus();
+                        // Refresh events
+                        const today = new Date();
+                        const start = new Date(today.getFullYear(), today.getMonth(), 1);
+                        const end = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+                        await store.fetchEvents(
+                            start.toISOString().split('T')[0],
+                            end.toISOString().split('T')[0]
+                        );
+                    }
+                } catch (err) {
+                    console.error('Failed to sync Outlook:', err);
+                } finally {
+                    outlookSyncLoading.value = false;
+                }
+            };
+
             const formatLastSync = (datetime) => {
                 if (!datetime) return 'Never';
                 const date = new Date(datetime);
@@ -1238,8 +1455,11 @@
                 // Sync state
                 syncStatus,
                 syncLoading,
+                outlookSyncLoading,
                 googleCalendars,
+                outlookCalendars,
                 selectedCalendarId,
+                selectedOutlookCalendarId,
                 syncDirection,
                 syncEnabled,
 
@@ -1268,13 +1488,19 @@
                 confirmDeleteEvent,
                 deleteEvent,
 
-                // Sync methods
+                // Google sync methods
                 connectGoogle,
                 disconnectGoogle,
                 selectCalendar,
                 updateSyncSettings,
                 triggerSync,
                 formatLastSync,
+
+                // Outlook sync methods
+                connectOutlook,
+                disconnectOutlook,
+                selectOutlookCalendar,
+                triggerOutlookSync,
             };
         },
     };

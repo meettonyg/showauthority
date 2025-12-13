@@ -5,8 +5,8 @@ Headless Vue 3 frontend for the Podcast Influence Tracker WordPress plugin.
 ## Features
 
 - 🎙️ Browse podcasts with search and pagination
-- 👤 Guest directory (coming soon)
-- 📊 Podcast metrics display (coming soon)
+- 👤 Guest directory with filtering and search
+- 📊 Podcast metrics display (YouTube, Twitter, Instagram, etc.)
 - 🔍 Real-time search
 - 📱 Responsive design
 - ⚡ Fast and modern (Vite + Vue 3)
@@ -90,7 +90,8 @@ Build locally and upload `dist/` folder to any static hosting:
 frontend-vue/
 ├── src/
 │   ├── components/       # Reusable Vue components
-│   │   └── PodcastCard.vue
+│   │   ├── PodcastCard.vue
+│   │   └── GuestCard.vue
 │   ├── views/           # Page components
 │   │   ├── Home.vue
 │   │   ├── Podcasts.vue
@@ -98,7 +99,8 @@ frontend-vue/
 │   │   ├── Guests.vue
 │   │   └── GuestDetail.vue
 │   ├── stores/          # Pinia stores
-│   │   └── podcasts.js
+│   │   ├── podcasts.js
+│   │   └── guests.js
 │   ├── services/        # API services
 │   │   └── api.js
 │   ├── router/          # Vue Router config

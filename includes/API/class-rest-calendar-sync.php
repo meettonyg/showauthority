@@ -104,6 +104,61 @@ class PIT_REST_Calendar_Sync {
                 ],
             ],
         ]);
+
+        // =====================
+        // Outlook Calendar Routes
+        // =====================
+
+        // GET /calendar-sync/outlook/auth - Get Outlook auth URL
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/outlook/auth', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [__CLASS__, 'get_outlook_auth_url'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        // GET /calendar-sync/outlook/callback - OAuth callback (no auth required)
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/outlook/callback', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [__CLASS__, 'outlook_oauth_callback'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        // GET /calendar-sync/outlook/calendars - List user's Outlook calendars
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/outlook/calendars', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [__CLASS__, 'get_outlook_calendars'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        // POST /calendar-sync/outlook/select-calendar - Select Outlook calendar to sync
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/outlook/select-calendar', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [__CLASS__, 'select_outlook_calendar'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args' => [
+                'calendar_id' => [
+                    'required' => true,
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'calendar_name' => [
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+            ],
+        ]);
+
+        // POST /calendar-sync/outlook/disconnect - Disconnect Outlook Calendar
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/outlook/disconnect', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [__CLASS__, 'disconnect_outlook'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        // POST /calendar-sync/outlook/sync - Trigger Outlook manual sync
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/outlook/sync', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [__CLASS__, 'trigger_outlook_sync'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
     }
 
     /**
@@ -118,29 +173,38 @@ class PIT_REST_Calendar_Sync {
      */
     public static function get_status($request) {
         $user_id = get_current_user_id();
-        $connection = self::get_user_connection($user_id, 'google');
+        $google_connection = self::get_user_connection($user_id, 'google');
+        $outlook_connection = self::get_user_connection($user_id, 'outlook');
 
         $google_configured = PIT_Google_Calendar::is_configured();
+        $outlook_configured = PIT_Outlook_Calendar::is_configured();
 
         return rest_ensure_response([
             'success' => true,
             'data' => [
                 'google' => [
                     'configured' => $google_configured,
-                    'connected' => !empty($connection),
-                    'email' => $connection['provider_email'] ?? null,
-                    'name' => $connection['provider_name'] ?? null,
-                    'calendar_id' => $connection['calendar_id'] ?? null,
-                    'calendar_name' => $connection['calendar_name'] ?? null,
-                    'sync_enabled' => (bool)($connection['sync_enabled'] ?? false),
-                    'sync_direction' => $connection['sync_direction'] ?? 'both',
-                    'last_sync_at' => $connection['last_sync_at'] ?? null,
-                    'sync_error' => $connection['sync_error'] ?? null,
+                    'connected' => !empty($google_connection),
+                    'email' => $google_connection['provider_email'] ?? null,
+                    'name' => $google_connection['provider_name'] ?? null,
+                    'calendar_id' => $google_connection['calendar_id'] ?? null,
+                    'calendar_name' => $google_connection['calendar_name'] ?? null,
+                    'sync_enabled' => (bool)($google_connection['sync_enabled'] ?? false),
+                    'sync_direction' => $google_connection['sync_direction'] ?? 'both',
+                    'last_sync_at' => $google_connection['last_sync_at'] ?? null,
+                    'sync_error' => $google_connection['sync_error'] ?? null,
                 ],
                 'outlook' => [
-                    'configured' => false,
-                    'connected' => false,
-                    'coming_soon' => true,
+                    'configured' => $outlook_configured,
+                    'connected' => !empty($outlook_connection),
+                    'email' => $outlook_connection['provider_email'] ?? null,
+                    'name' => $outlook_connection['provider_name'] ?? null,
+                    'calendar_id' => $outlook_connection['calendar_id'] ?? null,
+                    'calendar_name' => $outlook_connection['calendar_name'] ?? null,
+                    'sync_enabled' => (bool)($outlook_connection['sync_enabled'] ?? false),
+                    'sync_direction' => $outlook_connection['sync_direction'] ?? 'both',
+                    'last_sync_at' => $outlook_connection['last_sync_at'] ?? null,
+                    'sync_error' => $outlook_connection['sync_error'] ?? null,
                 ],
             ],
         ]);
@@ -381,6 +445,211 @@ class PIT_REST_Calendar_Sync {
         ]);
     }
 
+    // =====================
+    // Outlook Calendar Handlers
+    // =====================
+
+    /**
+     * Get Outlook auth URL
+     */
+    public static function get_outlook_auth_url($request) {
+        if (!PIT_Outlook_Calendar::is_configured()) {
+            return new WP_Error(
+                'not_configured',
+                'Outlook Calendar integration is not configured. Please contact the administrator.',
+                ['status' => 400]
+            );
+        }
+
+        $auth_url = PIT_Outlook_Calendar::get_auth_url();
+
+        if (is_wp_error($auth_url)) {
+            return $auth_url;
+        }
+
+        return rest_ensure_response([
+            'success' => true,
+            'data' => [
+                'auth_url' => $auth_url,
+            ],
+        ]);
+    }
+
+    /**
+     * Handle Outlook OAuth callback
+     */
+    public static function outlook_oauth_callback($request) {
+        $code = $request->get_param('code');
+        $state = $request->get_param('state');
+        $error = $request->get_param('error');
+
+        // Handle OAuth errors
+        if ($error) {
+            return self::redirect_with_error('Outlook authorization was denied: ' . $error);
+        }
+
+        if (!$code || !$state) {
+            return self::redirect_with_error('Invalid OAuth callback parameters');
+        }
+
+        // Verify state token
+        $state_data = get_transient('pit_outlook_oauth_state_' . $state);
+        delete_transient('pit_outlook_oauth_state_' . $state);
+
+        if (!$state_data) {
+            return self::redirect_with_error('Invalid or expired authorization state');
+        }
+
+        $user_id = $state_data['user_id'];
+
+        // Exchange code for tokens
+        $tokens = PIT_Outlook_Calendar::exchange_code($code);
+
+        if (is_wp_error($tokens)) {
+            return self::redirect_with_error('Failed to get access token: ' . $tokens->get_error_message());
+        }
+
+        // Get user info
+        $user_info = PIT_Outlook_Calendar::get_user_info($tokens['access_token']);
+
+        if (is_wp_error($user_info)) {
+            return self::redirect_with_error('Failed to get user info: ' . $user_info->get_error_message());
+        }
+
+        // Save connection to database
+        $saved = self::save_connection($user_id, 'outlook', [
+            'access_token' => $tokens['access_token'],
+            'refresh_token' => $tokens['refresh_token'],
+            'expires_in' => $tokens['expires_in'],
+            'email' => $user_info['email'],
+            'name' => $user_info['name'],
+        ]);
+
+        if (!$saved) {
+            return self::redirect_with_error('Failed to save connection');
+        }
+
+        // Redirect to calendar page with success
+        return self::redirect_with_success('Outlook Calendar connected successfully!');
+    }
+
+    /**
+     * Get user's Outlook calendars
+     */
+    public static function get_outlook_calendars($request) {
+        $user_id = get_current_user_id();
+        $access_token = self::get_valid_access_token($user_id, 'outlook');
+
+        if (is_wp_error($access_token)) {
+            return $access_token;
+        }
+
+        $calendars = PIT_Outlook_Calendar::get_calendars($access_token);
+
+        if (is_wp_error($calendars)) {
+            return $calendars;
+        }
+
+        return rest_ensure_response([
+            'success' => true,
+            'data' => $calendars,
+        ]);
+    }
+
+    /**
+     * Select Outlook calendar for sync
+     */
+    public static function select_outlook_calendar($request) {
+        global $wpdb;
+
+        $user_id = get_current_user_id();
+        $calendar_id = $request->get_param('calendar_id');
+        $calendar_name = $request->get_param('calendar_name') ?: 'Calendar';
+
+        $table = PIT_Calendar_Connections_Schema::get_table_name();
+
+        $updated = $wpdb->update(
+            $table,
+            [
+                'calendar_id' => $calendar_id,
+                'calendar_name' => $calendar_name,
+                'sync_enabled' => 1,
+            ],
+            [
+                'user_id' => $user_id,
+                'provider' => 'outlook',
+            ]
+        );
+
+        if ($updated === false) {
+            return new WP_Error('update_failed', 'Failed to update calendar selection', ['status' => 500]);
+        }
+
+        return rest_ensure_response([
+            'success' => true,
+            'message' => 'Outlook calendar selected successfully',
+            'data' => [
+                'calendar_id' => $calendar_id,
+                'calendar_name' => $calendar_name,
+            ],
+        ]);
+    }
+
+    /**
+     * Disconnect Outlook Calendar
+     */
+    public static function disconnect_outlook($request) {
+        global $wpdb;
+
+        $user_id = get_current_user_id();
+        $table = PIT_Calendar_Connections_Schema::get_table_name();
+
+        // Delete the connection
+        $wpdb->delete($table, [
+            'user_id' => $user_id,
+            'provider' => 'outlook',
+        ]);
+
+        // Also clear outlook_event_id from user's events (keep local events)
+        $events_table = PIT_Calendar_Events_Schema::get_table_name();
+        $wpdb->query($wpdb->prepare(
+            "UPDATE $events_table
+             SET outlook_calendar_id = NULL,
+                 outlook_event_id = NULL,
+                 sync_status = CASE WHEN google_event_id IS NULL THEN 'local_only' ELSE sync_status END
+             WHERE user_id = %d",
+            $user_id
+        ));
+
+        return rest_ensure_response([
+            'success' => true,
+            'message' => 'Outlook Calendar disconnected',
+        ]);
+    }
+
+    /**
+     * Trigger Outlook manual sync
+     */
+    public static function trigger_outlook_sync($request) {
+        $user_id = get_current_user_id();
+
+        $result = PIT_Calendar_Sync_Service::sync_user($user_id, 'outlook');
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        return rest_ensure_response([
+            'success' => true,
+            'message' => 'Outlook sync completed',
+            'data' => $result,
+        ]);
+    }
+
+    // =====================
+    // Helper Methods
+    // =====================
+
     /**
      * Get user's calendar connection
      */
@@ -451,7 +720,12 @@ class PIT_REST_Calendar_Sync {
                 return new WP_Error('no_refresh_token', 'No refresh token available', ['status' => 401]);
             }
 
-            $new_tokens = PIT_Google_Calendar::refresh_token($refresh_token);
+            // Use appropriate provider's refresh method
+            if ($provider === 'outlook') {
+                $new_tokens = PIT_Outlook_Calendar::refresh_token($refresh_token);
+            } else {
+                $new_tokens = PIT_Google_Calendar::refresh_token($refresh_token);
+            }
 
             if (is_wp_error($new_tokens)) {
                 // Mark connection as having an error
@@ -464,17 +738,20 @@ class PIT_REST_Calendar_Sync {
                 return $new_tokens;
             }
 
-            // Update stored token
+            // Update stored token (Outlook may return new refresh token)
+            $update_data = [
+                'access_token' => self::encrypt_token($new_tokens['access_token']),
+                'token_expires_at' => date('Y-m-d H:i:s', time() + $new_tokens['expires_in']),
+                'sync_error' => null,
+            ];
+
+            // Outlook returns a new refresh token on each refresh
+            if (!empty($new_tokens['refresh_token'])) {
+                $update_data['refresh_token'] = self::encrypt_token($new_tokens['refresh_token']);
+            }
+
             $table = PIT_Calendar_Connections_Schema::get_table_name();
-            $wpdb->update(
-                $table,
-                [
-                    'access_token' => self::encrypt_token($new_tokens['access_token']),
-                    'token_expires_at' => date('Y-m-d H:i:s', time() + $new_tokens['expires_in']),
-                    'sync_error' => null,
-                ],
-                ['id' => $connection['id']]
-            );
+            $wpdb->update($table, $update_data, ['id' => $connection['id']]);
 
             return $new_tokens['access_token'];
         }
