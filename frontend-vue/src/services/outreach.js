@@ -9,6 +9,7 @@ import axios from 'axios'
  *
  * @package ShowAuthority
  * @since 5.0.0
+ * @updated 5.1.0 - Added campaign management methods
  */
 
 // WordPress REST API configuration
@@ -93,6 +94,73 @@ export default {
    */
   async sendEmail(appearanceId, payload) {
     const response = await api.post(`/pit-bridge/appearances/${appearanceId}/send`, payload)
+    return response.data
+  },
+
+  // =========================================================================
+  // Campaign Management (v2.0+ API)
+  // =========================================================================
+
+  /**
+   * Get extended status with version info
+   * @returns {Promise<{available: boolean, configured: boolean, has_api: boolean, version: string, api_version: number, features: Object}>}
+   */
+  async getExtendedStatus() {
+    const response = await api.get('/pit-bridge/status/extended')
+    return response.data
+  },
+
+  /**
+   * Get campaigns for an appearance
+   * @param {number} appearanceId - The appearance ID
+   * @returns {Promise<{success: boolean, data: Array}>}
+   */
+  async getCampaigns(appearanceId) {
+    const response = await api.get(`/pit-bridge/appearances/${appearanceId}/campaigns`)
+    return response.data
+  },
+
+  /**
+   * Start a new campaign for an appearance
+   * @param {number} appearanceId - The appearance ID
+   * @param {Object} payload - Campaign data
+   * @param {string} payload.name - Campaign name
+   * @param {number} [payload.template_id] - Template ID
+   * @param {Array} [payload.steps] - Campaign steps
+   * @returns {Promise<{success: boolean, message: string, campaign_id?: number}>}
+   */
+  async startCampaign(appearanceId, payload) {
+    const response = await api.post(`/pit-bridge/appearances/${appearanceId}/campaigns`, payload)
+    return response.data
+  },
+
+  /**
+   * Pause a campaign
+   * @param {number} campaignId - The campaign ID
+   * @returns {Promise<{success: boolean, message: string}>}
+   */
+  async pauseCampaign(campaignId) {
+    const response = await api.post(`/pit-bridge/campaigns/${campaignId}/pause`)
+    return response.data
+  },
+
+  /**
+   * Resume a paused campaign
+   * @param {number} campaignId - The campaign ID
+   * @returns {Promise<{success: boolean, message: string}>}
+   */
+  async resumeCampaign(campaignId) {
+    const response = await api.post(`/pit-bridge/campaigns/${campaignId}/resume`)
+    return response.data
+  },
+
+  /**
+   * Cancel a campaign
+   * @param {number} campaignId - The campaign ID
+   * @returns {Promise<{success: boolean, message: string}>}
+   */
+  async cancelCampaign(campaignId) {
+    const response = await api.post(`/pit-bridge/campaigns/${campaignId}/cancel`)
     return response.data
   }
 }

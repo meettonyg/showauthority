@@ -7,6 +7,7 @@
  *
  * @package Podcast_Influence_Tracker
  * @since 4.2.0
+ * @updated 5.1.0 - Added campaign management endpoints
  */
 
 if (!defined('ABSPATH')) {
@@ -96,6 +97,97 @@ class PIT_REST_Guestify_Bridge {
                     'sanitize_callback' => 'absint',
                 ],
             ],
+        ]);
+
+        // Get campaigns for an appearance
+        register_rest_route(self::NAMESPACE, '/pit-bridge/appearances/(?P<id>\d+)/campaigns', [
+            'methods'             => 'GET',
+            'callback'            => [__CLASS__, 'get_campaigns'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args' => [
+                'id' => [
+                    'required'          => true,
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                ],
+            ],
+        ]);
+
+        // Start a new campaign for an appearance
+        register_rest_route(self::NAMESPACE, '/pit-bridge/appearances/(?P<id>\d+)/campaigns', [
+            'methods'             => 'POST',
+            'callback'            => [__CLASS__, 'start_campaign'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args' => [
+                'id' => [
+                    'required'          => true,
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                ],
+                'name' => [
+                    'required'          => true,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'template_id' => [
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                    'default'           => 0,
+                ],
+                'steps' => [
+                    'type'    => 'array',
+                    'default' => [],
+                ],
+            ],
+        ]);
+
+        // Pause a campaign
+        register_rest_route(self::NAMESPACE, '/pit-bridge/campaigns/(?P<campaign_id>\d+)/pause', [
+            'methods'             => 'POST',
+            'callback'            => [__CLASS__, 'pause_campaign'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args' => [
+                'campaign_id' => [
+                    'required'          => true,
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                ],
+            ],
+        ]);
+
+        // Resume a campaign
+        register_rest_route(self::NAMESPACE, '/pit-bridge/campaigns/(?P<campaign_id>\d+)/resume', [
+            'methods'             => 'POST',
+            'callback'            => [__CLASS__, 'resume_campaign'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args' => [
+                'campaign_id' => [
+                    'required'          => true,
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                ],
+            ],
+        ]);
+
+        // Cancel a campaign
+        register_rest_route(self::NAMESPACE, '/pit-bridge/campaigns/(?P<campaign_id>\d+)/cancel', [
+            'methods'             => 'POST',
+            'callback'            => [__CLASS__, 'cancel_campaign'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args' => [
+                'campaign_id' => [
+                    'required'          => true,
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                ],
+            ],
+        ]);
+
+        // Get extended status with version info
+        register_rest_route(self::NAMESPACE, '/pit-bridge/status/extended', [
+            'methods'             => 'GET',
+            'callback'            => [__CLASS__, 'get_extended_status'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
         ]);
     }
 
@@ -219,5 +311,145 @@ class PIT_REST_Guestify_Bridge {
         ));
 
         return (int) $owner_id === $user_id;
+    }
+
+    // =========================================================================
+    // Campaign Management Endpoints (v2.0+ API)
+    // =========================================================================
+
+    /**
+     * Get campaigns for an appearance
+     */
+    public static function get_campaigns(WP_REST_Request $request): WP_REST_Response {
+        $appearance_id = (int) $request->get_param('id');
+
+        if (!self::verify_appearance_ownership($appearance_id)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'You do not have permission to view campaigns for this appearance.',
+            ], 403);
+        }
+
+        if (!PIT_Guestify_Outreach_Bridge::has_public_api()) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Campaign management requires Guestify Outreach v2.0 or later.',
+                'data'    => [],
+            ], 200);
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data'    => PIT_Guestify_Outreach_Bridge::get_campaigns($appearance_id),
+        ]);
+    }
+
+    /**
+     * Start a new campaign for an appearance
+     */
+    public static function start_campaign(WP_REST_Request $request): WP_REST_Response {
+        $appearance_id = (int) $request->get_param('id');
+
+        if (!self::verify_appearance_ownership($appearance_id)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'You do not have permission to start campaigns for this appearance.',
+            ], 403);
+        }
+
+        $result = PIT_Guestify_Outreach_Bridge::start_campaign([
+            'entity_id'   => $appearance_id,
+            'name'        => $request->get_param('name'),
+            'template_id' => $request->get_param('template_id'),
+            'steps'       => $request->get_param('steps'),
+        ]);
+
+        $status = !empty($result['success']) ? 201 : 400;
+        return new WP_REST_Response($result, $status);
+    }
+
+    /**
+     * Pause a campaign
+     */
+    public static function pause_campaign(WP_REST_Request $request): WP_REST_Response {
+        $campaign_id = (int) $request->get_param('campaign_id');
+
+        if (!self::verify_campaign_ownership($campaign_id)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'You do not have permission to pause this campaign.',
+            ], 403);
+        }
+
+        $result = PIT_Guestify_Outreach_Bridge::pause_campaign($campaign_id);
+
+        $status = !empty($result['success']) ? 200 : 400;
+        return new WP_REST_Response($result, $status);
+    }
+
+    /**
+     * Resume a campaign
+     */
+    public static function resume_campaign(WP_REST_Request $request): WP_REST_Response {
+        $campaign_id = (int) $request->get_param('campaign_id');
+
+        if (!self::verify_campaign_ownership($campaign_id)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'You do not have permission to resume this campaign.',
+            ], 403);
+        }
+
+        $result = PIT_Guestify_Outreach_Bridge::resume_campaign($campaign_id);
+
+        $status = !empty($result['success']) ? 200 : 400;
+        return new WP_REST_Response($result, $status);
+    }
+
+    /**
+     * Cancel a campaign
+     */
+    public static function cancel_campaign(WP_REST_Request $request): WP_REST_Response {
+        $campaign_id = (int) $request->get_param('campaign_id');
+
+        if (!self::verify_campaign_ownership($campaign_id)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'You do not have permission to cancel this campaign.',
+            ], 403);
+        }
+
+        $result = PIT_Guestify_Outreach_Bridge::cancel_campaign($campaign_id);
+
+        $status = !empty($result['success']) ? 200 : 400;
+        return new WP_REST_Response($result, $status);
+    }
+
+    /**
+     * Get extended status with version info
+     */
+    public static function get_extended_status(): WP_REST_Response {
+        return new WP_REST_Response(
+            PIT_Guestify_Outreach_Bridge::get_extended_status()
+        );
+    }
+
+    /**
+     * Verify the campaign belongs to an appearance owned by the current user
+     */
+    private static function verify_campaign_ownership(int $campaign_id): bool {
+        // Admins can access any campaign
+        if (current_user_can('manage_options')) {
+            return true;
+        }
+
+        // Get the campaign to find its linked appearance
+        $campaign = PIT_Guestify_Outreach_Bridge::get_campaign($campaign_id);
+        if (!$campaign || empty($campaign['entity_id'])) {
+            return false;
+        }
+
+        // Verify the linked appearance belongs to current user
+        return self::verify_appearance_ownership((int) $campaign['entity_id']);
     }
 }

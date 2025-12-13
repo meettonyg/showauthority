@@ -5,10 +5,11 @@ import outreachApi from '../services/outreach'
  * Messages Store
  *
  * Pinia store for managing email messaging state via Guestify Outreach integration.
- * Handles templates, message history, sending emails, and tracking stats.
+ * Handles templates, message history, sending emails, tracking stats, and campaigns.
  *
  * @package ShowAuthority
  * @since 5.0.0
+ * @updated 5.1.0 - Added campaign management support
  */
 export const useMessagesStore = defineStore('messages', {
   state: () => ({
@@ -16,6 +17,17 @@ export const useMessagesStore = defineStore('messages', {
     available: false,
     configured: false,
     statusChecked: false,
+
+    // Extended status (v2.0+)
+    hasApi: false,
+    version: null,
+    apiVersion: null,
+    features: {
+      send_email: false,
+      templates: false,
+      campaigns: false,
+      tracking: false
+    },
 
     // Templates
     templates: [],
@@ -31,6 +43,15 @@ export const useMessagesStore = defineStore('messages', {
     statsByAppearance: {}, // { [appearanceId]: Stats }
     statsLoading: false,
 
+    // Campaigns (per appearance)
+    campaignsByAppearance: {}, // { [appearanceId]: Campaign[] }
+    campaignsLoading: false,
+    campaignsError: null,
+
+    // Campaign actions
+    campaignActionLoading: false,
+    campaignActionError: null,
+
     // Sending state
     sending: false,
     sendError: null,
@@ -42,6 +63,11 @@ export const useMessagesStore = defineStore('messages', {
      * Check if integration is ready to use
      */
     isReady: (state) => state.available && state.configured,
+
+    /**
+     * Check if campaigns feature is available (v2.0+)
+     */
+    hasCampaigns: (state) => state.hasApi && state.features.campaigns,
 
     /**
      * Get messages for a specific appearance
@@ -59,6 +85,21 @@ export const useMessagesStore = defineStore('messages', {
         opened: 0,
         clicked: 0
       }
+    },
+
+    /**
+     * Get campaigns for a specific appearance
+     */
+    getCampaignsForAppearance: (state) => (appearanceId) => {
+      return state.campaignsByAppearance[appearanceId] || []
+    },
+
+    /**
+     * Get active campaigns for a specific appearance
+     */
+    getActiveCampaignsForAppearance: (state) => (appearanceId) => {
+      const campaigns = state.campaignsByAppearance[appearanceId] || []
+      return campaigns.filter(c => c.status === 'active' || c.status === 'running')
     },
 
     /**
@@ -87,18 +128,46 @@ export const useMessagesStore = defineStore('messages', {
   actions: {
     /**
      * Check if Outreach plugin is available and configured
+     * Uses extended status to get version and feature info
      */
     async checkStatus() {
       try {
-        const result = await outreachApi.getStatus()
-        this.available = result.available
-        this.configured = result.configured
-        this.statusChecked = true
-        return result
+        // Try extended status first (v2.0+)
+        try {
+          const extended = await outreachApi.getExtendedStatus()
+          this.available = extended.available
+          this.configured = extended.configured
+          this.hasApi = extended.has_api || false
+          this.version = extended.version || null
+          this.apiVersion = extended.api_version || null
+          this.features = extended.features || {
+            send_email: extended.available,
+            templates: extended.available,
+            campaigns: extended.has_api,
+            tracking: extended.configured
+          }
+          this.statusChecked = true
+          return extended
+        } catch {
+          // Fallback to basic status
+          const result = await outreachApi.getStatus()
+          this.available = result.available
+          this.configured = result.configured
+          this.hasApi = false
+          this.features = {
+            send_email: result.available,
+            templates: result.available,
+            campaigns: false,
+            tracking: result.configured
+          }
+          this.statusChecked = true
+          return result
+        }
       } catch (error) {
         console.error('Failed to check Outreach status:', error)
         this.available = false
         this.configured = false
+        this.hasApi = false
         this.statusChecked = true
         return { available: false, configured: false }
       }
@@ -233,11 +302,18 @@ export const useMessagesStore = defineStore('messages', {
 
       // If available, load data in parallel
       if (this.available) {
-        await Promise.all([
+        const loads = [
           this.loadTemplates(),
           this.loadMessages(appearanceId),
           this.loadStats(appearanceId)
-        ])
+        ]
+
+        // Load campaigns if v2.0 API is available
+        if (this.hasCampaigns) {
+          loads.push(this.loadCampaigns(appearanceId))
+        }
+
+        await Promise.all(loads)
       }
     },
 
@@ -248,6 +324,191 @@ export const useMessagesStore = defineStore('messages', {
     clearMessagesCache(appearanceId) {
       delete this.messagesByAppearance[appearanceId]
       delete this.statsByAppearance[appearanceId]
+      delete this.campaignsByAppearance[appearanceId]
+    },
+
+    // =========================================================================
+    // Campaign Management (v2.0+ API)
+    // =========================================================================
+
+    /**
+     * Load campaigns for an appearance
+     * @param {number} appearanceId
+     * @param {boolean} force - Force reload even if cached
+     */
+    async loadCampaigns(appearanceId, force = false) {
+      if (!this.hasCampaigns) return
+
+      // Skip if already loaded and not forcing
+      if (!force && this.campaignsByAppearance[appearanceId]) {
+        return
+      }
+
+      this.campaignsLoading = true
+      this.campaignsError = null
+
+      try {
+        const result = await outreachApi.getCampaigns(appearanceId)
+        this.campaignsByAppearance[appearanceId] = result.data || []
+      } catch (error) {
+        console.error('Failed to load campaigns:', error)
+        this.campaignsError = error.message || 'Failed to load campaigns'
+      } finally {
+        this.campaignsLoading = false
+      }
+    },
+
+    /**
+     * Start a new campaign
+     * @param {number} appearanceId
+     * @param {Object} campaignData
+     * @returns {Promise<{success: boolean, message: string, campaign_id?: number}>}
+     */
+    async startCampaign(appearanceId, campaignData) {
+      if (!this.hasCampaigns) {
+        return {
+          success: false,
+          message: 'Campaign management requires Guestify Outreach v2.0 or later'
+        }
+      }
+
+      this.campaignActionLoading = true
+      this.campaignActionError = null
+
+      try {
+        const result = await outreachApi.startCampaign(appearanceId, campaignData)
+
+        if (result.success) {
+          // Reload campaigns to reflect the new campaign
+          await this.loadCampaigns(appearanceId, true)
+        }
+
+        return result
+      } catch (error) {
+        console.error('Failed to start campaign:', error)
+        const errorMessage = error.response?.data?.message || error.message || 'Failed to start campaign'
+        this.campaignActionError = errorMessage
+        return {
+          success: false,
+          message: errorMessage
+        }
+      } finally {
+        this.campaignActionLoading = false
+      }
+    },
+
+    /**
+     * Pause a campaign
+     * @param {number} campaignId
+     * @param {number} appearanceId - For refreshing the campaign list
+     * @returns {Promise<{success: boolean, message: string}>}
+     */
+    async pauseCampaign(campaignId, appearanceId) {
+      if (!this.hasCampaigns) {
+        return {
+          success: false,
+          message: 'Campaign management requires Guestify Outreach v2.0 or later'
+        }
+      }
+
+      this.campaignActionLoading = true
+      this.campaignActionError = null
+
+      try {
+        const result = await outreachApi.pauseCampaign(campaignId)
+
+        if (result.success && appearanceId) {
+          await this.loadCampaigns(appearanceId, true)
+        }
+
+        return result
+      } catch (error) {
+        console.error('Failed to pause campaign:', error)
+        const errorMessage = error.response?.data?.message || error.message || 'Failed to pause campaign'
+        this.campaignActionError = errorMessage
+        return {
+          success: false,
+          message: errorMessage
+        }
+      } finally {
+        this.campaignActionLoading = false
+      }
+    },
+
+    /**
+     * Resume a paused campaign
+     * @param {number} campaignId
+     * @param {number} appearanceId - For refreshing the campaign list
+     * @returns {Promise<{success: boolean, message: string}>}
+     */
+    async resumeCampaign(campaignId, appearanceId) {
+      if (!this.hasCampaigns) {
+        return {
+          success: false,
+          message: 'Campaign management requires Guestify Outreach v2.0 or later'
+        }
+      }
+
+      this.campaignActionLoading = true
+      this.campaignActionError = null
+
+      try {
+        const result = await outreachApi.resumeCampaign(campaignId)
+
+        if (result.success && appearanceId) {
+          await this.loadCampaigns(appearanceId, true)
+        }
+
+        return result
+      } catch (error) {
+        console.error('Failed to resume campaign:', error)
+        const errorMessage = error.response?.data?.message || error.message || 'Failed to resume campaign'
+        this.campaignActionError = errorMessage
+        return {
+          success: false,
+          message: errorMessage
+        }
+      } finally {
+        this.campaignActionLoading = false
+      }
+    },
+
+    /**
+     * Cancel a campaign
+     * @param {number} campaignId
+     * @param {number} appearanceId - For refreshing the campaign list
+     * @returns {Promise<{success: boolean, message: string}>}
+     */
+    async cancelCampaign(campaignId, appearanceId) {
+      if (!this.hasCampaigns) {
+        return {
+          success: false,
+          message: 'Campaign management requires Guestify Outreach v2.0 or later'
+        }
+      }
+
+      this.campaignActionLoading = true
+      this.campaignActionError = null
+
+      try {
+        const result = await outreachApi.cancelCampaign(campaignId)
+
+        if (result.success && appearanceId) {
+          await this.loadCampaigns(appearanceId, true)
+        }
+
+        return result
+      } catch (error) {
+        console.error('Failed to cancel campaign:', error)
+        const errorMessage = error.response?.data?.message || error.message || 'Failed to cancel campaign'
+        this.campaignActionError = errorMessage
+        return {
+          success: false,
+          message: errorMessage
+        }
+      } finally {
+        this.campaignActionLoading = false
+      }
     },
 
     /**
@@ -257,12 +518,24 @@ export const useMessagesStore = defineStore('messages', {
       this.available = false
       this.configured = false
       this.statusChecked = false
+      this.hasApi = false
+      this.version = null
+      this.apiVersion = null
+      this.features = {
+        send_email: false,
+        templates: false,
+        campaigns: false,
+        tracking: false
+      }
       this.templates = []
       this.messagesByAppearance = {}
       this.statsByAppearance = {}
+      this.campaignsByAppearance = {}
       this.sending = false
       this.sendError = null
       this.lastSentResult = null
+      this.campaignActionLoading = false
+      this.campaignActionError = null
     }
   }
 })

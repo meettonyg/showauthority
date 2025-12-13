@@ -24,7 +24,23 @@
     <!-- Email Interface -->
     <div v-else class="email-interface">
       <!-- Stats -->
-      <MessageStats :stats="stats" />
+      <MessageStats
+        :stats="stats"
+        :active-campaigns="activeCampaignsCount"
+        :show-campaign-stats="messagesStore.hasCampaigns"
+        :version="messagesStore.version"
+        :api-version="messagesStore.apiVersion"
+        :show-version="true"
+      />
+
+      <!-- Campaign Manager (v2.0+) -->
+      <CampaignManager
+        v-if="messagesStore.hasCampaigns"
+        ref="campaignManagerRef"
+        :appearance-id="appearanceId"
+        @campaign-started="handleCampaignStarted"
+        @campaign-updated="handleCampaignUpdated"
+      />
 
       <!-- Header with Compose Button -->
       <div class="interface-header">
@@ -69,6 +85,7 @@
  *
  * @package ShowAuthority
  * @since 5.0.0
+ * @updated 5.1.0 - Added campaign management support
  */
 
 import { ref, computed, onMounted, watch } from 'vue'
@@ -76,6 +93,7 @@ import { useMessagesStore } from '../../stores/messages'
 import MessageStats from './MessageStats.vue'
 import MessageList from './MessageList.vue'
 import MessageComposer from './MessageComposer.vue'
+import CampaignManager from './CampaignManager.vue'
 
 const props = defineProps({
   /**
@@ -101,7 +119,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['email-sent'])
+const emit = defineEmits(['email-sent', 'campaign-started', 'campaign-updated'])
 
 // Store
 const messagesStore = useMessagesStore()
@@ -109,6 +127,7 @@ const messagesStore = useMessagesStore()
 // UI state
 const showComposer = ref(false)
 const composerRef = ref(null)
+const campaignManagerRef = ref(null)
 
 // Computed
 const messages = computed(() => {
@@ -117,6 +136,11 @@ const messages = computed(() => {
 
 const stats = computed(() => {
   return messagesStore.getStatsForAppearance(props.appearanceId)
+})
+
+const activeCampaignsCount = computed(() => {
+  const campaigns = messagesStore.getActiveCampaignsForAppearance(props.appearanceId)
+  return campaigns.length
 })
 
 // Initialize on mount
@@ -147,9 +171,23 @@ async function handleSendEmail(emailData) {
   }
 }
 
+// Handle campaign events
+function handleCampaignStarted(result) {
+  emit('campaign-started', result)
+  // Refresh stats to reflect new campaign
+  messagesStore.loadStats(props.appearanceId)
+}
+
+function handleCampaignUpdated(event) {
+  emit('campaign-updated', event)
+  // Refresh stats when campaign status changes
+  messagesStore.loadStats(props.appearanceId)
+}
+
 // Expose methods for parent components
 defineExpose({
-  refresh: () => messagesStore.initialize(props.appearanceId)
+  refresh: () => messagesStore.initialize(props.appearanceId),
+  refreshCampaigns: () => campaignManagerRef.value?.refresh()
 })
 </script>
 
