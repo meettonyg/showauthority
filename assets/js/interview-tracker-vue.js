@@ -51,6 +51,7 @@
                 podcast_id: '',
                 date_from: '',
                 date_to: '',
+                featured_only: false,
             },
         }),
 
@@ -265,6 +266,9 @@
                     if (this.portfolioFilters.date_to) {
                         params.append('date_to', this.portfolioFilters.date_to);
                     }
+                    if (this.portfolioFilters.featured_only) {
+                        params.append('featured_only', '1');
+                    }
 
                     const response = await fetch(
                         `${guestifyData.restUrl}portfolio?${params}`,
@@ -297,6 +301,39 @@
 
             applyPortfolioFilters() {
                 this.fetchPortfolio(1);
+            },
+
+            async toggleFeatured(creditId) {
+                try {
+                    const response = await fetch(
+                        `${guestifyData.restUrl}speaking-credits/${creditId}/feature`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'X-WP-Nonce': guestifyData.nonce,
+                                'Content-Type': 'application/json',
+                            },
+                        }
+                    );
+
+                    if (!response.ok) {
+                        throw new Error('Failed to toggle featured status');
+                    }
+
+                    const data = await response.json();
+
+                    // Update the local portfolio item
+                    const item = this.portfolio.find(p => p.credit_id === creditId);
+                    if (item) {
+                        item.is_featured = data.is_featured;
+                        item.featured_at = data.featured_at;
+                    }
+
+                    return data;
+                } catch (err) {
+                    console.error('Failed to toggle featured status:', err);
+                    throw err;
+                }
             },
 
             async exportPortfolio() {
@@ -849,6 +886,16 @@
                         Filter
                     </button>
 
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;">
+                        <input
+                            type="checkbox"
+                            v-model="featuredOnly"
+                            @change="store.applyPortfolioFilters()"
+                            style="width: 16px; height: 16px; cursor: pointer;"
+                        >
+                        <span style="color: #475569; font-size: 14px;">Featured Only</span>
+                    </label>
+
                     <button
                         @click="store.exportPortfolio()"
                         style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; margin-left: auto;"
@@ -910,6 +957,24 @@
                             >
                                 ✓ Verified
                             </span>
+                            <button
+                                @click.stop="toggleItemFeatured(item)"
+                                :style="{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '20px',
+                                    padding: '4px',
+                                    lineHeight: '1',
+                                    color: item.is_featured ? '#f59e0b' : '#cbd5e1',
+                                    transition: 'color 0.2s, transform 0.2s',
+                                }"
+                                :title="item.is_featured ? 'Remove from featured' : 'Add to featured'"
+                                @mouseenter="$event.target.style.transform = 'scale(1.2)'"
+                                @mouseleave="$event.target.style.transform = 'scale(1)'"
+                            >
+                                {{ item.is_featured ? '★' : '☆' }}
+                            </button>
                         </div>
 
                         <!-- Card Body -->
@@ -1005,13 +1070,26 @@
                 set: (val) => store.setPortfolioFilter('date_to', val),
             });
 
+            const featuredOnly = computed({
+                get: () => store.portfolioFilters.featured_only,
+                set: (val) => store.setPortfolioFilter('featured_only', val),
+            });
+
             const formatDate = (dateStr) => {
                 if (!dateStr) return 'No date';
                 const date = new Date(dateStr);
                 return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
             };
 
-            return { store, searchQuery, podcastFilter, dateFrom, dateTo, formatDate };
+            const toggleItemFeatured = async (item) => {
+                try {
+                    await store.toggleFeatured(item.credit_id);
+                } catch (err) {
+                    alert('Failed to update featured status');
+                }
+            };
+
+            return { store, searchQuery, podcastFilter, dateFrom, dateTo, featuredOnly, formatDate, toggleItemFeatured };
         },
     };
 

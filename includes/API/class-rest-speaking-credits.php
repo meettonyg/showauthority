@@ -63,6 +63,13 @@ class PIT_REST_Speaking_Credits {
             'permission_callback' => [__CLASS__, 'check_admin_permissions'],
         ]);
 
+        // Toggle featured status for a speaking credit (user owns this credit)
+        register_rest_route(self::NAMESPACE, '/speaking-credits/(?P<id>\d+)/feature', [
+            'methods' => 'POST',
+            'callback' => [__CLASS__, 'toggle_featured'],
+            'permission_callback' => [__CLASS__, 'check_permissions'],
+        ]);
+
         // Link guest to engagement (convenience endpoint)
         register_rest_route(self::NAMESPACE, '/speaking-credits/link', [
             'methods' => 'POST',
@@ -96,6 +103,7 @@ class PIT_REST_Speaking_Credits {
                 'engagement_type' => ['type' => 'string', 'sanitize_callback' => 'sanitize_text_field'],
                 'date_from' => ['type' => 'string', 'sanitize_callback' => 'sanitize_text_field'],
                 'date_to' => ['type' => 'string', 'sanitize_callback' => 'sanitize_text_field'],
+                'featured_only' => ['type' => 'boolean', 'default' => false],
                 'page' => ['type' => 'integer', 'default' => 1, 'minimum' => 1],
                 'per_page' => ['type' => 'integer', 'default' => 20, 'minimum' => 1, 'maximum' => 100],
             ],
@@ -252,6 +260,65 @@ class PIT_REST_Speaking_Credits {
     }
 
     /**
+     * Toggle featured status for a speaking credit
+     *
+     * Users can feature their own portfolio items for their media kit.
+     * This is user-specific (unlike verification which is global).
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response|WP_Error
+     */
+    public static function toggle_featured($request) {
+        global $wpdb;
+
+        $credit_id = (int) $request->get_param('id');
+        $user_id = get_current_user_id();
+
+        // Get the credit and verify ownership
+        $credits_table = $wpdb->prefix . 'pit_speaking_credits';
+        $guests_table = $wpdb->prefix . 'pit_guests';
+
+        $credit = $wpdb->get_row($wpdb->prepare(
+            "SELECT sc.*, g.created_by_user_id
+             FROM {$credits_table} sc
+             INNER JOIN {$guests_table} g ON sc.guest_id = g.id
+             WHERE sc.id = %d",
+            $credit_id
+        ));
+
+        if (!$credit) {
+            return new WP_Error('not_found', 'Speaking credit not found', ['status' => 404]);
+        }
+
+        // Verify user owns this credit (via guest profile)
+        if ((int) $credit->created_by_user_id !== $user_id) {
+            return new WP_Error('forbidden', 'You do not have permission to modify this credit', ['status' => 403]);
+        }
+
+        // Toggle the featured status
+        $new_featured = !((bool) ($credit->is_featured ?? false));
+        $featured_at = $new_featured ? current_time('mysql') : null;
+
+        $wpdb->update(
+            $credits_table,
+            [
+                'is_featured' => $new_featured ? 1 : 0,
+                'featured_at' => $featured_at,
+            ],
+            ['id' => $credit_id],
+            ['%d', '%s'],
+            ['%d']
+        );
+
+        return new WP_REST_Response([
+            'id' => $credit_id,
+            'is_featured' => $new_featured,
+            'featured_at' => $featured_at,
+            'message' => $new_featured ? 'Added to featured' : 'Removed from featured',
+        ], 200);
+    }
+
+    /**
      * Link a guest to an engagement
      */
     public static function link($request) {
@@ -402,6 +469,12 @@ class PIT_REST_Speaking_Credits {
             $prepare_args[] = $date_to;
         }
 
+        // Featured filter
+        $featured_only = $request->get_param('featured_only');
+        if ($featured_only) {
+            $where[] = "sc.is_featured = 1";
+        }
+
         $where_clause = implode(' AND ', $where);
 
         // Main query - following the plan's SQL structure
@@ -421,6 +494,8 @@ class PIT_REST_Speaking_Credits {
                     p.artwork_url AS podcast_image,
                     sc.role,
                     sc.id AS credit_id,
+                    sc.is_featured,
+                    sc.featured_at,
                     o.status AS pipeline_status,
                     o.id AS opportunity_id
                 FROM {$engagements_table} e
@@ -472,6 +547,8 @@ class PIT_REST_Speaking_Credits {
                 'engagement_type' => $row->engagement_type,
                 'description' => $row->description,
                 'is_verified' => (bool) $row->is_verified,
+                'is_featured' => (bool) ($row->is_featured ?? false),
+                'featured_at' => $row->featured_at ?? null,
                 'podcast_id' => $row->podcast_id ? (int) $row->podcast_id : null,
                 'podcast_name' => $row->podcast_name,
                 'podcast_image' => $row->podcast_image,
