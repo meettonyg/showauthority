@@ -147,6 +147,7 @@ class Podcast_Influence_Tracker {
 
         // MIGRATIONS
         require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
+        require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4-2.php';
         require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-events-schema.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-tracker-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-detail-shortcode.php';

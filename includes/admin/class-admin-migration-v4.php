@@ -78,6 +78,16 @@ class PIT_Admin_Migration_V4 {
             wp_redirect(admin_url('tools.php?page=pit-migration-v4&action=rollback_complete'));
             exit;
         }
+
+        // Handle v4.2 migration (Featured Podcasts)
+        if (isset($_POST['pit_migration_v42_execute']) && wp_verify_nonce($_POST['_wpnonce'], 'pit_migration_v4')) {
+            if (class_exists('PIT_Schema_Migration_V4_2')) {
+                $results = PIT_Schema_Migration_V4_2::run(false);
+                set_transient('pit_migration_v42_results', $results, 300);
+            }
+            wp_redirect(admin_url('tools.php?page=pit-migration-v4&action=v42_complete'));
+            exit;
+        }
     }
 
     /**
@@ -114,6 +124,10 @@ class PIT_Admin_Migration_V4 {
             <?php elseif ($action === 'rollback_complete'): ?>
                 <div class="notice notice-warning">
                     <p><strong>Rollback Complete!</strong> The migration has been reverted.</p>
+                </div>
+            <?php elseif ($action === 'v42_complete'): ?>
+                <div class="notice notice-success">
+                    <p><strong>Migration v4.2 Complete!</strong> Featured podcasts columns have been added.</p>
                 </div>
             <?php endif; ?>
 
@@ -205,6 +219,72 @@ class PIT_Admin_Migration_V4 {
                     </button>
                 </form>
             </div>
+
+            <!-- Migration v4.2: Featured Podcasts -->
+            <?php
+            $v42_status = class_exists('PIT_Schema_Migration_V4_2') ? PIT_Schema_Migration_V4_2::get_status() : null;
+            $v42_results = get_transient('pit_migration_v42_results');
+            ?>
+            <?php if ($v42_status): ?>
+            <div class="card" style="max-width: 800px; padding: 20px; margin-bottom: 20px;">
+                <h3>⭐ Migration v4.2: Featured Podcasts</h3>
+                <p>Adds the ability to mark portfolio items as "featured" for your media kit.</p>
+
+                <table class="widefat" style="max-width: 400px; margin-bottom: 15px;">
+                    <tr>
+                        <th>Current Version</th>
+                        <td><code><?php echo esc_html($v42_status['current_version']); ?></code></td>
+                    </tr>
+                    <tr>
+                        <th>Target Version</th>
+                        <td><code><?php echo esc_html($v42_status['target_version']); ?></code></td>
+                    </tr>
+                    <tr>
+                        <th>is_featured column</th>
+                        <td><?php echo $v42_status['has_is_featured'] ? '✅ Exists' : '❌ Missing'; ?></td>
+                    </tr>
+                    <tr>
+                        <th>featured_at column</th>
+                        <td><?php echo $v42_status['has_featured_at'] ? '✅ Exists' : '❌ Missing'; ?></td>
+                    </tr>
+                    <?php if ($v42_status['has_is_featured']): ?>
+                    <tr>
+                        <th>Featured Items</th>
+                        <td><?php echo number_format($v42_status['total_featured']); ?></td>
+                    </tr>
+                    <?php endif; ?>
+                </table>
+
+                <?php if ($v42_status['needs_migration']): ?>
+                <form method="post" style="display: inline-block;">
+                    <?php wp_nonce_field('pit_migration_v4'); ?>
+                    <button type="submit" name="pit_migration_v42_execute" class="button button-primary">
+                        🚀 Run Migration v4.2
+                    </button>
+                </form>
+                <?php else: ?>
+                <p style="color: green;">✅ Migration v4.2 is already complete.</p>
+                <?php endif; ?>
+
+                <?php if ($v42_results): ?>
+                <h4>Migration Results</h4>
+                <table class="widefat" style="max-width: 600px;">
+                    <thead>
+                        <tr><th>Step</th><th>Status</th><th>Message</th></tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($v42_results['steps_completed'] ?? [] as $step): ?>
+                        <tr>
+                            <td><code><?php echo esc_html($step['step'] ?? 'unknown'); ?></code></td>
+                            <td><?php echo esc_html($step['status'] ?? ''); ?></td>
+                            <td><?php echo esc_html($step['message'] ?? ''); ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
 
             <!-- Results Section -->
             <?php if ($results): ?>
