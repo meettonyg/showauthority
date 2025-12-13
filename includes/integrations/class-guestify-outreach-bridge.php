@@ -14,6 +14,7 @@
  * @package ShowAuthority
  * @since 4.2.0
  * @updated 5.0.0 - Added Public API support, entity_type support
+ * @updated 5.1.0 - Added campaign management support (v2.0 API)
  */
 
 if (!defined('ABSPATH')) {
@@ -26,6 +27,11 @@ class PIT_Guestify_Outreach_Bridge {
      * Minimum version of Outreach plugin that supports Public API
      */
     const MIN_API_VERSION = '2.0.0';
+
+    /**
+     * Minimum API version constant that must be defined
+     */
+    const MIN_API_VERSION_CONST = 1;
 
     /**
      * Entity type identifier for ShowAuthority appearances
@@ -67,14 +73,22 @@ class PIT_Guestify_Outreach_Bridge {
 
     /**
      * Check if Public API is available
+     *
+     * Checks both version constant and API version constant for compatibility.
      */
     public static function has_public_api(): bool {
-        if (!defined('GUESTIFY_OUTREACH_VERSION')) {
+        // Check class existence upfront to avoid repetition
+        if (!class_exists('Guestify_Outreach_Public_API') || !defined('GUESTIFY_OUTREACH_VERSION')) {
             return false;
         }
 
-        return version_compare(GUESTIFY_OUTREACH_VERSION, self::MIN_API_VERSION, '>=')
-            && class_exists('Guestify_Outreach_Public_API');
+        // Check API version constant (preferred method)
+        if (defined('GUESTIFY_OUTREACH_API_VERSION')) {
+            return GUESTIFY_OUTREACH_API_VERSION >= self::MIN_API_VERSION_CONST;
+        }
+
+        // Fallback to version string comparison
+        return version_compare(GUESTIFY_OUTREACH_VERSION, self::MIN_API_VERSION, '>=');
     }
 
     /**
@@ -85,6 +99,40 @@ class PIT_Guestify_Outreach_Bridge {
             return GUESTIFY_OUTREACH_VERSION;
         }
         return null;
+    }
+
+    /**
+     * Get the Outreach API version
+     */
+    public static function get_api_version(): ?int {
+        if (defined('GUESTIFY_OUTREACH_API_VERSION')) {
+            return (int) GUESTIFY_OUTREACH_API_VERSION;
+        }
+        return null;
+    }
+
+    /**
+     * Check if entity type is valid via Guestify helper function
+     */
+    public static function is_valid_entity_type(string $type): bool {
+        if (function_exists('guestify_is_valid_entity_type')) {
+            return guestify_is_valid_entity_type($type);
+        }
+
+        // Fallback: assume 'appearance' is always valid for ShowAuthority
+        return $type === self::ENTITY_TYPE;
+    }
+
+    /**
+     * Get valid entity types from Guestify
+     */
+    public static function get_entity_types(): array {
+        if (function_exists('guestify_get_entity_types')) {
+            return guestify_get_entity_types();
+        }
+
+        // Fallback: return default types
+        return ['formidable_entry', 'appearance', 'contact', 'lead', 'prospect', 'custom'];
     }
 
     /**
@@ -111,11 +159,18 @@ class PIT_Guestify_Outreach_Bridge {
 
         // Use Public API if available
         if (self::has_public_api()) {
+            // Get sender info from Guestify Outreach settings
+            $settings = get_option('guestify_outreach_settings', []);
+            $from_email = $settings['from_email'] ?? '';
+            $from_name = $settings['from_name'] ?? '';
+
             $result = Guestify_Outreach_Public_API::send_email([
                 'entity_id'    => $appearance_id,
                 'entity_type'  => self::ENTITY_TYPE,
                 'to_email'     => sanitize_email($args['to_email']),
                 'to_name'      => sanitize_text_field($args['to_name'] ?? ''),
+                'from_email'   => sanitize_email($from_email),
+                'from_name'    => sanitize_text_field($from_name),
                 'subject'      => sanitize_text_field($args['subject']),
                 'html_content' => wp_kses_post($args['html_content']),
                 'template_id'  => absint($args['template_id'] ?? 0) ?: null,
@@ -459,5 +514,238 @@ class PIT_Guestify_Outreach_Bridge {
             'created_by'    => get_current_user_id(),
             'created_at'    => current_time('mysql'),
         ]);
+    }
+
+    // =========================================================================
+    // Campaign Management (v2.0+ API)
+    // =========================================================================
+
+    /**
+     * Check if campaign management is available
+     *
+     * @param bool $require_configured Whether to also check if Brevo is configured
+     * @return array|null Error response if not available, null if OK
+     */
+    private static function check_campaign_availability(bool $require_configured = false): ?array {
+        if (!self::has_public_api()) {
+            return [
+                'success' => false,
+                'message' => 'Campaign management requires Guestify Outreach v2.0 or later.'
+            ];
+        }
+
+        if ($require_configured && !self::is_configured()) {
+            return [
+                'success' => false,
+                'message' => 'Brevo API key not configured in Guestify Outreach settings.'
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * Start a new email campaign
+     *
+     * @param array $args Campaign arguments
+     * @return array Result with success, message, and optional campaign_id
+     */
+    public static function start_campaign(array $args): array {
+        $error = self::check_campaign_availability(true);
+        if ($error !== null) {
+            return $error;
+        }
+
+        // Validate entity type
+        $entity_type = $args['entity_type'] ?? self::ENTITY_TYPE;
+        if (!self::is_valid_entity_type($entity_type)) {
+            return [
+                'success' => false,
+                'message' => 'Invalid entity type: ' . $entity_type
+            ];
+        }
+
+        // Prepare campaign data
+        $campaign_args = [
+            'entity_id'   => absint($args['entity_id'] ?? 0),
+            'entity_type' => $entity_type,
+            'name'        => sanitize_text_field($args['name'] ?? ''),
+            'template_id' => absint($args['template_id'] ?? 0) ?: null,
+            'schedule'    => $args['schedule'] ?? null,
+            'steps'       => $args['steps'] ?? [],
+        ];
+
+        $result = Guestify_Outreach_Public_API::start_campaign($campaign_args);
+
+        // Log to activity feed on success
+        if (!empty($result['success']) && !empty($args['entity_id'])) {
+            self::log_campaign_activity($args['entity_id'], 'started', $args['name'] ?? 'Campaign');
+        }
+
+        return $result;
+    }
+
+    /**
+     * Pause an active campaign
+     *
+     * @param int $campaign_id Campaign ID
+     * @return array Result with success and message
+     */
+    public static function pause_campaign(int $campaign_id): array {
+        $error = self::check_campaign_availability();
+        if ($error !== null) {
+            return $error;
+        }
+
+        $result = Guestify_Outreach_Public_API::pause_campaign($campaign_id);
+
+        if (!empty($result['success'])) {
+            self::log_campaign_status_change($campaign_id, 'paused');
+        }
+
+        return $result;
+    }
+
+    /**
+     * Resume a paused campaign
+     *
+     * @param int $campaign_id Campaign ID
+     * @return array Result with success and message
+     */
+    public static function resume_campaign(int $campaign_id): array {
+        $error = self::check_campaign_availability();
+        if ($error !== null) {
+            return $error;
+        }
+
+        $result = Guestify_Outreach_Public_API::resume_campaign($campaign_id);
+
+        if (!empty($result['success'])) {
+            self::log_campaign_status_change($campaign_id, 'resumed');
+        }
+
+        return $result;
+    }
+
+    /**
+     * Cancel a campaign
+     *
+     * @param int $campaign_id Campaign ID
+     * @return array Result with success and message
+     */
+    public static function cancel_campaign(int $campaign_id): array {
+        $error = self::check_campaign_availability();
+        if ($error !== null) {
+            return $error;
+        }
+
+        $result = Guestify_Outreach_Public_API::cancel_campaign($campaign_id);
+
+        if (!empty($result['success'])) {
+            self::log_campaign_status_change($campaign_id, 'cancelled');
+        }
+
+        return $result;
+    }
+
+    /**
+     * Get campaigns for an appearance
+     *
+     * @param int $appearance_id ShowAuthority appearance/opportunity ID
+     * @return array List of campaigns
+     */
+    public static function get_campaigns(int $appearance_id): array {
+        if (!self::has_public_api()) {
+            return [];
+        }
+
+        if (!method_exists('Guestify_Outreach_Public_API', 'get_campaigns')) {
+            return [];
+        }
+
+        return Guestify_Outreach_Public_API::get_campaigns(
+            $appearance_id,
+            self::ENTITY_TYPE
+        );
+    }
+
+    /**
+     * Get a single campaign by ID
+     *
+     * @param int $campaign_id Campaign ID
+     * @return array|null Campaign data or null if not found
+     */
+    public static function get_campaign(int $campaign_id): ?array {
+        if (!self::has_public_api()) {
+            return null;
+        }
+
+        if (!method_exists('Guestify_Outreach_Public_API', 'get_campaign')) {
+            return null;
+        }
+
+        return Guestify_Outreach_Public_API::get_campaign($campaign_id);
+    }
+
+    /**
+     * Log campaign activity to activity feed
+     */
+    private static function log_campaign_activity(int $appearance_id, string $action, string $name): void {
+        global $wpdb;
+        $table = $wpdb->prefix . 'pit_appearance_notes';
+
+        $exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+        if (!$exists) {
+            return;
+        }
+
+        $wpdb->insert($table, [
+            'appearance_id' => $appearance_id,
+            'title'         => 'Campaign ' . $action . ': ' . wp_trim_words($name, 6),
+            'content'       => sprintf('Email campaign "%s" was %s.', $name, $action),
+            'note_type'     => 'campaign',
+            'created_by'    => get_current_user_id(),
+            'created_at'    => current_time('mysql'),
+        ]);
+    }
+
+    /**
+     * Log campaign status change to activity feed
+     */
+    private static function log_campaign_status_change(int $campaign_id, string $status): void {
+        // Get campaign info to find appearance_id
+        $campaign = self::get_campaign($campaign_id);
+        if (!$campaign || empty($campaign['entity_id'])) {
+            return;
+        }
+
+        self::log_campaign_activity(
+            (int) $campaign['entity_id'],
+            $status,
+            $campaign['name'] ?? 'Campaign #' . $campaign_id
+        );
+    }
+
+    /**
+     * Get extended status information including version details
+     *
+     * @return array Status information
+     */
+    public static function get_extended_status(): array {
+        return [
+            'available'    => self::is_active(),
+            'configured'   => self::is_configured(),
+            'has_api'      => self::has_public_api(),
+            'version'      => self::get_version(),
+            'api_version'  => self::get_api_version(),
+            'entity_type'  => self::ENTITY_TYPE,
+            'entity_types' => self::get_entity_types(),
+            'features'     => [
+                'send_email'   => self::is_active(),
+                'templates'    => self::is_active(),
+                'campaigns'    => self::has_public_api(),
+                'tracking'     => self::is_configured(),
+            ],
+        ];
     }
 }
