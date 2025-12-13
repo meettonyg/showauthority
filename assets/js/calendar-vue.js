@@ -518,6 +518,23 @@
                     </div>
                 </div>
 
+                <!-- Generic Confirmation Modal -->
+                <div class="calendar-modal confirm-modal" :class="{ active: showConfirmModal }">
+                    <div class="calendar-modal-content small">
+                        <div class="calendar-modal-header">
+                            <h2>{{ confirmAction.title }}</h2>
+                            <button class="modal-close" @click="cancelConfirm">&times;</button>
+                        </div>
+                        <div class="calendar-modal-body">
+                            <p>{{ confirmAction.message }}</p>
+                        </div>
+                        <div class="calendar-modal-footer">
+                            <button class="btn-cancel" @click="cancelConfirm">Cancel</button>
+                            <button class="btn-primary" @click="executeConfirm">Confirm</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Sync Settings Modal -->
                 <div class="calendar-modal sync-modal" :class="{ active: showSyncModal }">
                     <div class="calendar-modal-content">
@@ -697,11 +714,13 @@
             const showDetailModal = ref(false);
             const showDeleteModal = ref(false);
             const showSyncModal = ref(false);
+            const showConfirmModal = ref(false);
             const isEditing = ref(false);
             const saving = ref(false);
             const deleting = ref(false);
             const modalError = ref(null);
             const eventToDelete = ref(null);
+            const confirmAction = ref({ title: '', message: '', callback: null });
 
             // Sync state
             const syncStatus = ref({ google: null, outlook: null });
@@ -985,7 +1004,7 @@
                         is_all_day: eventForm.is_all_day ? 1 : 0,
                         description: eventForm.description || null,
                         location: eventForm.location || null,
-                        timezone: 'America/Chicago',
+                        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                     };
 
                     if (isEditing.value && eventForm.id) {
@@ -1028,6 +1047,94 @@
                     console.error('Failed to delete event:', err);
                 } finally {
                     deleting.value = false;
+                }
+            };
+
+            // ==========================================================================
+            // CONFIRMATION MODAL HELPERS
+            // ==========================================================================
+
+            const showConfirmation = (title, message, callback) => {
+                confirmAction.value = { title, message, callback };
+                showConfirmModal.value = true;
+            };
+
+            const executeConfirm = () => {
+                if (confirmAction.value.callback) {
+                    confirmAction.value.callback();
+                }
+                showConfirmModal.value = false;
+                confirmAction.value = { title: '', message: '', callback: null };
+            };
+
+            const cancelConfirm = () => {
+                showConfirmModal.value = false;
+                confirmAction.value = { title: '', message: '', callback: null };
+            };
+
+            // ==========================================================================
+            // GENERIC PROVIDER METHODS
+            // ==========================================================================
+
+            const disconnectProvider = async (provider) => {
+                const loadingRef = provider === 'google' ? syncLoading : outlookSyncLoading;
+                loadingRef.value = true;
+
+                try {
+                    await fetch(
+                        `${store.config.restUrl}calendar-sync/${provider}/disconnect`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    await fetchSyncStatus();
+
+                    if (provider === 'google') {
+                        googleCalendars.value = [];
+                    } else {
+                        outlookCalendars.value = [];
+                    }
+                } catch (err) {
+                    console.error(`Failed to disconnect ${provider}:`, err);
+                } finally {
+                    loadingRef.value = false;
+                }
+            };
+
+            const triggerProviderSync = async (provider) => {
+                const loadingRef = provider === 'google' ? syncLoading : outlookSyncLoading;
+                loadingRef.value = true;
+
+                try {
+                    const response = await fetch(
+                        `${store.config.restUrl}calendar-sync/${provider}/sync`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (response.ok) {
+                        await fetchSyncStatus();
+                        // Refresh events
+                        const today = new Date();
+                        const start = new Date(today.getFullYear(), today.getMonth(), 1);
+                        const end = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+                        await store.fetchEvents(
+                            start.toISOString().split('T')[0],
+                            end.toISOString().split('T')[0]
+                        );
+                    }
+                } catch (err) {
+                    console.error(`Failed to sync ${provider}:`, err);
+                } finally {
+                    loadingRef.value = false;
                 }
             };
 
@@ -1101,30 +1208,12 @@
                 }
             };
 
-            const disconnectGoogle = async () => {
-                if (!confirm('Are you sure you want to disconnect Google Calendar?')) {
-                    return;
-                }
-
-                syncLoading.value = true;
-                try {
-                    await fetch(
-                        `${store.config.restUrl}calendar-sync/google/disconnect`,
-                        {
-                            method: 'POST',
-                            headers: {
-                                'X-WP-Nonce': store.config.nonce,
-                            },
-                        }
-                    );
-
-                    await fetchSyncStatus();
-                    googleCalendars.value = [];
-                } catch (err) {
-                    console.error('Failed to disconnect:', err);
-                } finally {
-                    syncLoading.value = false;
-                }
+            const disconnectGoogle = () => {
+                showConfirmation(
+                    'Disconnect Google Calendar',
+                    'Are you sure you want to disconnect Google Calendar? Your synced events will remain but future sync will stop.',
+                    () => disconnectProvider('google')
+                );
             };
 
             const loadGoogleCalendars = async () => {
@@ -1198,35 +1287,8 @@
                 }
             };
 
-            const triggerSync = async () => {
-                syncLoading.value = true;
-                try {
-                    const response = await fetch(
-                        `${store.config.restUrl}calendar-sync/google/sync`,
-                        {
-                            method: 'POST',
-                            headers: {
-                                'X-WP-Nonce': store.config.nonce,
-                            },
-                        }
-                    );
-
-                    if (response.ok) {
-                        await fetchSyncStatus();
-                        // Refresh events
-                        const today = new Date();
-                        const start = new Date(today.getFullYear(), today.getMonth(), 1);
-                        const end = new Date(today.getFullYear(), today.getMonth() + 2, 0);
-                        await store.fetchEvents(
-                            start.toISOString().split('T')[0],
-                            end.toISOString().split('T')[0]
-                        );
-                    }
-                } catch (err) {
-                    console.error('Failed to sync:', err);
-                } finally {
-                    syncLoading.value = false;
-                }
+            const triggerSync = () => {
+                triggerProviderSync('google');
             };
 
             // =====================
@@ -1257,30 +1319,12 @@
                 }
             };
 
-            const disconnectOutlook = async () => {
-                if (!confirm('Are you sure you want to disconnect Outlook Calendar?')) {
-                    return;
-                }
-
-                outlookSyncLoading.value = true;
-                try {
-                    await fetch(
-                        `${store.config.restUrl}calendar-sync/outlook/disconnect`,
-                        {
-                            method: 'POST',
-                            headers: {
-                                'X-WP-Nonce': store.config.nonce,
-                            },
-                        }
-                    );
-
-                    await fetchSyncStatus();
-                    outlookCalendars.value = [];
-                } catch (err) {
-                    console.error('Failed to disconnect Outlook:', err);
-                } finally {
-                    outlookSyncLoading.value = false;
-                }
+            const disconnectOutlook = () => {
+                showConfirmation(
+                    'Disconnect Outlook Calendar',
+                    'Are you sure you want to disconnect Outlook Calendar? Your synced events will remain but future sync will stop.',
+                    () => disconnectProvider('outlook')
+                );
             };
 
             const loadOutlookCalendars = async () => {
@@ -1343,35 +1387,8 @@
                 }
             };
 
-            const triggerOutlookSync = async () => {
-                outlookSyncLoading.value = true;
-                try {
-                    const response = await fetch(
-                        `${store.config.restUrl}calendar-sync/outlook/sync`,
-                        {
-                            method: 'POST',
-                            headers: {
-                                'X-WP-Nonce': store.config.nonce,
-                            },
-                        }
-                    );
-
-                    if (response.ok) {
-                        await fetchSyncStatus();
-                        // Refresh events
-                        const today = new Date();
-                        const start = new Date(today.getFullYear(), today.getMonth(), 1);
-                        const end = new Date(today.getFullYear(), today.getMonth() + 2, 0);
-                        await store.fetchEvents(
-                            start.toISOString().split('T')[0],
-                            end.toISOString().split('T')[0]
-                        );
-                    }
-                } catch (err) {
-                    console.error('Failed to sync Outlook:', err);
-                } finally {
-                    outlookSyncLoading.value = false;
-                }
+            const triggerOutlookSync = () => {
+                triggerProviderSync('outlook');
             };
 
             const formatLastSync = (datetime) => {
@@ -1445,6 +1462,8 @@
                 showDetailModal,
                 showDeleteModal,
                 showSyncModal,
+                showConfirmModal,
+                confirmAction,
                 isEditing,
                 saving,
                 deleting,
@@ -1487,6 +1506,10 @@
                 saveEvent,
                 confirmDeleteEvent,
                 deleteEvent,
+
+                // Confirmation modal methods
+                executeConfirm,
+                cancelConfirm,
 
                 // Google sync methods
                 connectGoogle,

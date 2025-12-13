@@ -209,6 +209,7 @@
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useGuestStore } from '../stores/guests'
+import { formatDate, getInitials } from '../utils/formatters'
 
 const route = useRoute()
 const guestStore = useGuestStore()
@@ -217,32 +218,7 @@ const guest = computed(() => guestStore.currentGuest)
 const loading = computed(() => guestStore.loading)
 const error = computed(() => guestStore.error)
 
-const initials = computed(() => {
-  const name = guest.value?.full_name || ''
-  const parts = name.split(' ')
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-  }
-  return name.substring(0, 2).toUpperCase()
-})
-
-function getInitials(name) {
-  const parts = (name || '').split(' ')
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-  }
-  return (name || '').substring(0, 2).toUpperCase()
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
-}
+const initials = computed(() => getInitials(guest.value?.full_name || ''))
 
 onMounted(() => {
   guestStore.fetchGuest(route.params.id)

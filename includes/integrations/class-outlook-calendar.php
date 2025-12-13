@@ -400,7 +400,7 @@ class PIT_Outlook_Calendar {
         }
 
         // Handle all-day vs timed events
-        $timezone = $event_data['timezone'] ?? 'America/Chicago';
+        $timezone = $event_data['timezone'] ?? wp_timezone_string();
 
         if (!empty($event_data['is_all_day'])) {
             // All-day event
@@ -489,7 +489,7 @@ class PIT_Outlook_Calendar {
             'start_datetime' => $start_datetime,
             'end_datetime' => $end_datetime,
             'is_all_day' => $is_all_day,
-            'timezone' => $outlook_event['start']['timeZone'] ?? 'America/Chicago',
+            'timezone' => $outlook_event['start']['timeZone'] ?? wp_timezone_string(),
             'status' => isset($outlook_event['@removed']) ? 'cancelled' : 'confirmed',
             'web_link' => $outlook_event['webLink'] ?? '',
             'last_modified' => $outlook_event['lastModifiedDateTime'] ?? null,

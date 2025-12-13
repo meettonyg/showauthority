@@ -103,7 +103,7 @@
           </div>
         </div>
         <p v-if="metricsLastUpdated" class="metrics-updated">
-          Last updated: {{ formatDate(metricsLastUpdated) }}
+          Last updated: {{ formatDateShort(metricsLastUpdated) }}
         </p>
       </div>
 
@@ -132,6 +132,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { usePodcastStore } from '../stores/podcasts'
+import { formatNumber, formatDateShort } from '../utils/formatters'
 import api from '../services/api'
 
 const route = useRoute()
@@ -144,23 +145,6 @@ const metricsLastUpdated = ref(null)
 const podcast = computed(() => podcastStore.currentPodcast)
 const loading = computed(() => podcastStore.loading)
 const error = computed(() => podcastStore.error)
-
-function formatNumber(num) {
-  if (!num) return '0'
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
-  if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
-  return num.toString()
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
-}
 
 async function fetchMetrics() {
   if (!route.params.id) return
