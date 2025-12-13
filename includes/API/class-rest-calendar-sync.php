@@ -214,15 +214,32 @@ class PIT_REST_Calendar_Sync {
      * Get Google auth URL
      */
     public static function get_google_auth_url($request) {
-        if (!PIT_Google_Calendar::is_configured()) {
+        return self::get_provider_auth_url('google');
+    }
+
+    /**
+     * Get Outlook auth URL
+     */
+    public static function get_outlook_auth_url($request) {
+        return self::get_provider_auth_url('outlook');
+    }
+
+    /**
+     * Generic: Get provider auth URL
+     */
+    private static function get_provider_auth_url($provider) {
+        $provider_class = self::get_provider_class($provider);
+        $provider_name = ucfirst($provider);
+
+        if (!$provider_class::is_configured()) {
             return new WP_Error(
                 'not_configured',
-                'Google Calendar integration is not configured. Please contact the administrator.',
+                "{$provider_name} Calendar integration is not configured. Please contact the administrator.",
                 ['status' => 400]
             );
         }
 
-        $auth_url = PIT_Google_Calendar::get_auth_url();
+        $auth_url = $provider_class::get_auth_url();
 
         if (is_wp_error($auth_url)) {
             return $auth_url;
@@ -240,13 +257,29 @@ class PIT_REST_Calendar_Sync {
      * Handle Google OAuth callback
      */
     public static function google_oauth_callback($request) {
+        return self::handle_oauth_callback('google', $request);
+    }
+
+    /**
+     * Handle Outlook OAuth callback
+     */
+    public static function outlook_oauth_callback($request) {
+        return self::handle_oauth_callback('outlook', $request);
+    }
+
+    /**
+     * Generic: Handle OAuth callback
+     */
+    private static function handle_oauth_callback($provider, $request) {
         $code = $request->get_param('code');
         $state = $request->get_param('state');
         $error = $request->get_param('error');
+        $provider_class = self::get_provider_class($provider);
+        $provider_name = ucfirst($provider);
 
         // Handle OAuth errors
         if ($error) {
-            return self::redirect_with_error('Google authorization was denied: ' . $error);
+            return self::redirect_with_error("{$provider_name} authorization was denied: " . $error);
         }
 
         if (!$code || !$state) {
@@ -254,8 +287,8 @@ class PIT_REST_Calendar_Sync {
         }
 
         // Verify state token
-        $state_data = get_transient('pit_google_oauth_state_' . $state);
-        delete_transient('pit_google_oauth_state_' . $state);
+        $state_data = get_transient("pit_{$provider}_oauth_state_" . $state);
+        delete_transient("pit_{$provider}_oauth_state_" . $state);
 
         if (!$state_data) {
             return self::redirect_with_error('Invalid or expired authorization state');
@@ -264,21 +297,21 @@ class PIT_REST_Calendar_Sync {
         $user_id = $state_data['user_id'];
 
         // Exchange code for tokens
-        $tokens = PIT_Google_Calendar::exchange_code($code);
+        $tokens = $provider_class::exchange_code($code);
 
         if (is_wp_error($tokens)) {
             return self::redirect_with_error('Failed to get access token: ' . $tokens->get_error_message());
         }
 
         // Get user info
-        $user_info = PIT_Google_Calendar::get_user_info($tokens['access_token']);
+        $user_info = $provider_class::get_user_info($tokens['access_token']);
 
         if (is_wp_error($user_info)) {
             return self::redirect_with_error('Failed to get user info: ' . $user_info->get_error_message());
         }
 
         // Save connection to database
-        $saved = self::save_connection($user_id, 'google', [
+        $saved = self::save_connection($user_id, $provider, [
             'access_token' => $tokens['access_token'],
             'refresh_token' => $tokens['refresh_token'],
             'expires_in' => $tokens['expires_in'],
@@ -291,21 +324,36 @@ class PIT_REST_Calendar_Sync {
         }
 
         // Redirect to calendar page with success
-        return self::redirect_with_success('Google Calendar connected successfully!');
+        return self::redirect_with_success("{$provider_name} Calendar connected successfully!");
     }
 
     /**
      * Get user's Google calendars
      */
     public static function get_google_calendars($request) {
+        return self::get_provider_calendars('google');
+    }
+
+    /**
+     * Get user's Outlook calendars
+     */
+    public static function get_outlook_calendars($request) {
+        return self::get_provider_calendars('outlook');
+    }
+
+    /**
+     * Generic: Get provider calendars
+     */
+    private static function get_provider_calendars($provider) {
         $user_id = get_current_user_id();
-        $access_token = self::get_valid_access_token($user_id, 'google');
+        $access_token = self::get_valid_access_token($user_id, $provider);
 
         if (is_wp_error($access_token)) {
             return $access_token;
         }
 
-        $calendars = PIT_Google_Calendar::get_calendars($access_token);
+        $provider_class = self::get_provider_class($provider);
+        $calendars = $provider_class::get_calendars($access_token);
 
         if (is_wp_error($calendars)) {
             return $calendars;
@@ -321,11 +369,25 @@ class PIT_REST_Calendar_Sync {
      * Select Google calendar for sync
      */
     public static function select_google_calendar($request) {
+        return self::select_provider_calendar('google', $request);
+    }
+
+    /**
+     * Select Outlook calendar for sync
+     */
+    public static function select_outlook_calendar($request) {
+        return self::select_provider_calendar('outlook', $request);
+    }
+
+    /**
+     * Generic: Select provider calendar
+     */
+    private static function select_provider_calendar($provider, $request) {
         global $wpdb;
 
         $user_id = get_current_user_id();
         $calendar_id = $request->get_param('calendar_id');
-        $calendar_name = $request->get_param('calendar_name') ?: 'Primary';
+        $calendar_name = $request->get_param('calendar_name') ?: ($provider === 'google' ? 'Primary' : 'Calendar');
 
         $table = PIT_Calendar_Connections_Schema::get_table_name();
 
@@ -338,7 +400,7 @@ class PIT_REST_Calendar_Sync {
             ],
             [
                 'user_id' => $user_id,
-                'provider' => 'google',
+                'provider' => $provider,
             ]
         );
 
@@ -348,7 +410,7 @@ class PIT_REST_Calendar_Sync {
 
         return rest_ensure_response([
             'success' => true,
-            'message' => 'Calendar selected successfully',
+            'message' => ucfirst($provider) . ' calendar selected successfully',
             'data' => [
                 'calendar_id' => $calendar_id,
                 'calendar_name' => $calendar_name,
@@ -360,41 +422,81 @@ class PIT_REST_Calendar_Sync {
      * Disconnect Google Calendar
      */
     public static function disconnect_google($request) {
+        return self::disconnect_provider('google');
+    }
+
+    /**
+     * Disconnect Outlook Calendar
+     */
+    public static function disconnect_outlook($request) {
+        return self::disconnect_provider('outlook');
+    }
+
+    /**
+     * Generic: Disconnect provider
+     */
+    private static function disconnect_provider($provider) {
         global $wpdb;
 
         $user_id = get_current_user_id();
         $table = PIT_Calendar_Connections_Schema::get_table_name();
 
         // Delete the connection
-        $deleted = $wpdb->delete($table, [
+        $wpdb->delete($table, [
             'user_id' => $user_id,
-            'provider' => 'google',
+            'provider' => $provider,
         ]);
 
-        // Also clear google_event_id from user's events (keep local events)
+        // Clear provider-specific event IDs from user's events (keep local events)
         $events_table = PIT_Calendar_Events_Schema::get_table_name();
-        $wpdb->query($wpdb->prepare(
-            "UPDATE $events_table
-             SET google_calendar_id = NULL,
-                 google_event_id = NULL,
-                 sync_status = 'local_only'
-             WHERE user_id = %d",
-            $user_id
-        ));
+
+        if ($provider === 'google') {
+            $wpdb->query($wpdb->prepare(
+                "UPDATE $events_table
+                 SET google_calendar_id = NULL,
+                     google_event_id = NULL,
+                     sync_status = CASE WHEN outlook_event_id IS NULL THEN 'local_only' ELSE sync_status END
+                 WHERE user_id = %d",
+                $user_id
+            ));
+        } else {
+            $wpdb->query($wpdb->prepare(
+                "UPDATE $events_table
+                 SET outlook_calendar_id = NULL,
+                     outlook_event_id = NULL,
+                     sync_status = CASE WHEN google_event_id IS NULL THEN 'local_only' ELSE sync_status END
+                 WHERE user_id = %d",
+                $user_id
+            ));
+        }
 
         return rest_ensure_response([
             'success' => true,
-            'message' => 'Google Calendar disconnected',
+            'message' => ucfirst($provider) . ' Calendar disconnected',
         ]);
     }
 
     /**
-     * Trigger manual sync
+     * Trigger Google manual sync
      */
     public static function trigger_sync($request) {
+        return self::trigger_provider_sync('google');
+    }
+
+    /**
+     * Trigger Outlook manual sync
+     */
+    public static function trigger_outlook_sync($request) {
+        return self::trigger_provider_sync('outlook');
+    }
+
+    /**
+     * Generic: Trigger provider sync
+     */
+    private static function trigger_provider_sync($provider) {
         $user_id = get_current_user_id();
 
-        $result = PIT_Calendar_Sync_Service::sync_user($user_id, 'google');
+        $result = PIT_Calendar_Sync_Service::sync_user($user_id, $provider);
 
         if (is_wp_error($result)) {
             return $result;
@@ -402,7 +504,7 @@ class PIT_REST_Calendar_Sync {
 
         return rest_ensure_response([
             'success' => true,
-            'message' => 'Sync completed',
+            'message' => ucfirst($provider) . ' sync completed',
             'data' => $result,
         ]);
     }
@@ -446,209 +548,15 @@ class PIT_REST_Calendar_Sync {
     }
 
     // =====================
-    // Outlook Calendar Handlers
-    // =====================
-
-    /**
-     * Get Outlook auth URL
-     */
-    public static function get_outlook_auth_url($request) {
-        if (!PIT_Outlook_Calendar::is_configured()) {
-            return new WP_Error(
-                'not_configured',
-                'Outlook Calendar integration is not configured. Please contact the administrator.',
-                ['status' => 400]
-            );
-        }
-
-        $auth_url = PIT_Outlook_Calendar::get_auth_url();
-
-        if (is_wp_error($auth_url)) {
-            return $auth_url;
-        }
-
-        return rest_ensure_response([
-            'success' => true,
-            'data' => [
-                'auth_url' => $auth_url,
-            ],
-        ]);
-    }
-
-    /**
-     * Handle Outlook OAuth callback
-     */
-    public static function outlook_oauth_callback($request) {
-        $code = $request->get_param('code');
-        $state = $request->get_param('state');
-        $error = $request->get_param('error');
-
-        // Handle OAuth errors
-        if ($error) {
-            return self::redirect_with_error('Outlook authorization was denied: ' . $error);
-        }
-
-        if (!$code || !$state) {
-            return self::redirect_with_error('Invalid OAuth callback parameters');
-        }
-
-        // Verify state token
-        $state_data = get_transient('pit_outlook_oauth_state_' . $state);
-        delete_transient('pit_outlook_oauth_state_' . $state);
-
-        if (!$state_data) {
-            return self::redirect_with_error('Invalid or expired authorization state');
-        }
-
-        $user_id = $state_data['user_id'];
-
-        // Exchange code for tokens
-        $tokens = PIT_Outlook_Calendar::exchange_code($code);
-
-        if (is_wp_error($tokens)) {
-            return self::redirect_with_error('Failed to get access token: ' . $tokens->get_error_message());
-        }
-
-        // Get user info
-        $user_info = PIT_Outlook_Calendar::get_user_info($tokens['access_token']);
-
-        if (is_wp_error($user_info)) {
-            return self::redirect_with_error('Failed to get user info: ' . $user_info->get_error_message());
-        }
-
-        // Save connection to database
-        $saved = self::save_connection($user_id, 'outlook', [
-            'access_token' => $tokens['access_token'],
-            'refresh_token' => $tokens['refresh_token'],
-            'expires_in' => $tokens['expires_in'],
-            'email' => $user_info['email'],
-            'name' => $user_info['name'],
-        ]);
-
-        if (!$saved) {
-            return self::redirect_with_error('Failed to save connection');
-        }
-
-        // Redirect to calendar page with success
-        return self::redirect_with_success('Outlook Calendar connected successfully!');
-    }
-
-    /**
-     * Get user's Outlook calendars
-     */
-    public static function get_outlook_calendars($request) {
-        $user_id = get_current_user_id();
-        $access_token = self::get_valid_access_token($user_id, 'outlook');
-
-        if (is_wp_error($access_token)) {
-            return $access_token;
-        }
-
-        $calendars = PIT_Outlook_Calendar::get_calendars($access_token);
-
-        if (is_wp_error($calendars)) {
-            return $calendars;
-        }
-
-        return rest_ensure_response([
-            'success' => true,
-            'data' => $calendars,
-        ]);
-    }
-
-    /**
-     * Select Outlook calendar for sync
-     */
-    public static function select_outlook_calendar($request) {
-        global $wpdb;
-
-        $user_id = get_current_user_id();
-        $calendar_id = $request->get_param('calendar_id');
-        $calendar_name = $request->get_param('calendar_name') ?: 'Calendar';
-
-        $table = PIT_Calendar_Connections_Schema::get_table_name();
-
-        $updated = $wpdb->update(
-            $table,
-            [
-                'calendar_id' => $calendar_id,
-                'calendar_name' => $calendar_name,
-                'sync_enabled' => 1,
-            ],
-            [
-                'user_id' => $user_id,
-                'provider' => 'outlook',
-            ]
-        );
-
-        if ($updated === false) {
-            return new WP_Error('update_failed', 'Failed to update calendar selection', ['status' => 500]);
-        }
-
-        return rest_ensure_response([
-            'success' => true,
-            'message' => 'Outlook calendar selected successfully',
-            'data' => [
-                'calendar_id' => $calendar_id,
-                'calendar_name' => $calendar_name,
-            ],
-        ]);
-    }
-
-    /**
-     * Disconnect Outlook Calendar
-     */
-    public static function disconnect_outlook($request) {
-        global $wpdb;
-
-        $user_id = get_current_user_id();
-        $table = PIT_Calendar_Connections_Schema::get_table_name();
-
-        // Delete the connection
-        $wpdb->delete($table, [
-            'user_id' => $user_id,
-            'provider' => 'outlook',
-        ]);
-
-        // Also clear outlook_event_id from user's events (keep local events)
-        $events_table = PIT_Calendar_Events_Schema::get_table_name();
-        $wpdb->query($wpdb->prepare(
-            "UPDATE $events_table
-             SET outlook_calendar_id = NULL,
-                 outlook_event_id = NULL,
-                 sync_status = CASE WHEN google_event_id IS NULL THEN 'local_only' ELSE sync_status END
-             WHERE user_id = %d",
-            $user_id
-        ));
-
-        return rest_ensure_response([
-            'success' => true,
-            'message' => 'Outlook Calendar disconnected',
-        ]);
-    }
-
-    /**
-     * Trigger Outlook manual sync
-     */
-    public static function trigger_outlook_sync($request) {
-        $user_id = get_current_user_id();
-
-        $result = PIT_Calendar_Sync_Service::sync_user($user_id, 'outlook');
-
-        if (is_wp_error($result)) {
-            return $result;
-        }
-
-        return rest_ensure_response([
-            'success' => true,
-            'message' => 'Outlook sync completed',
-            'data' => $result,
-        ]);
-    }
-
-    // =====================
     // Helper Methods
     // =====================
+
+    /**
+     * Get provider class name
+     */
+    private static function get_provider_class($provider) {
+        return $provider === 'outlook' ? 'PIT_Outlook_Calendar' : 'PIT_Google_Calendar';
+    }
 
     /**
      * Get user's calendar connection
