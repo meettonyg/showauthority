@@ -26,6 +26,8 @@
       <!-- Stats -->
       <MessageStats
         :stats="stats"
+        :unified-stats="unifiedStats"
+        :unified="useUnifiedStats"
         :active-campaigns="activeCampaignsCount"
         :show-campaign-stats="messagesStore.hasCampaigns"
         :version="messagesStore.version"
@@ -66,12 +68,15 @@
       ref="composerRef"
       :show="showComposer"
       :templates="messagesStore.templates"
+      :sequences="messagesStore.sequences"
+      :sequences-loading="messagesStore.sequencesLoading"
       :default-email="defaultRecipientEmail"
       :default-name="defaultRecipientName"
-      :sending="messagesStore.sending"
-      :error="messagesStore.sendError"
+      :sending="messagesStore.sending || messagesStore.campaignActionLoading"
+      :error="messagesStore.sendError || messagesStore.campaignActionError"
       @close="handleComposerClose"
       @send="handleSendEmail"
+      @start-campaign="handleStartSequenceCampaign"
     />
   </div>
 </template>
@@ -138,9 +143,18 @@ const stats = computed(() => {
   return messagesStore.getStatsForAppearance(props.appearanceId)
 })
 
+const unifiedStats = computed(() => {
+  return messagesStore.getUnifiedStatsForAppearance(props.appearanceId)
+})
+
 const activeCampaignsCount = computed(() => {
   const campaigns = messagesStore.getActiveCampaignsForAppearance(props.appearanceId)
   return campaigns.length
+})
+
+// Use unified stats if campaigns/sequences are available
+const useUnifiedStats = computed(() => {
+  return messagesStore.hasCampaigns
 })
 
 // Initialize on mount
@@ -171,11 +185,23 @@ async function handleSendEmail(emailData) {
   }
 }
 
-// Handle campaign events
+// Handle start sequence campaign (from MessageComposer)
+async function handleStartSequenceCampaign(campaignData) {
+  const result = await messagesStore.startSequenceCampaign(props.appearanceId, campaignData)
+
+  if (result.success) {
+    showComposer.value = false
+    composerRef.value?.resetForm()
+    emit('campaign-started', result)
+  }
+}
+
+// Handle campaign events (from CampaignManager)
 function handleCampaignStarted(result) {
   emit('campaign-started', result)
   // Refresh stats to reflect new campaign
   messagesStore.loadStats(props.appearanceId)
+  messagesStore.loadUnifiedStats(props.appearanceId)
 }
 
 function handleCampaignUpdated(event) {
