@@ -66,6 +66,13 @@
             // Email integration state (Guestify Outreach Bridge)
             emailAvailable: false,
             emailConfigured: false,
+            emailHasApi: false,
+            emailFeatures: {
+                send_email: false,
+                templates: false,
+                campaigns: false,
+                tracking: false,
+            },
             emailTemplates: [],
             messages: [],
             messagesLoading: false,
@@ -75,6 +82,13 @@
                 opened: 0,
                 clicked: 0,
             },
+
+            // Campaign sequences (v2.0+ Guestify Outreach)
+            sequences: [],
+            sequencesLoading: false,
+            campaigns: [],
+            campaignsLoading: false,
+            startingCampaign: false,
 
             // Config from WordPress
             config: {
@@ -835,16 +849,47 @@
 
             /**
              * Check if email integration is available
+             * Uses extended status to get version and feature info
              */
             async checkEmailIntegration() {
                 try {
-                    const response = await this.api('pit-bridge/status');
-                    this.emailAvailable = response.available;
-                    this.emailConfigured = response.configured;
+                    // Try extended status first (v2.0+)
+                    try {
+                        const response = await this.api('pit-bridge/status/extended');
+                        this.emailAvailable = response.available;
+                        this.emailConfigured = response.configured;
+                        this.emailHasApi = response.has_api || false;
+                        this.emailFeatures = response.features || {
+                            send_email: response.available,
+                            templates: response.available,
+                            campaigns: response.has_api,
+                            tracking: response.configured,
+                        };
+                    } catch (extErr) {
+                        // Fallback to basic status
+                        console.warn('Extended status not available, using basic:', extErr);
+                        const response = await this.api('pit-bridge/status');
+                        this.emailAvailable = response.available;
+                        this.emailConfigured = response.configured;
+                        this.emailHasApi = false;
+                        this.emailFeatures = {
+                            send_email: response.available,
+                            templates: response.available,
+                            campaigns: false,
+                            tracking: response.configured,
+                        };
+                    }
                 } catch (err) {
                     console.warn('Email integration not available:', err);
                     this.emailAvailable = false;
                     this.emailConfigured = false;
+                    this.emailHasApi = false;
+                    this.emailFeatures = {
+                        send_email: false,
+                        templates: false,
+                        campaigns: false,
+                        tracking: false,
+                    };
                 }
             },
 
@@ -914,6 +959,79 @@
                     throw err;
                 } finally {
                     this.sendingEmail = false;
+                }
+            },
+
+            // =================================================================
+            // CAMPAIGN SEQUENCES (v2.0+ Guestify Outreach)
+            // =================================================================
+
+            /**
+             * Check if campaigns feature is available
+             */
+            hasCampaigns() {
+                return this.emailHasApi && this.emailFeatures.campaigns;
+            },
+
+            /**
+             * Load available sequences from Guestify Outreach
+             */
+            async loadSequences() {
+                if (!this.hasCampaigns()) return;
+                this.sequencesLoading = true;
+                try {
+                    const response = await this.api('pit-bridge/sequences');
+                    this.sequences = response.data || [];
+                } catch (err) {
+                    console.error('Failed to load sequences:', err);
+                    this.sequences = [];
+                } finally {
+                    this.sequencesLoading = false;
+                }
+            },
+
+            /**
+             * Load campaigns for this appearance
+             */
+            async loadCampaigns() {
+                if (!this.hasCampaigns()) return;
+                this.campaignsLoading = true;
+                try {
+                    const response = await this.api(`pit-bridge/appearances/${this.config.interviewId}/campaigns`);
+                    this.campaigns = response.data || [];
+                } catch (err) {
+                    console.error('Failed to load campaigns:', err);
+                    this.campaigns = [];
+                } finally {
+                    this.campaignsLoading = false;
+                }
+            },
+
+            /**
+             * Start a sequence-based campaign
+             */
+            async startSequenceCampaign(payload) {
+                this.startingCampaign = true;
+                try {
+                    const response = await this.api(`pit-bridge/appearances/${this.config.interviewId}/campaigns/sequence`, {
+                        method: 'POST',
+                        body: JSON.stringify(payload),
+                    });
+                    if (response.success) {
+                        // Refresh campaigns and messages
+                        await Promise.all([
+                            this.loadCampaigns(),
+                            this.loadMessages(),
+                            this.loadEmailStats(),
+                            this.loadNotes(),
+                        ]);
+                    }
+                    return response;
+                } catch (err) {
+                    console.error('Failed to start campaign:', err);
+                    throw err;
+                } finally {
+                    this.startingCampaign = false;
                 }
             }
         }
@@ -2225,45 +2343,109 @@
                 <div id="composeModal" class="custom-modal compose-modal" :class="{ active: showComposeModal }">
                     <div class="custom-modal-content">
                         <div class="custom-modal-header">
-                            <h2 id="modal-title">Compose Email</h2>
+                            <h2 id="modal-title">{{ composeMode === 'campaign' ? 'Start Campaign' : 'Compose Email' }}</h2>
                             <span class="custom-modal-close" @click="closeComposeModal">&times;</span>
                         </div>
                         <div class="custom-modal-body">
-                            <!-- Template Selector -->
-                            <div class="form-group" v-if="emailTemplates.length > 0">
-                                <label>Template (optional)</label>
-                                <select v-model="composeEmail.templateId" @change="applyTemplate" class="field-input">
-                                    <option :value="null">-- No Template --</option>
-                                    <option v-for="t in emailTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
-                                </select>
+                            <!-- Mode Toggle (when campaigns available) -->
+                            <div class="form-group compose-mode-toggle" v-if="emailFeatures.campaigns && sequences.length > 0">
+                                <div class="toggle-buttons">
+                                    <button type="button" class="toggle-btn" :class="{ active: composeMode === 'single' }" @click="composeMode = 'single'">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                        Single Email
+                                    </button>
+                                    <button type="button" class="toggle-btn" :class="{ active: composeMode === 'campaign' }" @click="composeMode = 'campaign'">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                                        Start Campaign
+                                    </button>
+                                </div>
                             </div>
 
-                            <div class="form-group">
-                                <label>To <span class="required">*</span></label>
-                                <input type="email" v-model="composeEmail.toEmail" class="field-input" placeholder="recipient@example.com" />
+                            <!-- Campaign Mode: Sequence Selector -->
+                            <div v-if="composeMode === 'campaign'" class="campaign-mode-content">
+                                <div class="form-group">
+                                    <label>Select Sequence <span class="required">*</span></label>
+                                    <select v-model="composeEmail.sequenceId" class="field-input">
+                                        <option :value="null">-- Choose a sequence --</option>
+                                        <option v-for="seq in activeSequences" :key="seq.id" :value="seq.id">
+                                            {{ seq.sequence_name }} ({{ seq.total_steps }} steps)
+                                        </option>
+                                    </select>
+                                    <p v-if="selectedSequence" class="sequence-description">
+                                        {{ selectedSequence.description }}
+                                    </p>
+                                </div>
+
+                                <!-- Sequence Steps Preview -->
+                                <div v-if="selectedSequence && selectedSequence.steps" class="sequence-steps-preview">
+                                    <label>Campaign Steps:</label>
+                                    <ol class="steps-list">
+                                        <li v-for="step in selectedSequence.steps" :key="step.id" class="step-item">
+                                            <span class="step-name">{{ step.step_name }}</span>
+                                            <span v-if="step.delay_value > 0" class="step-delay">
+                                                +{{ step.delay_value }} {{ step.delay_unit }}
+                                            </span>
+                                        </li>
+                                    </ol>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Recipient Email <span class="required">*</span></label>
+                                    <input type="email" v-model="composeEmail.toEmail" class="field-input" placeholder="recipient@example.com" />
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Recipient Name</label>
+                                    <input type="text" v-model="composeEmail.toName" class="field-input" placeholder="John Doe" />
+                                </div>
+
+                                <div class="custom-modal-actions">
+                                    <button class="cancel-button" @click="closeComposeModal">Cancel</button>
+                                    <button class="confirm-button" @click="handleStartCampaign" :disabled="startingCampaign || !isCampaignValid">
+                                        <span v-if="startingCampaign">Starting...</span>
+                                        <span v-else>Start Campaign</span>
+                                    </button>
+                                </div>
                             </div>
 
-                            <div class="form-group">
-                                <label>Recipient Name</label>
-                                <input type="text" v-model="composeEmail.toName" class="field-input" placeholder="John Doe" />
-                            </div>
+                            <!-- Single Email Mode -->
+                            <div v-else class="single-email-content">
+                                <!-- Template Selector -->
+                                <div class="form-group" v-if="emailTemplates.length > 0">
+                                    <label>Template (optional)</label>
+                                    <select v-model="composeEmail.templateId" @change="applyTemplate" class="field-input">
+                                        <option :value="null">-- No Template --</option>
+                                        <option v-for="t in emailTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+                                    </select>
+                                </div>
 
-                            <div class="form-group">
-                                <label>Subject <span class="required">*</span></label>
-                                <input type="text" v-model="composeEmail.subject" class="field-input" placeholder="Subject line..." />
-                            </div>
+                                <div class="form-group">
+                                    <label>To <span class="required">*</span></label>
+                                    <input type="email" v-model="composeEmail.toEmail" class="field-input" placeholder="recipient@example.com" />
+                                </div>
 
-                            <div class="form-group">
-                                <label>Message <span class="required">*</span></label>
-                                <textarea v-model="composeEmail.body" class="field-input email-body-textarea" rows="8" placeholder="Write your message here..."></textarea>
-                            </div>
+                                <div class="form-group">
+                                    <label>Recipient Name</label>
+                                    <input type="text" v-model="composeEmail.toName" class="field-input" placeholder="John Doe" />
+                                </div>
 
-                            <div class="custom-modal-actions">
-                                <button class="cancel-button" @click="closeComposeModal">Cancel</button>
-                                <button class="confirm-button" @click="handleSendEmail" :disabled="sendingEmail || !isComposeValid">
-                                    <span v-if="sendingEmail">Sending...</span>
-                                    <span v-else>Send Email</span>
-                                </button>
+                                <div class="form-group">
+                                    <label>Subject <span class="required">*</span></label>
+                                    <input type="text" v-model="composeEmail.subject" class="field-input" placeholder="Subject line..." />
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Message <span class="required">*</span></label>
+                                    <textarea v-model="composeEmail.body" class="field-input email-body-textarea" rows="8" placeholder="Write your message here..."></textarea>
+                                </div>
+
+                                <div class="custom-modal-actions">
+                                    <button class="cancel-button" @click="closeComposeModal">Cancel</button>
+                                    <button class="confirm-button" @click="handleSendEmail" :disabled="sendingEmail || !isComposeValid">
+                                        <span v-if="sendingEmail">Sending...</span>
+                                        <span v-else>Send Email</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2307,17 +2489,36 @@
 
             // Compose email modal state
             const showComposeModal = ref(false);
+            const composeMode = ref('single'); // 'single' or 'campaign'
             const composeEmail = reactive({
                 templateId: null,
                 toEmail: '',
                 toName: '',
                 subject: '',
                 body: '',
+                sequenceId: null, // For campaign mode
             });
 
             // Computed for compose validation
             const isComposeValid = computed(() => {
                 return composeEmail.toEmail && composeEmail.subject && composeEmail.body;
+            });
+
+            // Computed for campaign validation
+            const isCampaignValid = computed(() => {
+                return composeEmail.toEmail && composeEmail.sequenceId;
+            });
+
+            // Computed for active sequences (from store)
+            // Note: Backend already filters by is_active=1, so all returned sequences are active
+            const activeSequences = computed(() => {
+                return store.sequences;
+            });
+
+            // Computed for selected sequence details
+            const selectedSequence = computed(() => {
+                if (!composeEmail.sequenceId) return null;
+                return store.sequences.find(s => s.id === composeEmail.sequenceId);
             });
 
             // Episode search with debounce
@@ -2828,11 +3029,13 @@
             const closeComposeModal = () => {
                 showComposeModal.value = false;
                 // Reset form
+                composeMode.value = 'single';
                 composeEmail.templateId = null;
                 composeEmail.toEmail = '';
                 composeEmail.toName = '';
                 composeEmail.subject = '';
                 composeEmail.body = '';
+                composeEmail.sequenceId = null;
             };
 
             const applyTemplate = () => {
@@ -2868,6 +3071,28 @@
                 } catch (err) {
                     console.error('Failed to send email:', err);
                     showErrorMessage('Failed to send email: ' + err.message);
+                }
+            };
+
+            const handleStartCampaign = async () => {
+                if (!isCampaignValid.value) return;
+
+                try {
+                    const result = await store.startSequenceCampaign({
+                        sequence_id: composeEmail.sequenceId,
+                        recipient_email: composeEmail.toEmail,
+                        recipient_name: composeEmail.toName || '',
+                    });
+
+                    if (result.success) {
+                        showSuccessMessage('Campaign started successfully!');
+                        closeComposeModal();
+                    } else {
+                        showErrorMessage(result.message || 'Failed to start campaign');
+                    }
+                } catch (err) {
+                    console.error('Failed to start campaign:', err);
+                    showErrorMessage('Failed to start campaign: ' + err.message);
                 }
             };
 
@@ -2985,6 +3210,11 @@
                         store.loadTemplates();
                         store.loadMessages();
                         store.loadEmailStats();
+                        // Load sequences and campaigns if v2.0+ API available
+                        if (store.hasCampaigns()) {
+                            store.loadSequences();
+                            store.loadCampaigns();
+                        }
                     }
                 });
 
@@ -3128,22 +3358,35 @@
                 // Email integration state
                 emailAvailable: computed(() => store.emailAvailable),
                 emailConfigured: computed(() => store.emailConfigured),
+                emailFeatures: computed(() => store.emailFeatures),
                 emailTemplates: computed(() => store.emailTemplates),
                 messages: computed(() => store.messages),
                 messagesLoading: computed(() => store.messagesLoading),
                 sendingEmail: computed(() => store.sendingEmail),
                 emailStats: computed(() => store.emailStats),
 
+                // Campaign/Sequences state
+                sequences: computed(() => store.sequences),
+                sequencesLoading: computed(() => store.sequencesLoading),
+                campaigns: computed(() => store.campaigns),
+                campaignsLoading: computed(() => store.campaignsLoading),
+                startingCampaign: computed(() => store.startingCampaign),
+                activeSequences,
+                selectedSequence,
+
                 // Email compose modal state
                 showComposeModal,
+                composeMode,
                 composeEmail,
                 isComposeValid,
+                isCampaignValid,
 
                 // Email methods
                 openComposeModal,
                 closeComposeModal,
                 applyTemplate,
                 handleSendEmail,
+                handleStartCampaign,
             };
         }
     };

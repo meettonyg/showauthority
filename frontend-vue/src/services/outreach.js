@@ -13,17 +13,20 @@ import axios from 'axios'
  */
 
 // WordPress REST API configuration
+// Supports multiple config object names used across different pages
 const getApiBase = () => {
-  // Check for WordPress REST URL in window config
-  if (window.pitConfig?.restUrl) {
-    return window.pitConfig.restUrl.replace(/\/$/, '')
+  // Check for WordPress REST URL in window config (try multiple names)
+  const config = window.guestifyDetailData || window.pitConfig || window.guestifyData
+  if (config?.restUrl) {
+    return config.restUrl.replace(/\/$/, '')
   }
   // Fallback for development
   return import.meta.env.VITE_API_URL || '/wp-json/guestify/v1'
 }
 
 const getNonce = () => {
-  return window.pitConfig?.nonce || ''
+  const config = window.guestifyDetailData || window.pitConfig || window.guestifyData
+  return config?.nonce || ''
 }
 
 const api = axios.create({

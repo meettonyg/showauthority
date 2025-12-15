@@ -228,6 +228,116 @@ textarea.field-input {
     font-family: inherit;
 }
 
+/* ==========================================================================
+   Campaign Mode Toggle Styles
+   ========================================================================== */
+
+.compose-mode-toggle {
+    margin-bottom: 16px;
+}
+
+.compose-mode-toggle .toggle-buttons {
+    display: flex;
+    gap: 8px;
+    background-color: #f1f5f9;
+    padding: 4px;
+    border-radius: 8px;
+}
+
+.compose-mode-toggle .toggle-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.compose-mode-toggle .toggle-btn:hover {
+    background-color: #e2e8f0;
+    color: #475569;
+}
+
+.compose-mode-toggle .toggle-btn.active {
+    background-color: #fff;
+    color: #0ea5e9;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.compose-mode-toggle .toggle-btn svg {
+    flex-shrink: 0;
+}
+
+/* Campaign Mode Content */
+.campaign-mode-content,
+.single-email-content {
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Sequence Description */
+.sequence-description {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 6px;
+    line-height: 1.4;
+}
+
+/* Sequence Steps Preview */
+.sequence-steps-preview {
+    margin-bottom: 16px;
+    padding: 12px;
+    background-color: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.sequence-steps-preview label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.sequence-steps-preview .steps-list {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.sequence-steps-preview .step-item {
+    font-size: 13px;
+    color: #334155;
+    padding: 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sequence-steps-preview .step-name {
+    flex: 1;
+}
+
+.sequence-steps-preview .step-delay {
+    font-size: 11px;
+    color: #94a3b8;
+    background-color: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .custom-modal-content {
@@ -235,15 +345,25 @@ textarea.field-input {
         max-width: none;
         margin: 10px;
     }
-    
+
     .custom-modal-actions {
         flex-direction: column-reverse;
     }
-    
+
     .custom-modal-actions .cancel-button,
     .custom-modal-actions .confirm-button,
     .custom-modal-actions button {
         width: 100%;
         justify-content: center;
+    }
+
+    .compose-mode-toggle .toggle-btn {
+        font-size: 12px;
+        padding: 6px 8px;
+    }
+
+    .compose-mode-toggle .toggle-btn svg {
+        width: 14px;
+        height: 14px;
     }
 }
