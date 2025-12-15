@@ -52,6 +52,15 @@ export const useMessagesStore = defineStore('messages', {
     campaignActionLoading: false,
     campaignActionError: null,
 
+    // Sequences (global - available to all appearances)
+    sequences: [],
+    sequencesLoading: false,
+    sequencesError: null,
+
+    // Unified stats (per appearance - combines single emails + campaigns)
+    unifiedStatsByAppearance: {}, // { [appearanceId]: UnifiedStats }
+    unifiedStatsLoading: false,
+
     // Sending state
     sending: false,
     sendError: null,
@@ -70,6 +79,23 @@ export const useMessagesStore = defineStore('messages', {
     hasCampaigns: (state) => state.hasApi && state.features.campaigns,
 
     /**
+     * Check if sequences feature is available (v2.0+ with campaigns)
+     */
+    hasSequences: (state) => state.hasApi && state.features.campaigns,
+
+    /**
+     * Get active sequences only
+     */
+    activeSequences: (state) => state.sequences.filter(s => s.is_active),
+
+    /**
+     * Get sequence by ID
+     */
+    getSequenceById: (state) => (id) => {
+      return state.sequences.find(s => s.id === id)
+    },
+
+    /**
      * Get messages for a specific appearance
      */
     getMessagesForAppearance: (state) => (appearanceId) => {
@@ -84,6 +110,27 @@ export const useMessagesStore = defineStore('messages', {
         total_sent: 0,
         opened: 0,
         clicked: 0
+      }
+    },
+
+    /**
+     * Get unified stats for a specific appearance (single emails + campaigns)
+     */
+    getUnifiedStatsForAppearance: (state) => (appearanceId) => {
+      return state.unifiedStatsByAppearance[appearanceId] || {
+        total_sent: 0,
+        emails_sent: 0,
+        campaign_emails_sent: 0,
+        opened: 0,
+        open_rate: 0,
+        clicked: 0,
+        click_rate: 0,
+        replied: 0,
+        reply_rate: 0,
+        bounced: 0,
+        bounce_rate: 0,
+        active_campaigns: 0,
+        completed_campaigns: 0
       }
     },
 
@@ -330,12 +377,14 @@ export const useMessagesStore = defineStore('messages', {
         const loads = [
           this.loadTemplates(),
           this.loadMessages(appearanceId),
-          this.loadStats(appearanceId)
+          this.loadStats(appearanceId),
+          this.loadUnifiedStats(appearanceId)
         ]
 
-        // Load campaigns if v2.0 API is available
+        // Load campaigns and sequences if v2.0 API is available
         if (this.hasCampaigns) {
           loads.push(this.loadCampaigns(appearanceId))
+          loads.push(this.loadSequences())
         }
 
         await Promise.all(loads)
@@ -350,6 +399,7 @@ export const useMessagesStore = defineStore('messages', {
       delete this.messagesByAppearance[appearanceId]
       delete this.statsByAppearance[appearanceId]
       delete this.campaignsByAppearance[appearanceId]
+      delete this.unifiedStatsByAppearance[appearanceId]
     },
 
     // =========================================================================
@@ -521,6 +571,110 @@ export const useMessagesStore = defineStore('messages', {
       }
     },
 
+    // =========================================================================
+    // Sequence-Based Campaigns (v5.2.0+)
+    // =========================================================================
+
+    /**
+     * Load available sequences
+     * @param {boolean} force - Force reload even if cached
+     */
+    async loadSequences(force = false) {
+      if (!this.hasSequences) return
+
+      // Skip if already loaded and not forcing
+      if (!force && this.sequences.length > 0) {
+        return
+      }
+
+      this.sequencesLoading = true
+      this.sequencesError = null
+
+      try {
+        const result = await outreachApi.getSequences()
+        this.sequences = result.data || []
+      } catch (error) {
+        console.error('Failed to load sequences:', error)
+        this.sequencesError = error.message || 'Failed to load sequences'
+        this.sequences = []
+      } finally {
+        this.sequencesLoading = false
+      }
+    },
+
+    /**
+     * Start a sequence-based campaign
+     * @param {number} appearanceId - The appearance/opportunity ID
+     * @param {Object} campaignData
+     * @param {number} campaignData.sequence_id - The sequence ID to use
+     * @param {string} campaignData.recipient_email - Recipient email
+     * @param {string} [campaignData.recipient_name] - Recipient name
+     * @returns {Promise<{success: boolean, message: string, campaign_id?: number}>}
+     */
+    async startSequenceCampaign(appearanceId, campaignData) {
+      if (!this.hasSequences) {
+        return {
+          success: false,
+          message: 'Sequence campaigns require Guestify Outreach v2.0 or later'
+        }
+      }
+
+      this.campaignActionLoading = true
+      this.campaignActionError = null
+
+      try {
+        const result = await outreachApi.startSequenceCampaign(appearanceId, campaignData)
+
+        if (result.success) {
+          // Reload campaigns and unified stats to reflect the new campaign
+          await Promise.all([
+            this.loadCampaigns(appearanceId, true),
+            this.loadUnifiedStats(appearanceId)
+          ])
+        }
+
+        return result
+      } catch (error) {
+        return this._handleApiError(error, 'campaignActionError', 'Failed to start sequence campaign')
+      } finally {
+        this.campaignActionLoading = false
+      }
+    },
+
+    /**
+     * Load unified stats for an appearance (single emails + campaigns)
+     * @param {number} appearanceId
+     */
+    async loadUnifiedStats(appearanceId) {
+      if (!this.available) return
+
+      this.unifiedStatsLoading = true
+
+      try {
+        const result = await outreachApi.getUnifiedStats(appearanceId)
+        this.unifiedStatsByAppearance[appearanceId] = result.data || {
+          total_sent: 0,
+          emails_sent: 0,
+          campaign_emails_sent: 0,
+          opened: 0,
+          open_rate: 0,
+          clicked: 0,
+          click_rate: 0,
+          replied: 0,
+          reply_rate: 0,
+          bounced: 0,
+          bounce_rate: 0,
+          active_campaigns: 0,
+          completed_campaigns: 0
+        }
+      } catch (error) {
+        console.error('Failed to load unified stats:', error)
+        // Don't set error - stats are non-critical
+      } finally {
+        this.unifiedStatsLoading = false
+      }
+    },
+
     /**
      * Reset the entire store
      */
@@ -541,6 +695,11 @@ export const useMessagesStore = defineStore('messages', {
       this.messagesByAppearance = {}
       this.statsByAppearance = {}
       this.campaignsByAppearance = {}
+      this.unifiedStatsByAppearance = {}
+      this.sequences = []
+      this.sequencesLoading = false
+      this.sequencesError = null
+      this.unifiedStatsLoading = false
       this.sending = false
       this.sendError = null
       this.lastSentResult = null

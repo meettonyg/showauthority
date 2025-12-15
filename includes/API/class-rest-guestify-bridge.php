@@ -189,6 +189,74 @@ class PIT_REST_Guestify_Bridge {
             'callback'            => [__CLASS__, 'get_extended_status'],
             'permission_callback' => [__CLASS__, 'check_permission'],
         ]);
+
+        // =========================================================================
+        // Sequence-Based Campaign Endpoints (v5.2.0+)
+        // =========================================================================
+
+        // Get all available sequences
+        register_rest_route(self::NAMESPACE, '/pit-bridge/sequences', [
+            'methods'             => 'GET',
+            'callback'            => [__CLASS__, 'get_sequences'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        // Get a single sequence with steps
+        register_rest_route(self::NAMESPACE, '/pit-bridge/sequences/(?P<id>\d+)', [
+            'methods'             => 'GET',
+            'callback'            => [__CLASS__, 'get_sequence'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args' => [
+                'id' => [
+                    'required'          => true,
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                ],
+            ],
+        ]);
+
+        // Start a sequence-based campaign for an appearance
+        register_rest_route(self::NAMESPACE, '/pit-bridge/appearances/(?P<id>\d+)/campaigns/sequence', [
+            'methods'             => 'POST',
+            'callback'            => [__CLASS__, 'start_sequence_campaign'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args' => [
+                'id' => [
+                    'required'          => true,
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                ],
+                'sequence_id' => [
+                    'required'          => true,
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                ],
+                'recipient_email' => [
+                    'required'          => true,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_email',
+                ],
+                'recipient_name' => [
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                    'default'           => '',
+                ],
+            ],
+        ]);
+
+        // Get unified stats for an appearance (single emails + campaigns)
+        register_rest_route(self::NAMESPACE, '/pit-bridge/appearances/(?P<id>\d+)/unified-stats', [
+            'methods'             => 'GET',
+            'callback'            => [__CLASS__, 'get_unified_stats'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args' => [
+                'id' => [
+                    'required'          => true,
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                ],
+            ],
+        ]);
     }
 
     /**
@@ -451,5 +519,110 @@ class PIT_REST_Guestify_Bridge {
 
         // Verify the linked appearance belongs to current user
         return self::verify_appearance_ownership((int) $campaign['entity_id']);
+    }
+
+    // =========================================================================
+    // Sequence-Based Campaign Endpoint Callbacks (v5.2.0+)
+    // =========================================================================
+
+    /**
+     * Get all available sequences
+     */
+    public static function get_sequences(): WP_REST_Response {
+        if (!PIT_Guestify_Outreach_Bridge::has_public_api()) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Sequence campaigns require Guestify Outreach v2.0 or later.',
+                'data'    => [],
+            ], 200);
+        }
+
+        $sequences = PIT_Guestify_Outreach_Bridge::get_sequences();
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data'    => $sequences,
+        ]);
+    }
+
+    /**
+     * Get a single sequence with steps
+     */
+    public static function get_sequence(WP_REST_Request $request): WP_REST_Response {
+        if (!PIT_Guestify_Outreach_Bridge::has_public_api()) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Sequence campaigns require Guestify Outreach v2.0 or later.',
+                'data'    => null,
+            ], 200);
+        }
+
+        $sequence_id = (int) $request->get_param('id');
+        $sequence = PIT_Guestify_Outreach_Bridge::get_sequence($sequence_id);
+
+        if (!$sequence) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Sequence not found.',
+                'data'    => null,
+            ], 404);
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data'    => $sequence,
+        ]);
+    }
+
+    /**
+     * Start a sequence-based campaign for an appearance
+     */
+    public static function start_sequence_campaign(WP_REST_Request $request): WP_REST_Response {
+        $appearance_id = (int) $request->get_param('id');
+
+        if (!self::verify_appearance_ownership($appearance_id)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'You do not have permission to start campaigns for this appearance.',
+            ], 403);
+        }
+
+        if (!PIT_Guestify_Outreach_Bridge::has_public_api()) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Sequence campaigns require Guestify Outreach v2.0 or later.',
+            ], 400);
+        }
+
+        $result = PIT_Guestify_Outreach_Bridge::start_sequence_campaign([
+            'entity_id'       => $appearance_id,
+            'sequence_id'     => $request->get_param('sequence_id'),
+            'recipient_email' => $request->get_param('recipient_email'),
+            'recipient_name'  => $request->get_param('recipient_name'),
+        ]);
+
+        $status = !empty($result['success']) ? 201 : 400;
+        return new WP_REST_Response($result, $status);
+    }
+
+    /**
+     * Get unified stats for an appearance (single emails + campaigns)
+     */
+    public static function get_unified_stats(WP_REST_Request $request): WP_REST_Response {
+        $appearance_id = (int) $request->get_param('id');
+
+        if (!self::verify_appearance_ownership($appearance_id)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'You do not have permission to view stats for this appearance.',
+            ], 403);
+        }
+
+        $stats = PIT_Guestify_Outreach_Bridge::get_unified_stats($appearance_id);
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data'    => $stats,
+        ]);
     }
 }
