@@ -125,6 +125,9 @@ class PIT_Engagement_Repository {
     /**
      * Create or find engagement (upsert with deduplication)
      *
+     * When an existing engagement is found, updates it with any non-null fields
+     * from the new data (fills in missing data without overwriting existing values).
+     *
      * @param array $data Engagement data
      * @return array ['id' => int, 'created' => bool]
      */
@@ -132,28 +135,70 @@ class PIT_Engagement_Repository {
         global $wpdb;
         $table = $wpdb->prefix . 'pit_engagements';
 
+        $existing = null;
+
         // Priority 1: Check by episode_guid
         if (!empty($data['episode_guid'])) {
             $existing = self::get_by_guid($data['episode_guid']);
-            if ($existing) {
-                return ['id' => (int) $existing->id, 'created' => false];
-            }
         }
 
         // Priority 2: Check by uniqueness_hash
-        $hash = self::generate_hash($data);
-        if ($hash) {
-            $existing = self::get_by_hash($hash);
-            if ($existing) {
-                return ['id' => (int) $existing->id, 'created' => false];
+        if (!$existing) {
+            $hash = self::generate_hash($data);
+            if ($hash) {
+                $existing = self::get_by_hash($hash);
             }
         }
 
-        // No match - create new
-        $data['uniqueness_hash'] = $hash;
+        // Found existing - update with any new non-null data
+        if ($existing) {
+            $update_data = self::get_fillable_updates($existing, $data);
+            if (!empty($update_data)) {
+                self::update($existing->id, $update_data);
+            }
+            return ['id' => (int) $existing->id, 'created' => false];
+        }
+
+        // No match - create new (create() generates hash if not provided)
+        if (isset($hash)) {
+            $data['uniqueness_hash'] = $hash;
+        }
         $id = self::create($data);
 
         return ['id' => $id, 'created' => true];
+    }
+
+    /**
+     * Get fields that should be updated (fills in null/empty fields with new data)
+     *
+     * @param object $existing Existing engagement record
+     * @param array $new_data New data to potentially fill in
+     * @return array Fields to update
+     */
+    private static function get_fillable_updates($existing, $new_data) {
+        $fillable_fields = [
+            'thumbnail_url',
+            'audio_url',
+            'episode_url',
+            'description',
+            'duration_seconds',
+            'episode_number',
+            'season_number',
+        ];
+
+        $updates = [];
+        foreach ($fillable_fields as $field) {
+            // Only fill in if existing is null/empty-string and new data has a value
+            // Note: Use is_null/=== '' instead of empty() to preserve valid 0 values
+            $existing_value = $existing->$field ?? null;
+            $new_value = $new_data[$field] ?? null;
+
+            if ((is_null($existing_value) || $existing_value === '') && !is_null($new_value) && $new_value !== '') {
+                $updates[$field] = $new_value;
+            }
+        }
+
+        return $updates;
     }
 
     /**
