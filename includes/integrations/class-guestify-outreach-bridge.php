@@ -687,6 +687,325 @@ class PIT_Guestify_Outreach_Bridge {
         return Guestify_Outreach_Public_API::get_campaign($campaign_id);
     }
 
+    // =========================================================================
+    // Sequence-Based Campaigns (v2.0+ API)
+    // =========================================================================
+
+    /**
+     * Get available campaign sequences
+     *
+     * @return array List of sequences with their steps
+     */
+    public static function get_sequences(): array {
+        if (!self::has_public_api()) {
+            return [];
+        }
+
+        global $wpdb;
+        $user_id = get_current_user_id();
+
+        $sequences_table = $wpdb->prefix . 'guestify_campaign_sequences';
+        $steps_table = $wpdb->prefix . 'guestify_campaign_steps';
+
+        // Check if table exists
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $sequences_table)) !== $sequences_table) {
+            return [];
+        }
+
+        // Get sequences available to user (user's own + system defaults)
+        $sequences = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, sequence_name, description, category, total_steps, usage_count
+             FROM {$sequences_table}
+             WHERE (user_id = %d OR user_id = 0)
+             AND is_active = 1
+             ORDER BY usage_count DESC, sequence_name ASC",
+            $user_id
+        ), ARRAY_A);
+
+        if (!$sequences) {
+            return [];
+        }
+
+        // Get steps for each sequence
+        foreach ($sequences as &$seq) {
+            $seq['steps'] = $wpdb->get_results($wpdb->prepare(
+                "SELECT step_number, step_name, delay_value, delay_unit, template_id
+                 FROM {$steps_table}
+                 WHERE sequence_id = %d
+                 ORDER BY step_number ASC",
+                $seq['id']
+            ), ARRAY_A);
+
+            $seq['id'] = (int) $seq['id'];
+            $seq['total_steps'] = (int) $seq['total_steps'];
+            $seq['usage_count'] = (int) $seq['usage_count'];
+        }
+
+        return $sequences;
+    }
+
+    /**
+     * Get a single sequence with its steps
+     *
+     * @param int $sequence_id Sequence ID
+     * @return array|null Sequence data or null if not found
+     */
+    public static function get_sequence(int $sequence_id): ?array {
+        if (!self::has_public_api()) {
+            return null;
+        }
+
+        global $wpdb;
+        $user_id = get_current_user_id();
+
+        $sequences_table = $wpdb->prefix . 'guestify_campaign_sequences';
+        $steps_table = $wpdb->prefix . 'guestify_campaign_steps';
+
+        $sequence = $wpdb->get_row($wpdb->prepare(
+            "SELECT id, sequence_name, description, category, total_steps, usage_count
+             FROM {$sequences_table}
+             WHERE id = %d
+             AND (user_id = %d OR user_id = 0)
+             AND is_active = 1",
+            $sequence_id,
+            $user_id
+        ), ARRAY_A);
+
+        if (!$sequence) {
+            return null;
+        }
+
+        $sequence['steps'] = $wpdb->get_results($wpdb->prepare(
+            "SELECT step_number, step_name, delay_value, delay_unit, template_id
+             FROM {$steps_table}
+             WHERE sequence_id = %d
+             ORDER BY step_number ASC",
+            $sequence_id
+        ), ARRAY_A);
+
+        $sequence['id'] = (int) $sequence['id'];
+        $sequence['total_steps'] = (int) $sequence['total_steps'];
+        $sequence['usage_count'] = (int) $sequence['usage_count'];
+
+        return $sequence;
+    }
+
+    /**
+     * Get template variable data for an opportunity
+     *
+     * Gathers all data needed for template variable replacement from
+     * Show Authority's pit_opportunities, pit_guests, and pit_engagements tables.
+     *
+     * @param int $opportunity_id Opportunity/Appearance ID
+     * @return array Variable data for template replacement
+     */
+    private static function get_opportunity_variable_data(int $opportunity_id): array {
+        global $wpdb;
+
+        $opportunities_table = $wpdb->prefix . 'pit_opportunities';
+        $guests_table = $wpdb->prefix . 'pit_guests';
+        $engagements_table = $wpdb->prefix . 'pit_engagements';
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+
+        // Get opportunity with related data
+        $opportunity = $wpdb->get_row($wpdb->prepare(
+            "SELECT o.*,
+                    g.full_name as guest_full_name, g.email as guest_email,
+                    g.current_company, g.current_role,
+                    e.title as episode_title, e.url as episode_url,
+                    p.name as podcast_name, p.host_name, p.website_url as podcast_url
+             FROM {$opportunities_table} o
+             LEFT JOIN {$guests_table} g ON o.guest_id = g.id
+             LEFT JOIN {$engagements_table} e ON o.engagement_id = e.id
+             LEFT JOIN {$podcasts_table} p ON o.podcast_id = p.id
+             WHERE o.id = %d",
+            $opportunity_id
+        ), ARRAY_A);
+
+        if (!$opportunity) {
+            return [];
+        }
+
+        // Map to template variable names
+        return [
+            'entity_type'    => self::ENTITY_TYPE,
+            'entity_id'      => $opportunity_id,
+            'podcast_name'   => $opportunity['podcast_name'] ?? '',
+            'host_name'      => $opportunity['host_name'] ?? '',
+            'podcast_url'    => $opportunity['podcast_url'] ?? '',
+            'episode_title'  => $opportunity['episode_title'] ?? '',
+            'episode_url'    => $opportunity['episode_url'] ?? '',
+            'guest_name'     => $opportunity['guest_full_name'] ?? '',
+            'guest_email'    => $opportunity['guest_email'] ?? '',
+            'guest_company'  => $opportunity['current_company'] ?? '',
+            'guest_title'    => $opportunity['current_role'] ?? '',
+            'custom_variables' => [
+                'opportunity_status' => $opportunity['status'] ?? '',
+                'priority'           => $opportunity['priority'] ?? '',
+            ],
+        ];
+    }
+
+    /**
+     * Start a campaign using a sequence
+     *
+     * CRITICAL: This method gathers all template variable data from Show Authority's
+     * pit_opportunities table and passes it in the campaign metadata. The Campaign
+     * Processor will use this data instead of querying guestify_interview_entries.
+     *
+     * @param array $args {
+     *     @type int    $entity_id       Required. Appearance/Opportunity ID.
+     *     @type int    $sequence_id     Required. Sequence to use.
+     *     @type string $recipient_email Required. Recipient email.
+     *     @type string $recipient_name  Optional. Recipient name.
+     *     @type string $name            Optional. Campaign name (auto-generated if not provided).
+     * }
+     * @return array Result with success, message, and campaign_id
+     */
+    public static function start_sequence_campaign(array $args): array {
+        $error = self::check_campaign_availability(true);
+        if ($error !== null) {
+            return $error;
+        }
+
+        // Validate required fields
+        if (empty($args['entity_id'])) {
+            return ['success' => false, 'message' => 'Missing entity_id'];
+        }
+        if (empty($args['sequence_id'])) {
+            return ['success' => false, 'message' => 'Missing sequence_id'];
+        }
+        if (empty($args['recipient_email'])) {
+            return ['success' => false, 'message' => 'Missing recipient_email'];
+        }
+
+        // CRITICAL: Get template variable data from Show Authority tables
+        // This data will be stored in campaign metadata for the processor to use
+        $variable_data = self::get_opportunity_variable_data(absint($args['entity_id']));
+
+        if (empty($variable_data)) {
+            return [
+                'success' => false,
+                'message' => 'Could not load opportunity data for campaign variables'
+            ];
+        }
+
+        // Prepare campaign arguments for Public API
+        // Note: We pass interview_entry_id as 0 since we're using metadata for variables
+        $campaign_args = [
+            'sequence_id'        => absint($args['sequence_id']),
+            'entity_id'          => absint($args['entity_id']),
+            'entity_type'        => self::ENTITY_TYPE,
+            'recipient_email'    => sanitize_email($args['recipient_email']),
+            'recipient_name'     => sanitize_text_field($args['recipient_name'] ?? ''),
+            'metadata'           => $variable_data,  // CRITICAL: Template variables for processor
+        ];
+
+        $result = Guestify_Outreach_Public_API::start_campaign($campaign_args);
+
+        // Log to activity feed on success
+        if (!empty($result['success'])) {
+            $seq = self::get_sequence($args['sequence_id']);
+            $seq_name = $seq ? $seq['sequence_name'] : 'Sequence #' . $args['sequence_id'];
+            self::log_campaign_activity(
+                $args['entity_id'],
+                'started',
+                $args['name'] ?? $seq_name
+            );
+        }
+
+        return $result;
+    }
+
+    /**
+     * Get unified statistics matching the Outreach plugin's analytics
+     *
+     * Returns stats that match the aggregate reports in the Outreach plugin,
+     * including campaign status for active campaigns.
+     *
+     * @param int $appearance_id Appearance ID
+     * @return array Unified stats
+     */
+    public static function get_unified_stats(int $appearance_id): array {
+        $default_stats = [
+            'total_sent'       => 0,
+            'opened'           => 0,
+            'clicked'          => 0,
+            'replied'          => 0,
+            'bounced'          => 0,
+            'open_rate'        => 0,
+            'click_rate'       => 0,
+            'reply_rate'       => 0,
+            'campaign_status'  => null,
+            'campaign_step'    => null,
+            'campaign_total'   => null,
+            'campaign_name'    => null,
+            'campaign_id'      => null,
+            'next_send_date'   => null,
+        ];
+
+        if (!self::is_active()) {
+            return $default_stats;
+        }
+
+        // Get basic stats from Public API
+        if (self::has_public_api()) {
+            $stats = Guestify_Outreach_Public_API::get_stats($appearance_id, self::ENTITY_TYPE);
+            $default_stats = array_merge($default_stats, $stats);
+        } else {
+            $stats = self::get_stats_legacy($appearance_id);
+            $default_stats = array_merge($default_stats, $stats);
+        }
+
+        // Get active campaign info
+        if (self::has_public_api()) {
+            global $wpdb;
+            $table_active = $wpdb->prefix . 'guestify_active_campaigns';
+            $sequences_table = $wpdb->prefix . 'guestify_campaign_sequences';
+
+            if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_active)) === $table_active) {
+                // Check for entity columns
+                $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_active}");
+                $column_names = array_map(fn($col) => $col->Field, $columns);
+                $use_entity = in_array('entity_id', $column_names, true);
+
+                if ($use_entity) {
+                    $where_clause = $wpdb->prepare(
+                        "ac.entity_id = %d AND ac.entity_type = %s",
+                        $appearance_id,
+                        self::ENTITY_TYPE
+                    );
+                } else {
+                    $where_clause = $wpdb->prepare(
+                        "ac.interview_entry_id = %d",
+                        $appearance_id
+                    );
+                }
+
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+                $campaign = $wpdb->get_row(
+                    "SELECT ac.*, cs.sequence_name
+                     FROM {$table_active} ac
+                     LEFT JOIN {$sequences_table} cs ON ac.sequence_id = cs.id
+                     WHERE {$where_clause}
+                     AND ac.status IN ('active', 'paused')
+                     ORDER BY ac.id DESC LIMIT 1"
+                );
+
+                if ($campaign) {
+                    $default_stats['campaign_status'] = $campaign->status;
+                    $default_stats['campaign_step'] = (int) $campaign->current_step;
+                    $default_stats['campaign_total'] = (int) $campaign->total_steps;
+                    $default_stats['campaign_name'] = $campaign->sequence_name ?? 'Campaign';
+                    $default_stats['campaign_id'] = (int) $campaign->id;
+                    $default_stats['next_send_date'] = $campaign->next_send_date;
+                }
+            }
+        }
+
+        return $default_stats;
+    }
+
     /**
      * Log campaign activity to activity feed
      */

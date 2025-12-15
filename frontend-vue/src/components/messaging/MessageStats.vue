@@ -1,28 +1,90 @@
 <template>
-  <div class="message-stats">
-    <!-- Email Stats -->
-    <div class="stats-group">
-      <div class="stat-item">
-        <span class="stat-number">{{ stats.total_sent }}</span>
-        <span class="stat-label">Sent</span>
+  <div class="message-stats" :class="{ 'unified-mode': unified }">
+    <!-- Simple Stats (legacy mode) -->
+    <template v-if="!unified">
+      <div class="stats-group">
+        <div class="stat-item">
+          <span class="stat-number">{{ stats.total_sent }}</span>
+          <span class="stat-label">Sent</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number">{{ stats.opened }}</span>
+          <span class="stat-label">Opened</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number">{{ stats.clicked }}</span>
+          <span class="stat-label">Clicked</span>
+        </div>
       </div>
-      <div class="stat-item">
-        <span class="stat-number">{{ stats.opened }}</span>
-        <span class="stat-label">Opened</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-number">{{ stats.clicked }}</span>
-        <span class="stat-label">Clicked</span>
-      </div>
-    </div>
 
-    <!-- Campaign Stats (if available) -->
-    <div v-if="showCampaignStats && activeCampaigns > 0" class="stats-group stats-campaign">
-      <div class="stat-item">
-        <span class="stat-number stat-campaign">{{ activeCampaigns }}</span>
-        <span class="stat-label">Active Campaigns</span>
+      <!-- Campaign Stats (if available) -->
+      <div v-if="showCampaignStats && activeCampaigns > 0" class="stats-group stats-campaign">
+        <div class="stat-item">
+          <span class="stat-number stat-campaign">{{ activeCampaigns }}</span>
+          <span class="stat-label">Active Campaigns</span>
+        </div>
       </div>
-    </div>
+    </template>
+
+    <!-- Unified Stats (new enhanced mode) -->
+    <template v-else>
+      <!-- Delivery Row -->
+      <div class="stats-row">
+        <h4 class="row-title">Delivery</h4>
+        <div class="stats-group">
+          <div class="stat-item">
+            <span class="stat-number">{{ unifiedStats.total_sent }}</span>
+            <span class="stat-label">Total Sent</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number stat-secondary">{{ unifiedStats.emails_sent }}</span>
+            <span class="stat-label">Single Emails</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number stat-secondary">{{ unifiedStats.campaign_emails_sent }}</span>
+            <span class="stat-label">Campaign Emails</span>
+          </div>
+          <div v-if="unifiedStats.bounced > 0" class="stat-item">
+            <span class="stat-number stat-danger">{{ unifiedStats.bounced }}</span>
+            <span class="stat-label">Bounced ({{ formatRate(unifiedStats.bounce_rate) }})</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Engagement Row -->
+      <div class="stats-row">
+        <h4 class="row-title">Engagement</h4>
+        <div class="stats-group">
+          <div class="stat-item">
+            <span class="stat-number">{{ unifiedStats.opened }}</span>
+            <span class="stat-label">Opened ({{ formatRate(unifiedStats.open_rate) }})</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">{{ unifiedStats.clicked }}</span>
+            <span class="stat-label">Clicked ({{ formatRate(unifiedStats.click_rate) }})</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number stat-success">{{ unifiedStats.replied }}</span>
+            <span class="stat-label">Replied ({{ formatRate(unifiedStats.reply_rate) }})</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Campaigns Row -->
+      <div v-if="unifiedStats.active_campaigns > 0 || unifiedStats.completed_campaigns > 0" class="stats-row">
+        <h4 class="row-title">Campaigns</h4>
+        <div class="stats-group">
+          <div class="stat-item">
+            <span class="stat-number stat-campaign">{{ unifiedStats.active_campaigns }}</span>
+            <span class="stat-label">Active</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number stat-success">{{ unifiedStats.completed_campaigns }}</span>
+            <span class="stat-label">Completed</span>
+          </div>
+        </div>
+      </div>
+    </template>
 
     <!-- Version Badge -->
     <div v-if="showVersion && version" class="version-badge" :title="versionTooltip">
@@ -39,16 +101,20 @@
  * MessageStats Component
  *
  * Displays email statistics (sent, opened, clicked) for an appearance.
- * Enhanced to show campaign stats and version info.
+ * Supports two modes:
+ * - Legacy mode: Simple stats (total_sent, opened, clicked)
+ * - Unified mode: Full dashboard matching Guestify Outreach analytics
  *
  * @package ShowAuthority
  * @since 5.0.0
  * @updated 5.1.0 - Added campaign stats and version display
+ * @updated 5.2.0 - Added unified stats mode for campaign integration
  */
 
 import { computed } from 'vue'
 
 const props = defineProps({
+  // Legacy simple stats
   stats: {
     type: Object,
     default: () => ({
@@ -56,6 +122,30 @@ const props = defineProps({
       opened: 0,
       clicked: 0
     })
+  },
+  // Unified stats (full dashboard data)
+  unifiedStats: {
+    type: Object,
+    default: () => ({
+      total_sent: 0,
+      emails_sent: 0,
+      campaign_emails_sent: 0,
+      opened: 0,
+      open_rate: 0,
+      clicked: 0,
+      click_rate: 0,
+      replied: 0,
+      reply_rate: 0,
+      bounced: 0,
+      bounce_rate: 0,
+      active_campaigns: 0,
+      completed_campaigns: 0
+    })
+  },
+  // Enable unified stats mode
+  unified: {
+    type: Boolean,
+    default: false
   },
   activeCampaigns: {
     type: Number,
@@ -85,6 +175,14 @@ const versionTooltip = computed(() => {
   }
   return `Guestify Outreach v${props.version}`
 })
+
+// Format rate as percentage
+function formatRate(rate) {
+  if (rate === null || rate === undefined) return '0%'
+  const num = parseFloat(rate)
+  if (isNaN(num)) return '0%'
+  return `${num.toFixed(1)}%`
+}
 </script>
 
 <style scoped>
@@ -152,5 +250,52 @@ const versionTooltip = computed(() => {
 
 .version-badge svg {
   opacity: 0.7;
+}
+
+/* Unified Mode Styles */
+.message-stats.unified-mode {
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+}
+
+.stats-row {
+  width: 100%;
+}
+
+.row-title {
+  margin: 0 0 10px 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-tertiary, #9ca3af);
+}
+
+.unified-mode .stats-group {
+  flex-wrap: wrap;
+}
+
+.unified-mode .stat-item {
+  min-width: 80px;
+}
+
+.stat-number.stat-secondary {
+  font-size: 20px;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.stat-number.stat-success {
+  color: var(--color-success, #10b981);
+}
+
+.stat-number.stat-danger {
+  color: var(--color-error, #ef4444);
+}
+
+/* Stats row divider for unified mode */
+.unified-mode .stats-row + .stats-row {
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-light, #f0f0f0);
 }
 </style>

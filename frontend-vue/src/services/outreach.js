@@ -162,5 +162,54 @@ export default {
   async cancelCampaign(campaignId) {
     const response = await api.post(`/pit-bridge/campaigns/${campaignId}/cancel`)
     return response.data
+  },
+
+  // =========================================================================
+  // Sequence-Based Campaigns (v5.2.0+)
+  // =========================================================================
+
+  /**
+   * Get all available sequences
+   * @returns {Promise<{success: boolean, data: Array<{id: number, sequence_name: string, description: string, total_steps: number, is_active: boolean, steps: Array}>}>}
+   */
+  async getSequences() {
+    const response = await api.get('/pit-bridge/sequences')
+    return response.data
+  },
+
+  /**
+   * Get a single sequence with steps
+   * @param {number} sequenceId - The sequence ID
+   * @returns {Promise<{success: boolean, data: {id: number, sequence_name: string, description: string, total_steps: number, is_active: boolean, steps: Array}}>}
+   */
+  async getSequence(sequenceId) {
+    const response = await api.get(`/pit-bridge/sequences/${sequenceId}`)
+    return response.data
+  },
+
+  /**
+   * Start a sequence-based campaign for an appearance
+   * Uses pre-built sequences from Guestify Outreach with template variable injection
+   * @param {number} appearanceId - The appearance/opportunity ID
+   * @param {Object} payload - Campaign data
+   * @param {number} payload.sequence_id - The sequence ID to use
+   * @param {string} payload.recipient_email - Recipient email address
+   * @param {string} [payload.recipient_name] - Recipient name
+   * @returns {Promise<{success: boolean, message: string, campaign_id?: number}>}
+   */
+  async startSequenceCampaign(appearanceId, payload) {
+    const response = await api.post(`/pit-bridge/appearances/${appearanceId}/campaigns/sequence`, payload)
+    return response.data
+  },
+
+  /**
+   * Get unified stats for an appearance (single emails + campaigns combined)
+   * Matches the analytics format from Guestify Outreach dashboard
+   * @param {number} appearanceId - The appearance/opportunity ID
+   * @returns {Promise<{success: boolean, data: {total_sent: number, emails_sent: number, campaign_emails_sent: number, opened: number, open_rate: number, clicked: number, click_rate: number, replied: number, reply_rate: number, bounced: number, bounce_rate: number, active_campaigns: number, completed_campaigns: number}}>}
+   */
+  async getUnifiedStats(appearanceId) {
+    const response = await api.get(`/pit-bridge/appearances/${appearanceId}/unified-stats`)
+    return response.data
   }
 }

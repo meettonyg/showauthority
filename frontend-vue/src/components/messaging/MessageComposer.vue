@@ -4,7 +4,7 @@
       <div v-if="show" class="modal-overlay" @click.self="handleClose">
         <div class="modal-container">
           <div class="modal-header">
-            <h2 class="modal-title">Compose Email</h2>
+            <h2 class="modal-title">{{ modalTitle }}</h2>
             <button class="modal-close" @click="handleClose" :disabled="sending">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -14,71 +14,158 @@
           </div>
 
           <div class="modal-body">
-            <!-- Template Selector -->
-            <TemplateSelector
-              v-if="templates.length > 0"
-              v-model="form.templateId"
-              :templates="templates"
-              :disabled="sending"
-              @update:modelValue="applyTemplate"
-            />
-
-            <!-- To Email -->
-            <div class="form-group">
-              <label class="form-label">
-                To <span class="required">*</span>
-              </label>
-              <input
-                v-model="form.toEmail"
-                type="email"
-                class="form-input"
-                placeholder="recipient@example.com"
+            <!-- Mode Toggle (only show if sequences available) -->
+            <div v-if="hasSequences" class="mode-toggle">
+              <button
+                class="mode-btn"
+                :class="{ active: mode === 'email' }"
+                @click="mode = 'email'"
                 :disabled="sending"
-                required
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                  <polyline points="22,6 12,13 2,6"></polyline>
+                </svg>
+                Single Email
+              </button>
+              <button
+                class="mode-btn"
+                :class="{ active: mode === 'campaign' }"
+                @click="mode = 'campaign'"
+                :disabled="sending"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                Start Campaign
+              </button>
+            </div>
+
+            <!-- SINGLE EMAIL MODE -->
+            <template v-if="mode === 'email'">
+              <!-- Template Selector -->
+              <TemplateSelector
+                v-if="templates.length > 0"
+                v-model="form.templateId"
+                :templates="templates"
+                :disabled="sending"
+                @update:modelValue="applyTemplate"
               />
-            </div>
 
-            <!-- To Name -->
-            <div class="form-group">
-              <label class="form-label">Recipient Name</label>
-              <input
-                v-model="form.toName"
-                type="text"
-                class="form-input"
-                placeholder="John Doe"
+              <!-- To Email -->
+              <div class="form-group">
+                <label class="form-label">
+                  To <span class="required">*</span>
+                </label>
+                <input
+                  v-model="form.toEmail"
+                  type="email"
+                  class="form-input"
+                  placeholder="recipient@example.com"
+                  :disabled="sending"
+                  required
+                />
+              </div>
+
+              <!-- To Name -->
+              <div class="form-group">
+                <label class="form-label">Recipient Name</label>
+                <input
+                  v-model="form.toName"
+                  type="text"
+                  class="form-input"
+                  placeholder="John Doe"
+                  :disabled="sending"
+                />
+              </div>
+
+              <!-- Subject -->
+              <div class="form-group">
+                <label class="form-label">
+                  Subject <span class="required">*</span>
+                </label>
+                <input
+                  v-model="form.subject"
+                  type="text"
+                  class="form-input"
+                  placeholder="Subject line..."
+                  :disabled="sending"
+                  required
+                />
+              </div>
+
+              <!-- Body -->
+              <div class="form-group">
+                <label class="form-label">
+                  Message <span class="required">*</span>
+                </label>
+                <textarea
+                  v-model="form.body"
+                  class="form-input form-textarea"
+                  rows="8"
+                  placeholder="Write your message here..."
+                  :disabled="sending"
+                  required
+                ></textarea>
+              </div>
+            </template>
+
+            <!-- CAMPAIGN MODE -->
+            <template v-else-if="mode === 'campaign'">
+              <!-- Sequence Selector -->
+              <SequenceSelector
+                v-model="form.sequenceId"
+                :sequences="sequences"
                 :disabled="sending"
+                :loading="sequencesLoading"
               />
-            </div>
 
-            <!-- Subject -->
-            <div class="form-group">
-              <label class="form-label">
-                Subject <span class="required">*</span>
-              </label>
-              <input
-                v-model="form.subject"
-                type="text"
-                class="form-input"
-                placeholder="Subject line..."
-                :disabled="sending"
-                required
-              />
-            </div>
+              <!-- Recipient Email -->
+              <div class="form-group">
+                <label class="form-label">
+                  Recipient Email <span class="required">*</span>
+                </label>
+                <input
+                  v-model="form.toEmail"
+                  type="email"
+                  class="form-input"
+                  placeholder="recipient@example.com"
+                  :disabled="sending"
+                  required
+                />
+              </div>
 
-            <!-- Body -->
-            <div class="form-group">
-              <label class="form-label">
-                Message <span class="required">*</span>
-              </label>
-              <textarea
-                v-model="form.body"
-                class="form-input form-textarea"
-                rows="8"
-                placeholder="Write your message here..."
-                :disabled="sending"
-                required
-              ></textarea>
-            </div>
+              <!-- Recipient Name -->
+              <div class="form-group">
+                <label class="form-label">Recipient Name</label>
+                <input
+                  v-model="form.toName"
+                  type="text"
+                  class="form-input"
+                  placeholder="John Doe"
+                  :disabled="sending"
+                />
+              </div>
+
+              <!-- Campaign Info Box -->
+              <div v-if="selectedSequence" class="campaign-info">
+                <div class="info-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                  </svg>
+                </div>
+                <div class="info-content">
+                  <p class="info-title">Campaign will send {{ selectedSequence.total_steps }} emails automatically</p>
+                  <p class="info-text">
+                    The first email sends immediately. Subsequent emails are scheduled based on the sequence timing.
+                    Template variables like {podcast_name} and {host_name} will be replaced automatically.
+                  </p>
+                </div>
+              </div>
+            </template>
 
             <!-- Error Message -->
             <div v-if="error" class="form-error">
@@ -96,11 +183,11 @@
             </button>
             <button
               class="btn btn-primary"
-              @click="handleSend"
+              @click="handleAction"
               :disabled="sending || !isValid"
             >
               <span v-if="sending" class="btn-spinner"></span>
-              {{ sending ? 'Sending...' : 'Send Email' }}
+              {{ actionButtonText }}
             </button>
           </div>
         </div>
@@ -113,14 +200,17 @@
 /**
  * MessageComposer Component
  *
- * Modal dialog for composing and sending emails.
+ * Modal dialog for composing and sending emails or starting campaigns.
+ * Supports dual mode: Single Email or Campaign (sequence-based).
  *
  * @package ShowAuthority
  * @since 5.0.0
+ * @updated 5.2.0 - Added dual mode for campaign/sequence support
  */
 
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import TemplateSelector from './TemplateSelector.vue'
+import SequenceSelector from './SequenceSelector.vue'
 
 const props = defineProps({
   show: {
@@ -130,6 +220,14 @@ const props = defineProps({
   templates: {
     type: Array,
     default: () => []
+  },
+  sequences: {
+    type: Array,
+    default: () => []
+  },
+  sequencesLoading: {
+    type: Boolean,
+    default: false
   },
   defaultEmail: {
     type: String,
@@ -149,18 +247,49 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'send'])
+const emit = defineEmits(['close', 'send', 'start-campaign'])
+
+// Mode: 'email' or 'campaign'
+const mode = ref('email')
 
 const form = reactive({
   templateId: null,
+  sequenceId: null,
   toEmail: '',
   toName: '',
   subject: '',
   body: ''
 })
 
+// Check if sequences are available
+const hasSequences = computed(() => {
+  return props.sequences && props.sequences.length > 0
+})
+
+// Get selected sequence object
+const selectedSequence = computed(() => {
+  if (!form.sequenceId) return null
+  return props.sequences.find(s => s.id === form.sequenceId) || null
+})
+
+// Dynamic modal title
+const modalTitle = computed(() => {
+  return mode.value === 'campaign' ? 'Start Campaign' : 'Compose Email'
+})
+
+// Dynamic action button text
+const actionButtonText = computed(() => {
+  if (props.sending) {
+    return mode.value === 'campaign' ? 'Starting...' : 'Sending...'
+  }
+  return mode.value === 'campaign' ? 'Start Campaign' : 'Send Email'
+})
+
 // Validation
 const isValid = computed(() => {
+  if (mode.value === 'campaign') {
+    return form.toEmail?.trim() && form.sequenceId
+  }
   return form.toEmail?.trim() && form.subject?.trim() && form.body?.trim()
 })
 
@@ -190,22 +319,32 @@ function handleClose() {
   emit('close')
 }
 
-// Handle send
-function handleSend() {
+// Handle action (send email or start campaign)
+function handleAction() {
   if (!isValid.value || props.sending) return
 
-  emit('send', {
-    to_email: form.toEmail.trim(),
-    to_name: form.toName.trim(),
-    subject: form.subject.trim(),
-    body: form.body.trim(),
-    template_id: form.templateId
-  })
+  if (mode.value === 'campaign') {
+    emit('start-campaign', {
+      sequence_id: form.sequenceId,
+      recipient_email: form.toEmail.trim(),
+      recipient_name: form.toName.trim()
+    })
+  } else {
+    emit('send', {
+      to_email: form.toEmail.trim(),
+      to_name: form.toName.trim(),
+      subject: form.subject.trim(),
+      body: form.body.trim(),
+      template_id: form.templateId
+    })
+  }
 }
 
 // Reset form
 function resetForm() {
+  mode.value = 'email'
   form.templateId = null
+  form.sequenceId = null
   form.toEmail = ''
   form.toName = ''
   form.subject = ''
@@ -440,5 +579,81 @@ defineExpose({ resetForm })
 .modal-enter-from .modal-container,
 .modal-leave-to .modal-container {
   transform: scale(0.95);
+}
+
+/* Mode Toggle */
+.mode-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 4px;
+  background: var(--color-surface, #f8f9fa);
+  border-radius: 8px;
+}
+
+.mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary, #6b7280);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mode-btn:hover:not(:disabled) {
+  color: var(--color-text-primary, #1a1a1a);
+}
+
+.mode-btn.active {
+  background: var(--color-background, #fff);
+  color: var(--color-primary, #6366f1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.mode-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Campaign Info Box */
+.campaign-info {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  background: var(--color-info-bg, #eff6ff);
+  border: 1px solid var(--color-info-border, #bfdbfe);
+  border-radius: 8px;
+  margin-top: 16px;
+}
+
+.info-icon {
+  flex-shrink: 0;
+  color: var(--color-info, #3b82f6);
+}
+
+.info-content {
+  flex: 1;
+}
+
+.info-title {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-info-dark, #1e40af);
+}
+
+.info-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-info, #3b82f6);
+  line-height: 1.5;
 }
 </style>
