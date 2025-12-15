@@ -708,7 +708,11 @@ class PIT_Guestify_Outreach_Bridge {
         $steps_table = $wpdb->prefix . 'guestify_campaign_steps';
 
         // Check if table exists
-        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $sequences_table)) !== $sequences_table) {
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+        $table_exists = $wpdb->get_var(
+            $wpdb->prepare("SHOW TABLES LIKE %s", $sequences_table)
+        );
+        if (!$table_exists) {
             return [];
         }
 

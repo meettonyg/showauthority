@@ -190,6 +190,13 @@ class PIT_REST_Guestify_Bridge {
             'permission_callback' => [__CLASS__, 'check_permission'],
         ]);
 
+        // Debug endpoint for sequences troubleshooting
+        register_rest_route(self::NAMESPACE, '/pit-bridge/debug/sequences', [
+            'methods'             => 'GET',
+            'callback'            => [__CLASS__, 'debug_sequences'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
         // =========================================================================
         // Sequence-Based Campaign Endpoints (v5.2.0+)
         // =========================================================================
@@ -623,6 +630,52 @@ class PIT_REST_Guestify_Bridge {
         return new WP_REST_Response([
             'success' => true,
             'data'    => $stats,
+        ]);
+    }
+
+    /**
+     * Debug endpoint for troubleshooting sequences
+     * Access via: /wp-json/guestify/v1/pit-bridge/debug/sequences
+     */
+    public static function debug_sequences(): WP_REST_Response {
+        global $wpdb;
+
+        $user_id = get_current_user_id();
+        $sequences_table = $wpdb->prefix . 'guestify_campaign_sequences';
+
+        // Check table existence
+        $table_exists = $wpdb->get_var(
+            $wpdb->prepare("SHOW TABLES LIKE %s", $sequences_table)
+        );
+
+        // Get raw sequences from DB
+        $raw_sequences = [];
+        if ($table_exists) {
+            $raw_sequences = $wpdb->get_results(
+                "SELECT id, user_id, sequence_name, is_active, total_steps FROM {$sequences_table} LIMIT 20",
+                ARRAY_A
+            );
+        }
+
+        // Get sequences via Bridge
+        $bridge_sequences = PIT_Guestify_Outreach_Bridge::get_sequences();
+
+        return new WP_REST_Response([
+            'debug' => true,
+            'checks' => [
+                'has_public_api'     => PIT_Guestify_Outreach_Bridge::has_public_api(),
+                'is_active'          => PIT_Guestify_Outreach_Bridge::is_active(),
+                'is_configured'      => PIT_Guestify_Outreach_Bridge::is_configured(),
+                'guestify_version'   => PIT_Guestify_Outreach_Bridge::get_version(),
+                'api_version'        => PIT_Guestify_Outreach_Bridge::get_api_version(),
+                'current_user_id'    => $user_id,
+            ],
+            'table' => [
+                'name'   => $sequences_table,
+                'exists' => (bool) $table_exists,
+            ],
+            'raw_sequences'    => $raw_sequences,
+            'bridge_sequences' => $bridge_sequences,
         ]);
     }
 }
