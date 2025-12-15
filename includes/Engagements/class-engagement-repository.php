@@ -159,8 +159,10 @@ class PIT_Engagement_Repository {
             return ['id' => (int) $existing->id, 'created' => false];
         }
 
-        // No match - create new
-        $data['uniqueness_hash'] = $hash ?? self::generate_hash($data);
+        // No match - create new (create() generates hash if not provided)
+        if (isset($hash)) {
+            $data['uniqueness_hash'] = $hash;
+        }
         $id = self::create($data);
 
         return ['id' => $id, 'created' => true];
@@ -186,11 +188,12 @@ class PIT_Engagement_Repository {
 
         $updates = [];
         foreach ($fillable_fields as $field) {
-            // Only fill in if existing is empty and new data has a value
+            // Only fill in if existing is null/empty-string and new data has a value
+            // Note: Use is_null/=== '' instead of empty() to preserve valid 0 values
             $existing_value = $existing->$field ?? null;
             $new_value = $new_data[$field] ?? null;
 
-            if (empty($existing_value) && !empty($new_value)) {
+            if ((is_null($existing_value) || $existing_value === '') && !is_null($new_value) && $new_value !== '') {
                 $updates[$field] = $new_value;
             }
         }
