@@ -284,27 +284,11 @@ class Podcast_Influence_Tracker {
     }
 
     public function enqueue_frontend_scripts() {
-        // Enqueue frontend CSS
-        wp_enqueue_style(
-            'pit-frontend',
-            PIT_PLUGIN_URL . 'assets/css/frontend.css',
-            [],
-            PIT_VERSION
-        );
-
-        wp_enqueue_style(
-            'pit-interview-detail',
-            PIT_PLUGIN_URL . 'assets/css/interview-detail.css',
-            [],
-            PIT_VERSION
-        );
-
-        wp_enqueue_style(
-            'pit-interview-detail-modals',
-            PIT_PLUGIN_URL . 'assets/css/interview-detail-modals.css',
-            [],
-            PIT_VERSION
-        );
+        // CSS is now enqueued conditionally by individual shortcode classes:
+        // - PIT_Shortcodes::enqueue_assets() handles frontend.css for podcast_*/guest_* shortcodes
+        // - PIT_Interview_Detail_Shortcode::enqueue_scripts() handles frontend.css, interview-detail.css, and interview-detail-modals.css
+        // - PIT_Calendar_Shortcode::enqueue_scripts() handles calendar.css
+        // This prevents CSS from loading on pages that don't use the plugin.
     }
 
     /**
