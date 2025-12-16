@@ -286,7 +286,7 @@ class Podcast_Influence_Tracker {
     public function enqueue_frontend_scripts() {
         // CSS is now enqueued conditionally by individual shortcode classes:
         // - PIT_Shortcodes::enqueue_assets() handles frontend.css for podcast_*/guest_* shortcodes
-        // - PIT_Interview_Detail_Shortcode::enqueue_scripts() handles interview-detail.css
+        // - PIT_Interview_Detail_Shortcode::enqueue_scripts() handles frontend.css, interview-detail.css, and interview-detail-modals.css
         // - PIT_Calendar_Shortcode::enqueue_scripts() handles calendar.css
         // This prevents CSS from loading on pages that don't use the plugin.
     }

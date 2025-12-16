@@ -101,14 +101,14 @@ class PIT_Interview_Detail_Shortcode {
         wp_enqueue_style(
             'pit-interview-detail',
             PIT_PLUGIN_URL . 'assets/css/interview-detail.css',
-            [],
+            ['pit-frontend'],
             PIT_VERSION
         );
 
         wp_enqueue_style(
             'pit-interview-detail-modals',
             PIT_PLUGIN_URL . 'assets/css/interview-detail-modals.css',
-            [],
+            ['pit-interview-detail'],
             PIT_VERSION
         );
 
