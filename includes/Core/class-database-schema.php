@@ -20,7 +20,7 @@ class Database_Schema {
     /**
      * Database version for migrations
      */
-    const DB_VERSION = '3.3.1';
+    const DB_VERSION = '3.4.0';
 
     /**
      * Create all database tables
@@ -34,6 +34,7 @@ class Database_Schema {
         self::create_user_tables($charset_collate);
         self::create_podcast_tables($charset_collate);
         self::create_guest_tables($charset_collate);
+        self::create_appearance_tag_tables($charset_collate);
         self::create_social_metrics_tables($charset_collate);
         self::create_job_tables($charset_collate);
 
@@ -388,6 +389,61 @@ class Database_Schema {
         ) $charset_collate;";
 
         dbDelta($sql_content);
+    }
+
+    /**
+     * Create appearance tag tables
+     */
+    private static function create_appearance_tag_tables($charset_collate) {
+        global $wpdb;
+
+        // Appearance tags master table (user-defined tags)
+        $table_tags = $wpdb->prefix . 'pit_appearance_tags';
+        $sql_tags = "CREATE TABLE $table_tags (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            -- User Ownership (tags are per-user)
+            user_id bigint(20) UNSIGNED NOT NULL,
+
+            -- Tag Info
+            name varchar(100) NOT NULL,
+            slug varchar(100) NOT NULL,
+            color varchar(7) DEFAULT '#6b7280',
+            description text DEFAULT NULL,
+
+            -- Usage tracking
+            usage_count int(11) DEFAULT 0,
+
+            -- Timestamps
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (id),
+            UNIQUE KEY user_slug_unique (user_id, slug),
+            KEY user_id_idx (user_id),
+            KEY usage_count_idx (usage_count)
+        ) $charset_collate;";
+
+        dbDelta($sql_tags);
+
+        // Appearance-Tag relationships (many-to-many junction)
+        $table_tag_links = $wpdb->prefix . 'pit_appearance_tag_links';
+        $sql_tag_links = "CREATE TABLE $table_tag_links (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            appearance_id bigint(20) UNSIGNED NOT NULL,
+            tag_id bigint(20) UNSIGNED NOT NULL,
+
+            -- Timestamps
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (id),
+            UNIQUE KEY appearance_tag_unique (appearance_id, tag_id),
+            KEY appearance_id_idx (appearance_id),
+            KEY tag_id_idx (tag_id)
+        ) $charset_collate;";
+
+        dbDelta($sql_tag_links);
     }
 
     /**
@@ -826,6 +882,9 @@ class Database_Schema {
             'pit_topics',
             'pit_guest_topics',
             'pit_guest_network',
+            // Appearance tag tables
+            'pit_appearance_tags',
+            'pit_appearance_tag_links',
             // Social metrics tables
             'pit_social_links',
             'pit_metrics',

@@ -34,7 +34,11 @@
                 source: '',
                 guestProfileId: '',
                 showArchived: false,
+                tags: [], // Selected tag IDs for filtering
             },
+            // Tags (v3.4.0)
+            availableTags: [],
+            appearanceTags: {}, // Map of appearance_id -> tags array
             guestProfiles: [],
             // Pipeline stages loaded from database
             statusColumns: [],
@@ -85,6 +89,16 @@
 
                 if (!state.filters.showArchived) {
                     result = result.filter(i => !i.is_archived);
+                }
+
+                // Tag filter (v3.4.0)
+                if (state.filters.tags && state.filters.tags.length > 0) {
+                    result = result.filter(i => {
+                        const interviewTags = state.appearanceTags[i.id] || [];
+                        const interviewTagIds = interviewTags.map(t => t.id);
+                        // Check if any selected filter tag is applied to this interview
+                        return state.filters.tags.some(tagId => interviewTagIds.includes(tagId));
+                    });
                 }
 
                 return result;
@@ -240,6 +254,84 @@
                 } catch (err) {
                     console.error('Failed to fetch guest profiles:', err);
                 }
+            },
+
+            // Tag methods (v3.4.0)
+            async fetchAvailableTags() {
+                try {
+                    const response = await fetch(
+                        `${guestifyData.restUrl}tags`,
+                        {
+                            headers: {
+                                'X-WP-Nonce': guestifyData.nonce,
+                            },
+                        }
+                    );
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.availableTags = data.data || [];
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch available tags:', err);
+                }
+            },
+
+            async fetchAppearanceTags() {
+                // Get all appearance IDs
+                const appearanceIds = this.interviews.map(i => i.id);
+                if (appearanceIds.length === 0) return;
+
+                try {
+                    // Fetch tags for all appearances in batches
+                    // For simplicity, fetch each appearance's tags individually
+                    // Could be optimized with a batch endpoint later
+                    const tagPromises = appearanceIds.map(async (id) => {
+                        try {
+                            const response = await fetch(
+                                `${guestifyData.restUrl}appearances/${id}/tags`,
+                                {
+                                    headers: {
+                                        'X-WP-Nonce': guestifyData.nonce,
+                                    },
+                                }
+                            );
+                            if (response.ok) {
+                                const data = await response.json();
+                                return { id, tags: data.data || [] };
+                            }
+                            return { id, tags: [] };
+                        } catch {
+                            return { id, tags: [] };
+                        }
+                    });
+
+                    const results = await Promise.all(tagPromises);
+                    const tagsMap = {};
+                    results.forEach(({ id, tags }) => {
+                        tagsMap[id] = tags;
+                    });
+                    this.appearanceTags = tagsMap;
+                } catch (err) {
+                    console.error('Failed to fetch appearance tags:', err);
+                }
+            },
+
+            toggleTagFilter(tagId) {
+                const index = this.filters.tags.indexOf(tagId);
+                if (index === -1) {
+                    this.filters.tags.push(tagId);
+                } else {
+                    this.filters.tags.splice(index, 1);
+                }
+            },
+
+            clearTagFilters() {
+                this.filters.tags = [];
+            },
+
+            getTagsForAppearance(appearanceId) {
+                return this.appearanceTags[appearanceId] || [];
             },
 
             // Portfolio methods (Phase 5)
@@ -473,6 +565,65 @@
                     </option>
                 </select>
                 
+                <!-- Tag Filter (v3.4.0) -->
+                <div class="tag-filter-wrapper" style="position: relative;">
+                    <button
+                        type="button"
+                        @click="showTagDropdown = !showTagDropdown"
+                        style="padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px; background: white; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                            <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                        </svg>
+                        Tags
+                        <span v-if="selectedTagCount > 0" style="background: #3b82f6; color: white; padding: 1px 6px; border-radius: 10px; font-size: 11px;">
+                            {{ selectedTagCount }}
+                        </span>
+                    </button>
+
+                    <div
+                        v-if="showTagDropdown"
+                        style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; min-width: 200px; max-height: 300px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                        <div v-if="store.availableTags.length === 0" style="padding: 12px; color: #94a3b8; font-size: 13px;">
+                            No tags created yet
+                        </div>
+                        <div v-else>
+                            <div
+                                v-for="tag in store.availableTags"
+                                :key="tag.id"
+                                @click="toggleTag(tag.id)"
+                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
+                                :style="{ background: isTagSelected(tag.id) ? '#f0f9ff' : 'white' }"
+                                @mouseenter="$event.target.style.background = isTagSelected(tag.id) ? '#e0f2fe' : '#f1f5f9'"
+                                @mouseleave="$event.target.style.background = isTagSelected(tag.id) ? '#f0f9ff' : 'white'">
+                                <input
+                                    type="checkbox"
+                                    :checked="isTagSelected(tag.id)"
+                                    style="pointer-events: none;">
+                                <span
+                                    style="width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;"
+                                    :style="{ backgroundColor: tag.color }"></span>
+                                <span style="font-size: 13px; flex: 1;">{{ tag.name }}</span>
+                                <span style="font-size: 11px; color: #94a3b8;">{{ tag.usage_count }}</span>
+                            </div>
+                            <div v-if="selectedTagCount > 0" style="padding: 8px 12px; border-top: 1px solid #e2e8f0;">
+                                <button
+                                    type="button"
+                                    @click="clearTags"
+                                    style="width: 100%; padding: 6px; background: #f1f5f9; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; color: #64748b;">
+                                    Clear All Tags
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Backdrop to close dropdown -->
+                    <div
+                        v-if="showTagDropdown"
+                        @click="showTagDropdown = false"
+                        style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;"></div>
+                </div>
+
                 <label style="display: flex; align-items: center; gap: 4px;">
                     <input type="checkbox" v-model="showArchived">
                     Show Archived
@@ -515,11 +666,41 @@
                 },
             });
 
+            // Tag filter state (v3.4.0)
+            const showTagDropdown = ref(false);
+
+            const selectedTagCount = computed(() => store.filters.tags.length);
+
+            const isTagSelected = (tagId) => store.filters.tags.includes(tagId);
+
+            const toggleTag = (tagId) => {
+                store.toggleTagFilter(tagId);
+            };
+
+            const clearTags = () => {
+                store.clearTagFilters();
+                showTagDropdown.value = false;
+            };
+
             onMounted(() => {
                 store.fetchGuestProfiles();
             });
 
-            return { store, searchQuery, statusFilter, priorityFilter, sourceFilter, guestProfileFilter, showArchived };
+            return {
+                store,
+                searchQuery,
+                statusFilter,
+                priorityFilter,
+                sourceFilter,
+                guestProfileFilter,
+                showArchived,
+                // Tag filter (v3.4.0)
+                showTagDropdown,
+                selectedTagCount,
+                isTagSelected,
+                toggleTag,
+                clearTags,
+            };
         },
     };
 
@@ -586,9 +767,26 @@
                     <span v-if="interview.source">{{ interview.source }}</span>
                     <span v-if="interview.episode_date">{{ formatDate(interview.episode_date) }}</span>
                 </div>
+                <!-- Tags (v3.4.0) -->
+                <div v-if="interviewTags.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;">
+                    <span
+                        v-for="tag in interviewTags.slice(0, 3)"
+                        :key="tag.id"
+                        :style="{ backgroundColor: tag.color + '20', color: tag.color, borderColor: tag.color }"
+                        style="display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 10px; border: 1px solid;">
+                        {{ tag.name }}
+                    </span>
+                    <span v-if="interviewTags.length > 3" style="font-size: 10px; color: #94a3b8; padding: 2px 4px;">
+                        +{{ interviewTags.length - 3 }}
+                    </span>
+                </div>
             </div>
         `,
         setup(props) {
+            const store = useInterviewStore();
+
+            const interviewTags = computed(() => store.getTagsForAppearance(props.interview.id));
+
             const formatDate = (dateStr) => {
                 if (!dateStr) return '';
                 const date = new Date(dateStr);
@@ -610,7 +808,7 @@
                 window.location.href = '/app/interview/detail/?id=' + props.interview.id;
             };
 
-            return { formatDate, onDragStart, onDragEnd, openDetail };
+            return { formatDate, onDragStart, onDragEnd, openDetail, interviewTags };
         },
     };
 
@@ -726,6 +924,22 @@
                     </span>
                 </td>
                 <td style="padding: 12px;">{{ interview.source || '-' }}</td>
+                <td style="padding: 12px;">
+                    <!-- Tags (v3.4.0) -->
+                    <div v-if="interviewTags.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px;">
+                        <span
+                            v-for="tag in interviewTags.slice(0, 2)"
+                            :key="tag.id"
+                            :style="{ backgroundColor: tag.color + '20', color: tag.color, borderColor: tag.color }"
+                            style="display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 10px; border: 1px solid;">
+                            {{ tag.name }}
+                        </span>
+                        <span v-if="interviewTags.length > 2" style="font-size: 10px; color: #94a3b8; padding: 2px 4px;">
+                            +{{ interviewTags.length - 2 }}
+                        </span>
+                    </div>
+                    <span v-else style="color: #94a3b8;">-</span>
+                </td>
                 <td style="padding: 12px;">{{ formatDate(interview.updated_at) }}</td>
             </tr>
         `,
@@ -733,6 +947,7 @@
             const store = useInterviewStore();
 
             const isSelected = computed(() => store.selectedIds.includes(props.interview.id));
+            const interviewTags = computed(() => store.getTagsForAppearance(props.interview.id));
 
             const toggleSelect = () => {
                 store.toggleSelection(props.interview.id);
@@ -765,7 +980,7 @@
                 window.location.href = '/app/interview/detail/?id=' + props.interview.id;
             };
 
-            return { store, isSelected, toggleSelect, priorityStar, statusColor, statusLabel, formatDate, onRowClick };
+            return { store, isSelected, toggleSelect, priorityStar, statusColor, statusLabel, formatDate, onRowClick, interviewTags };
         },
     };
 
@@ -788,6 +1003,7 @@
                             <th style="padding: 12px; text-align: left;">Podcast Name</th>
                             <th style="padding: 12px; text-align: left;">Status</th>
                             <th style="padding: 12px; text-align: left;">Source</th>
+                            <th style="padding: 12px; text-align: left;">Tags</th>
                             <th style="padding: 12px; text-align: left;">Updated</th>
                         </tr>
                     </thead>
@@ -1328,10 +1544,11 @@
             onMounted(async () => {
                 // Load pipeline stages first (required for columns)
                 await store.fetchPipelineStages();
-                
+
                 // Then load other data
                 store.fetchGuestProfiles();
-                
+                store.fetchAvailableTags(); // Load available tags (v3.4.0)
+
                 // Check localStorage for saved view preference
                 const savedView = localStorage.getItem('pit_interview_view');
                 if (savedView && (savedView === 'kanban' || savedView === 'table' || savedView === 'portfolio')) {
@@ -1345,7 +1562,10 @@
                 }
 
                 // Fetch interviews
-                store.fetchInterviews();
+                await store.fetchInterviews();
+
+                // Load tags for appearances (v3.4.0)
+                store.fetchAppearanceTags();
             });
 
             // Watch for view changes and save to localStorage

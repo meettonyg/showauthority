@@ -90,6 +90,13 @@
             campaignsLoading: false,
             startingCampaign: false,
 
+            // Tags (v3.4.0)
+            tags: [],
+            availableTags: [],
+            tagsLoading: false,
+            tagInput: '',
+            showTagDropdown: false,
+
             // Config from WordPress
             config: {
                 restUrl: '',
@@ -200,6 +207,8 @@
                     await Promise.all([
                         this.loadTasks(),
                         this.loadNotes(),
+                        this.loadTags(),
+                        this.loadAvailableTags(),
                     ]);
                 } catch (err) {
                     this.error = err.message;
@@ -1033,6 +1042,142 @@
                 } finally {
                     this.startingCampaign = false;
                 }
+            },
+
+            // =================================================================
+            // TAGS (v3.4.0)
+            // =================================================================
+
+            /**
+             * Load tags for this appearance
+             */
+            async loadTags() {
+                this.tagsLoading = true;
+                try {
+                    const response = await this.api(`appearances/${this.config.interviewId}/tags`);
+                    this.tags = response.data || [];
+                } catch (err) {
+                    console.error('Failed to load tags:', err);
+                } finally {
+                    this.tagsLoading = false;
+                }
+            },
+
+            /**
+             * Load all available tags for the user
+             */
+            async loadAvailableTags() {
+                try {
+                    const response = await this.api('tags');
+                    this.availableTags = response.data || [];
+                } catch (err) {
+                    console.error('Failed to load available tags:', err);
+                }
+            },
+
+            /**
+             * Add a tag to this appearance
+             * Can use existing tag_id or create new tag with name
+             */
+            async addTag(tagData) {
+                this.tagsLoading = true;
+                try {
+                    const response = await this.api(`appearances/${this.config.interviewId}/tags`, {
+                        method: 'POST',
+                        body: JSON.stringify(tagData),
+                    });
+                    // Update local tags with the returned list
+                    this.tags = response.all_tags || [];
+                    // Refresh available tags (new tag may have been created)
+                    await this.loadAvailableTags();
+                    this.tagInput = '';
+                    this.showTagDropdown = false;
+                    return response.data;
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                } finally {
+                    this.tagsLoading = false;
+                }
+            },
+
+            /**
+             * Remove a tag from this appearance
+             */
+            async removeTag(tagId) {
+                this.tagsLoading = true;
+                try {
+                    const response = await this.api(`appearances/${this.config.interviewId}/tags/${tagId}`, {
+                        method: 'DELETE',
+                    });
+                    // Update local tags with the returned list
+                    this.tags = response.all_tags || [];
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                } finally {
+                    this.tagsLoading = false;
+                }
+            },
+
+            /**
+             * Create a new tag (master list)
+             */
+            async createTag(tagData) {
+                try {
+                    const response = await this.api('tags', {
+                        method: 'POST',
+                        body: JSON.stringify(tagData),
+                    });
+                    await this.loadAvailableTags();
+                    return response.data;
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                }
+            },
+
+            /**
+             * Delete a tag from master list
+             */
+            async deleteTag(tagId) {
+                try {
+                    await this.api(`tags/${tagId}`, {
+                        method: 'DELETE',
+                    });
+                    await this.loadAvailableTags();
+                    // Also refresh appearance tags in case removed tag was applied
+                    await this.loadTags();
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                }
+            },
+
+            /**
+             * Get filtered available tags based on search input
+             */
+            getFilteredTags() {
+                if (!this.tagInput) {
+                    // Filter out already applied tags
+                    const appliedIds = this.tags.map(t => t.id);
+                    return this.availableTags.filter(t => !appliedIds.includes(t.id));
+                }
+                const search = this.tagInput.toLowerCase();
+                const appliedIds = this.tags.map(t => t.id);
+                return this.availableTags.filter(t =>
+                    !appliedIds.includes(t.id) &&
+                    t.name.toLowerCase().includes(search)
+                );
+            },
+
+            /**
+             * Check if current input matches an existing tag
+             */
+            tagInputMatchesExisting() {
+                if (!this.tagInput) return false;
+                const search = this.tagInput.toLowerCase().trim();
+                return this.availableTags.some(t => t.name.toLowerCase() === search);
             }
         }
     });
@@ -1530,6 +1675,89 @@
                                             <div class="tag-content">
                                                 <p>{{ interview?.source || 'Not specified' }}</p>
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tags Card -->
+                                    <div class="sidebar-card">
+                                        <div class="sidebar-header">
+                                            <h3 class="sidebar-title">Tags</h3>
+                                        </div>
+                                        <div class="sidebar-content">
+                                            <!-- Applied Tags -->
+                                            <div class="applied-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">
+                                                <span
+                                                    v-for="tag in tags"
+                                                    :key="tag.id"
+                                                    class="appearance-tag"
+                                                    :style="{ backgroundColor: tag.color + '20', color: tag.color, borderColor: tag.color }"
+                                                    style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px; font-size: 12px; border: 1px solid;">
+                                                    {{ tag.name }}
+                                                    <button
+                                                        type="button"
+                                                        @click="handleRemoveTag(tag.id)"
+                                                        style="background: none; border: none; padding: 0; cursor: pointer; display: flex; opacity: 0.7;"
+                                                        :style="{ color: tag.color }"
+                                                        title="Remove tag">
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                        </svg>
+                                                    </button>
+                                                </span>
+                                                <span v-if="tags.length === 0 && !tagsLoading" style="color: #94a3b8; font-size: 12px; font-style: italic;">
+                                                    No tags applied
+                                                </span>
+                                            </div>
+
+                                            <!-- Tag Input -->
+                                            <div class="tag-input-wrapper" style="position: relative;">
+                                                <div style="display: flex; gap: 8px;">
+                                                    <input
+                                                        type="text"
+                                                        v-model="tagInput"
+                                                        placeholder="Add a tag..."
+                                                        @focus="showTagDropdown = true"
+                                                        @keydown.enter.prevent="handleTagInputEnter"
+                                                        @keydown.escape="showTagDropdown = false"
+                                                        style="flex: 1; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px;">
+                                                    <button
+                                                        v-if="tagInput && !tagInputMatchesExisting"
+                                                        type="button"
+                                                        @click="handleCreateAndAddTag"
+                                                        class="button small"
+                                                        style="padding: 8px 12px; font-size: 12px;"
+                                                        :disabled="tagsLoading">
+                                                        Create
+                                                    </button>
+                                                </div>
+
+                                                <!-- Tag Dropdown -->
+                                                <div
+                                                    v-if="showTagDropdown && filteredTags.length > 0"
+                                                    class="tag-dropdown"
+                                                    style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                                                    <div
+                                                        v-for="tag in filteredTags"
+                                                        :key="tag.id"
+                                                        @click="handleSelectTag(tag)"
+                                                        style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
+                                                        @mouseenter="$event.target.style.background = '#f1f5f9'"
+                                                        @mouseleave="$event.target.style.background = 'white'">
+                                                        <span
+                                                            style="width: 12px; height: 12px; border-radius: 3px;"
+                                                            :style="{ backgroundColor: tag.color }"></span>
+                                                        <span style="font-size: 13px;">{{ tag.name }}</span>
+                                                        <span style="font-size: 11px; color: #94a3b8; margin-left: auto;">{{ tag.usage_count }} uses</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Close dropdown when clicking outside -->
+                                            <div
+                                                v-if="showTagDropdown"
+                                                @click="showTagDropdown = false"
+                                                style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -3012,6 +3240,68 @@
             };
 
             // =================================================================
+            // TAG METHODS (v3.4.0)
+            // =================================================================
+
+            const handleRemoveTag = async (tagId) => {
+                try {
+                    await store.removeTag(tagId);
+                    showSuccessMessage('Tag removed');
+                } catch (err) {
+                    console.error('Failed to remove tag:', err);
+                    showErrorMessage('Failed to remove tag');
+                }
+            };
+
+            const handleSelectTag = async (tag) => {
+                try {
+                    await store.addTag({ tag_id: tag.id });
+                    showSuccessMessage('Tag added');
+                } catch (err) {
+                    console.error('Failed to add tag:', err);
+                    showErrorMessage('Failed to add tag');
+                }
+            };
+
+            const handleTagInputEnter = async () => {
+                const trimmedInput = store.tagInput.trim();
+                if (!trimmedInput) return;
+
+                // Check if input matches an existing tag
+                const existingTag = store.availableTags.find(
+                    t => t.name.toLowerCase() === trimmedInput.toLowerCase()
+                );
+
+                if (existingTag) {
+                    // Add existing tag
+                    await handleSelectTag(existingTag);
+                } else {
+                    // Create new tag and add it
+                    await handleCreateAndAddTag();
+                }
+            };
+
+            const handleCreateAndAddTag = async () => {
+                const trimmedInput = store.tagInput.trim();
+                if (!trimmedInput) return;
+
+                try {
+                    // Generate a random color from a palette
+                    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+                    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+                    await store.addTag({
+                        name: trimmedInput,
+                        color: randomColor,
+                    });
+                    showSuccessMessage('Tag created and added');
+                } catch (err) {
+                    console.error('Failed to create tag:', err);
+                    showErrorMessage('Failed to create tag');
+                }
+            };
+
+            // =================================================================
             // EMAIL COMPOSE METHODS
             // =================================================================
 
@@ -3387,6 +3677,27 @@
                 applyTemplate,
                 handleSendEmail,
                 handleStartCampaign,
+
+                // Tags state (v3.4.0)
+                tags: computed(() => store.tags),
+                availableTags: computed(() => store.availableTags),
+                tagsLoading: computed(() => store.tagsLoading),
+                tagInput: computed({
+                    get: () => store.tagInput,
+                    set: (val) => store.tagInput = val,
+                }),
+                showTagDropdown: computed({
+                    get: () => store.showTagDropdown,
+                    set: (val) => store.showTagDropdown = val,
+                }),
+                filteredTags: computed(() => store.getFilteredTags()),
+                tagInputMatchesExisting: computed(() => store.tagInputMatchesExisting()),
+
+                // Tag methods
+                handleRemoveTag,
+                handleSelectTag,
+                handleTagInputEnter,
+                handleCreateAndAddTag,
             };
         }
     };

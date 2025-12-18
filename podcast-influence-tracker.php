@@ -73,6 +73,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/Guests/class-opportunity-repository.php';
         require_once PIT_PLUGIN_DIR . 'includes/Guests/class-private-contact-repository.php';
         require_once PIT_PLUGIN_DIR . 'includes/Guests/class-claim-request-repository.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Guests/class-appearance-tag-repository.php';
 
         // ENGAGEMENTS DOMAIN (v4.0)
         require_once PIT_PLUGIN_DIR . 'includes/Engagements/class-engagement-repository.php';
@@ -128,6 +129,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-appearances.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-appearance-tasks.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-appearance-notes.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-appearance-tags.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-guest-profiles.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-calendar-events.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-pipeline-stages.php';
@@ -239,6 +241,7 @@ class Podcast_Influence_Tracker {
         PIT_REST_Appearances::register_routes();
         PIT_REST_Appearance_Tasks::register_routes();
         PIT_REST_Appearance_Notes::register_routes();
+        PIT_REST_Appearance_Tags::register_routes();
         PIT_REST_Calendar_Sync::register_routes();
         PIT_REST_Pipeline_Stages::register_routes();
 
