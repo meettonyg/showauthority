@@ -22,6 +22,11 @@
     const { createPinia, defineStore } = Pinia;
 
     // ==========================================================================
+    // CONSTANTS
+    // ==========================================================================
+    const TAG_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+
+    // ==========================================================================
     // PINIA STORE
     // ==========================================================================
     const useDetailStore = defineStore('interviewDetail', {
@@ -1158,17 +1163,14 @@
              * Get filtered available tags based on search input
              */
             getFilteredTags() {
-                if (!this.tagInput) {
-                    // Filter out already applied tags
-                    const appliedIds = this.tags.map(t => t.id);
-                    return this.availableTags.filter(t => !appliedIds.includes(t.id));
-                }
-                const search = this.tagInput.toLowerCase();
-                const appliedIds = this.tags.map(t => t.id);
-                return this.availableTags.filter(t =>
-                    !appliedIds.includes(t.id) &&
-                    t.name.toLowerCase().includes(search)
-                );
+                const appliedIds = new Set(this.tags.map(t => t.id));
+                const search = this.tagInput?.toLowerCase() || '';
+
+                return this.availableTags.filter(t => {
+                    if (appliedIds.has(t.id)) return false;
+                    if (search && !t.name.toLowerCase().includes(search)) return false;
+                    return true;
+                });
             },
 
             /**
@@ -1685,18 +1687,17 @@
                                         </div>
                                         <div class="sidebar-content">
                                             <!-- Applied Tags -->
-                                            <div class="applied-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">
+                                            <div class="applied-tags">
                                                 <span
                                                     v-for="tag in tags"
                                                     :key="tag.id"
                                                     class="appearance-tag"
-                                                    :style="{ backgroundColor: tag.color + '20', color: tag.color, borderColor: tag.color }"
-                                                    style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px; font-size: 12px; border: 1px solid;">
+                                                    :style="{ backgroundColor: tag.color + '20', color: tag.color, borderColor: tag.color }">
                                                     {{ tag.name }}
                                                     <button
                                                         type="button"
                                                         @click="handleRemoveTag(tag.id)"
-                                                        style="background: none; border: none; padding: 0; cursor: pointer; display: flex; opacity: 0.7;"
+                                                        class="appearance-tag-remove"
                                                         :style="{ color: tag.color }"
                                                         title="Remove tag">
                                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1705,28 +1706,27 @@
                                                         </svg>
                                                     </button>
                                                 </span>
-                                                <span v-if="tags.length === 0 && !tagsLoading" style="color: #94a3b8; font-size: 12px; font-style: italic;">
+                                                <span v-if="tags.length === 0 && !tagsLoading" class="tags-empty-text">
                                                     No tags applied
                                                 </span>
                                             </div>
 
                                             <!-- Tag Input -->
-                                            <div class="tag-input-wrapper" style="position: relative;">
-                                                <div style="display: flex; gap: 8px;">
+                                            <div class="tag-input-wrapper">
+                                                <div class="tag-input-row">
                                                     <input
                                                         type="text"
                                                         v-model="tagInput"
                                                         placeholder="Add a tag..."
+                                                        class="tag-input"
                                                         @focus="showTagDropdown = true"
                                                         @keydown.enter.prevent="handleTagInputEnter"
-                                                        @keydown.escape="showTagDropdown = false"
-                                                        style="flex: 1; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px;">
+                                                        @keydown.escape="showTagDropdown = false">
                                                     <button
                                                         v-if="tagInput && !tagInputMatchesExisting"
                                                         type="button"
                                                         @click="handleCreateAndAddTag"
                                                         class="button small"
-                                                        style="padding: 8px 12px; font-size: 12px;"
                                                         :disabled="tagsLoading">
                                                         Create
                                                     </button>
@@ -1735,20 +1735,17 @@
                                                 <!-- Tag Dropdown -->
                                                 <div
                                                     v-if="showTagDropdown && filteredTags.length > 0"
-                                                    class="tag-dropdown"
-                                                    style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                                                    class="tag-dropdown">
                                                     <div
                                                         v-for="tag in filteredTags"
                                                         :key="tag.id"
                                                         @click="handleSelectTag(tag)"
-                                                        style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
-                                                        @mouseenter="$event.target.style.background = '#f1f5f9'"
-                                                        @mouseleave="$event.target.style.background = 'white'">
+                                                        class="tag-dropdown-item">
                                                         <span
-                                                            style="width: 12px; height: 12px; border-radius: 3px;"
+                                                            class="tag-color-dot"
                                                             :style="{ backgroundColor: tag.color }"></span>
-                                                        <span style="font-size: 13px;">{{ tag.name }}</span>
-                                                        <span style="font-size: 11px; color: #94a3b8; margin-left: auto;">{{ tag.usage_count }} uses</span>
+                                                        <span class="tag-dropdown-name">{{ tag.name }}</span>
+                                                        <span class="tag-dropdown-count">{{ tag.usage_count }} uses</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1757,7 +1754,7 @@
                                             <div
                                                 v-if="showTagDropdown"
                                                 @click="showTagDropdown = false"
-                                                style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;"></div>
+                                                class="tag-dropdown-backdrop"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -3286,9 +3283,8 @@
                 if (!trimmedInput) return;
 
                 try {
-                    // Generate a random color from a palette
-                    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
-                    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+                    // Generate a random color from the palette constant
+                    const randomColor = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)];
 
                     await store.addTag({
                         name: trimmedInput,

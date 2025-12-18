@@ -283,35 +283,24 @@
                 if (appearanceIds.length === 0) return;
 
                 try {
-                    // Fetch tags for all appearances in batches
-                    // For simplicity, fetch each appearance's tags individually
-                    // Could be optimized with a batch endpoint later
-                    const tagPromises = appearanceIds.map(async (id) => {
-                        try {
-                            const response = await fetch(
-                                `${guestifyData.restUrl}appearances/${id}/tags`,
-                                {
-                                    headers: {
-                                        'X-WP-Nonce': guestifyData.nonce,
-                                    },
-                                }
-                            );
-                            if (response.ok) {
-                                const data = await response.json();
-                                return { id, tags: data.data || [] };
-                            }
-                            return { id, tags: [] };
-                        } catch {
-                            return { id, tags: [] };
+                    // Use batch endpoint to fetch all tags in a single request
+                    const response = await fetch(
+                        `${guestifyData.restUrl}appearances/tags/batch`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-WP-Nonce': guestifyData.nonce,
+                            },
+                            body: JSON.stringify({ appearance_ids: appearanceIds }),
                         }
-                    });
+                    );
 
-                    const results = await Promise.all(tagPromises);
-                    const tagsMap = {};
-                    results.forEach(({ id, tags }) => {
-                        tagsMap[id] = tags;
-                    });
-                    this.appearanceTags = tagsMap;
+                    if (response.ok) {
+                        const result = await response.json();
+                        // The API returns { data: { appearance_id: [tags], ... } }
+                        this.appearanceTags = result.data || {};
+                    }
                 } catch (err) {
                     console.error('Failed to fetch appearance tags:', err);
                 }

@@ -12,6 +12,7 @@
  * - GET    /appearances/{id}/tags          - Get tags for an appearance
  * - POST   /appearances/{id}/tags          - Add tag to appearance
  * - DELETE /appearances/{id}/tags/{tag_id} - Remove tag from appearance
+ * - POST   /appearances/tags/batch         - Get tags for multiple appearances
  *
  * @package Podcast_Influence_Tracker
  * @since 3.4.0
@@ -161,6 +162,22 @@ class PIT_REST_Appearance_Tags {
                 'tag_id' => [
                     'type' => 'integer',
                     'required' => true,
+                ],
+            ],
+        ]);
+
+        // Batch get tags for multiple appearances
+        register_rest_route(self::NAMESPACE, '/appearances/tags/batch', [
+            'methods' => 'POST',
+            'callback' => [__CLASS__, 'get_tags_batch'],
+            'permission_callback' => [__CLASS__, 'check_permissions'],
+            'args' => [
+                'appearance_ids' => [
+                    'type' => 'array',
+                    'required' => true,
+                    'items' => [
+                        'type' => 'integer',
+                    ],
                 ],
             ],
         ]);
@@ -425,6 +442,45 @@ class PIT_REST_Appearance_Tags {
         return new WP_REST_Response([
             'all_tags' => $all_data,
             'message' => 'Tag removed from appearance',
+        ], 200);
+    }
+
+    /**
+     * Batch get tags for multiple appearances
+     *
+     * Efficiently fetches tags for multiple appearances in a single query.
+     */
+    public static function get_tags_batch($request) {
+        $user_id = get_current_user_id();
+        $appearance_ids = $request->get_param('appearance_ids');
+
+        if (empty($appearance_ids) || !is_array($appearance_ids)) {
+            return new WP_REST_Response([
+                'data' => [],
+            ], 200);
+        }
+
+        // Sanitize and validate IDs
+        $appearance_ids = array_map('intval', $appearance_ids);
+        $appearance_ids = array_filter($appearance_ids, function($id) { return $id > 0; });
+
+        if (empty($appearance_ids)) {
+            return new WP_REST_Response([
+                'data' => [],
+            ], 200);
+        }
+
+        // Use the batch query method from repository
+        $grouped_tags = PIT_Appearance_Tag_Repository::get_for_appearances($appearance_ids, $user_id);
+
+        // Format tags for each appearance
+        $data = [];
+        foreach ($grouped_tags as $appearance_id => $tags) {
+            $data[$appearance_id] = array_map([PIT_Appearance_Tag_Repository::class, 'format_tag'], $tags);
+        }
+
+        return new WP_REST_Response([
+            'data' => $data,
         ], 200);
     }
 }
