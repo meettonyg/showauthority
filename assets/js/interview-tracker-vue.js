@@ -1352,6 +1352,59 @@
                                 </option>
                             </select>
                         </div>
+                        <div class="pit-filter-field">
+                            <label class="pit-filter-label">Tags</label>
+                            <div class="pit-tag-filter" style="position: relative;">
+                                <button
+                                    type="button"
+                                    @click="showTagDropdown = !showTagDropdown"
+                                    class="pit-select"
+                                    style="width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                                    <span v-if="store.filters.tags.length === 0">All Tags</span>
+                                    <span v-else>{{ store.filters.tags.length }} tag{{ store.filters.tags.length > 1 ? 's' : '' }} selected</span>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </button>
+                                <div
+                                    v-if="showTagDropdown"
+                                    style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 250px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                                    <div v-if="store.availableTags.length === 0" style="padding: 12px; color: #94a3b8; font-size: 13px;">
+                                        No tags created yet
+                                    </div>
+                                    <template v-else>
+                                        <div
+                                            v-for="tag in store.availableTags"
+                                            :key="tag.id"
+                                            @click="store.toggleTagFilter(tag.id)"
+                                            style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
+                                            :style="{ background: store.filters.tags.includes(tag.id) ? '#f0f9ff' : 'white' }">
+                                            <input
+                                                type="checkbox"
+                                                :checked="store.filters.tags.includes(tag.id)"
+                                                style="pointer-events: none;">
+                                            <span
+                                                style="width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;"
+                                                :style="{ backgroundColor: tag.color }"></span>
+                                            <span style="font-size: 13px; flex: 1;">{{ tag.name }}</span>
+                                            <span style="font-size: 11px; color: #94a3b8;">{{ tag.usage_count }}</span>
+                                        </div>
+                                        <div v-if="store.filters.tags.length > 0" style="padding: 8px 12px; border-top: 1px solid #e2e8f0;">
+                                            <button
+                                                type="button"
+                                                @click="store.clearTagFilters(); showTagDropdown = false;"
+                                                style="width: 100%; padding: 6px; background: #f1f5f9; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; color: #64748b;">
+                                                Clear Tag Filters
+                                            </button>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div
+                                    v-if="showTagDropdown"
+                                    @click="showTagDropdown = false"
+                                    style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;"></div>
+                            </div>
+                        </div>
                     </div>
                     <div class="pit-filter-footer">
                         <label class="pit-checkbox-label">
@@ -1385,6 +1438,7 @@
         setup() {
             const store = useInterviewStore();
             const showFilters = ref(false);
+            const showTagDropdown = ref(false);
 
             const searchQuery = computed({
                 get: () => store.filters.search,
@@ -1421,6 +1475,7 @@
                 store.setFilter('source', '');
                 store.setFilter('guestProfileId', '');
                 store.setFilter('showArchived', false);
+                store.clearTagFilters();
                 store.fetchInterviews();
             };
 
@@ -1456,7 +1511,7 @@
                 localStorage.setItem('pit_interview_view', newView);
             });
 
-            return { store, searchQuery, statusFilter, priorityFilter, sourceFilter, guestProfileFilter, showArchived, showFilters, resetFilters };
+            return { store, searchQuery, statusFilter, priorityFilter, sourceFilter, guestProfileFilter, showArchived, showFilters, showTagDropdown, resetFilters };
         },
     };
 
