@@ -271,6 +271,25 @@
                 return this.appearanceTags[appearanceId] || [];
             },
 
+            async bulkUpdateTags(appearanceIds, addTagIds = [], removeTagIds = []) {
+                if (appearanceIds.length === 0) return;
+                if (addTagIds.length === 0 && removeTagIds.length === 0) return;
+
+                try {
+                    await api.patch('appearances/tags/bulk', {
+                        appearance_ids: appearanceIds,
+                        add_tag_ids: addTagIds,
+                        remove_tag_ids: removeTagIds,
+                    });
+
+                    // Refresh tags for all appearances
+                    await this.fetchAppearanceTags();
+                } catch (err) {
+                    console.error('Failed to bulk update tags:', err);
+                    throw err;
+                }
+            },
+
             // Portfolio methods (Phase 5)
             async fetchPortfolio(page = 1) {
                 this.portfolioLoading = true;
@@ -1134,7 +1153,7 @@
         template: `
             <div v-if="store.showBulkPanel" class="pit-bulk-panel">
                 <h3>Edit {{ store.selectedIds.length }} Items</h3>
-                
+
                 <div class="form-group">
                     <label>Interview Profile</label>
                     <select v-model="bulkGuestProfileId">
@@ -1144,7 +1163,7 @@
                         </option>
                     </select>
                 </div>
-                
+
                 <div class="form-group">
                     <label>Status</label>
                     <select v-model="bulkStatus">
@@ -1154,7 +1173,7 @@
                         </option>
                     </select>
                 </div>
-                
+
                 <div class="form-group">
                     <label>Priority</label>
                     <select v-model="bulkPriority">
@@ -1164,7 +1183,7 @@
                         <option value="low">Low</option>
                     </select>
                 </div>
-                
+
                 <div class="form-group">
                     <label>Source</label>
                     <select v-model="bulkSource">
@@ -1174,14 +1193,100 @@
                         </option>
                     </select>
                 </div>
-                
+
+                <div class="form-group">
+                    <label>Add Tags</label>
+                    <div style="position: relative;">
+                        <button
+                            type="button"
+                            @click="showAddTagsDropdown = !showAddTagsDropdown"
+                            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px; background: white; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                            <span v-if="tagsToAdd.length === 0">Select tags to add...</span>
+                            <span v-else>{{ tagsToAdd.length }} tag{{ tagsToAdd.length > 1 ? 's' : '' }} selected</span>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
+                        <div
+                            v-if="showAddTagsDropdown"
+                            style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                            <div v-if="store.availableTags.length === 0" style="padding: 12px; color: #94a3b8; font-size: 13px;">
+                                No tags available
+                            </div>
+                            <div
+                                v-for="tag in store.availableTags"
+                                :key="tag.id"
+                                @click="toggleTagToAdd(tag.id)"
+                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
+                                :style="{ background: tagsToAdd.includes(tag.id) ? '#f0f9ff' : 'white' }">
+                                <input type="checkbox" :checked="tagsToAdd.includes(tag.id)" style="pointer-events: none;">
+                                <span style="width: 12px; height: 12px; border-radius: 3px;" :style="{ backgroundColor: tag.color }"></span>
+                                <span style="font-size: 13px;">{{ tag.name }}</span>
+                            </div>
+                        </div>
+                        <div v-if="showAddTagsDropdown" @click="showAddTagsDropdown = false" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;"></div>
+                    </div>
+                    <div v-if="tagsToAdd.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;">
+                        <span
+                            v-for="tagId in tagsToAdd"
+                            :key="tagId"
+                            style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 11px; background: #e0f2fe; color: #0369a1;">
+                            {{ getTagName(tagId) }}
+                            <button type="button" @click="toggleTagToAdd(tagId)" style="background: none; border: none; cursor: pointer; padding: 0; color: #0369a1;">&times;</button>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Remove Tags</label>
+                    <div style="position: relative;">
+                        <button
+                            type="button"
+                            @click="showRemoveTagsDropdown = !showRemoveTagsDropdown"
+                            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px; background: white; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                            <span v-if="tagsToRemove.length === 0">Select tags to remove...</span>
+                            <span v-else>{{ tagsToRemove.length }} tag{{ tagsToRemove.length > 1 ? 's' : '' }} selected</span>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
+                        <div
+                            v-if="showRemoveTagsDropdown"
+                            style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                            <div v-if="store.availableTags.length === 0" style="padding: 12px; color: #94a3b8; font-size: 13px;">
+                                No tags available
+                            </div>
+                            <div
+                                v-for="tag in store.availableTags"
+                                :key="tag.id"
+                                @click="toggleTagToRemove(tag.id)"
+                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
+                                :style="{ background: tagsToRemove.includes(tag.id) ? '#fef2f2' : 'white' }">
+                                <input type="checkbox" :checked="tagsToRemove.includes(tag.id)" style="pointer-events: none;">
+                                <span style="width: 12px; height: 12px; border-radius: 3px;" :style="{ backgroundColor: tag.color }"></span>
+                                <span style="font-size: 13px;">{{ tag.name }}</span>
+                            </div>
+                        </div>
+                        <div v-if="showRemoveTagsDropdown" @click="showRemoveTagsDropdown = false" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;"></div>
+                    </div>
+                    <div v-if="tagsToRemove.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;">
+                        <span
+                            v-for="tagId in tagsToRemove"
+                            :key="tagId"
+                            style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 11px; background: #fee2e2; color: #b91c1c;">
+                            {{ getTagName(tagId) }}
+                            <button type="button" @click="toggleTagToRemove(tagId)" style="background: none; border: none; cursor: pointer; padding: 0; color: #b91c1c;">&times;</button>
+                        </span>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px;">
                         <input type="checkbox" v-model="bulkArchive" @change="archiveChanged = true">
                         Archive
                     </label>
                 </div>
-                
+
                 <div class="actions">
                     <button class="btn-secondary" @click="cancelBulkEdit">Cancel</button>
                     <button class="btn-primary" @click="applyBulkEdit">Apply Changes</button>
@@ -1196,6 +1301,10 @@
             const bulkSource = ref('');
             const bulkArchive = ref(false);
             const archiveChanged = ref(false);
+            const tagsToAdd = ref([]);
+            const tagsToRemove = ref([]);
+            const showAddTagsDropdown = ref(false);
+            const showRemoveTagsDropdown = ref(false);
 
             const sourceOptions = [
                 'Direct Outreach',
@@ -1218,7 +1327,40 @@
                 }
             });
 
-            const applyBulkEdit = () => {
+            const toggleTagToAdd = (tagId) => {
+                const index = tagsToAdd.value.indexOf(tagId);
+                if (index === -1) {
+                    tagsToAdd.value.push(tagId);
+                    // Remove from tagsToRemove if present
+                    const removeIndex = tagsToRemove.value.indexOf(tagId);
+                    if (removeIndex !== -1) {
+                        tagsToRemove.value.splice(removeIndex, 1);
+                    }
+                } else {
+                    tagsToAdd.value.splice(index, 1);
+                }
+            };
+
+            const toggleTagToRemove = (tagId) => {
+                const index = tagsToRemove.value.indexOf(tagId);
+                if (index === -1) {
+                    tagsToRemove.value.push(tagId);
+                    // Remove from tagsToAdd if present
+                    const addIndex = tagsToAdd.value.indexOf(tagId);
+                    if (addIndex !== -1) {
+                        tagsToAdd.value.splice(addIndex, 1);
+                    }
+                } else {
+                    tagsToRemove.value.splice(index, 1);
+                }
+            };
+
+            const getTagName = (tagId) => {
+                const tag = store.availableTags.find(t => t.id === tagId);
+                return tag ? tag.name : '';
+            };
+
+            const applyBulkEdit = async () => {
                 const updates = {};
                 if (bulkGuestProfileId.value) updates.guest_profile_id = parseInt(bulkGuestProfileId.value);
                 if (bulkStatus.value) updates.status = bulkStatus.value;
@@ -1226,10 +1368,18 @@
                 if (bulkSource.value) updates.source = bulkSource.value;
                 if (archiveChanged.value) updates.is_archived = bulkArchive.value ? 1 : 0;
 
+                // Apply field updates
                 if (Object.keys(updates).length > 0) {
-                    store.bulkUpdate(updates);
+                    await store.bulkUpdate(updates);
                 }
 
+                // Apply tag updates
+                if (tagsToAdd.value.length > 0 || tagsToRemove.value.length > 0) {
+                    await store.bulkUpdateTags(store.selectedIds, tagsToAdd.value, tagsToRemove.value);
+                }
+
+                store.showBulkPanel = false;
+                store.selectedIds = [];
                 resetForm();
             };
 
@@ -1245,18 +1395,29 @@
                 bulkSource.value = '';
                 bulkArchive.value = false;
                 archiveChanged.value = false;
+                tagsToAdd.value = [];
+                tagsToRemove.value = [];
+                showAddTagsDropdown.value = false;
+                showRemoveTagsDropdown.value = false;
             };
 
-            return { 
-                store, 
+            return {
+                store,
                 bulkGuestProfileId,
-                bulkStatus, 
-                bulkPriority, 
+                bulkStatus,
+                bulkPriority,
                 bulkSource,
                 bulkArchive,
                 archiveChanged,
+                tagsToAdd,
+                tagsToRemove,
+                showAddTagsDropdown,
+                showRemoveTagsDropdown,
                 guestProfiles: computed(() => store.guestProfiles),
                 sourceOptions,
+                toggleTagToAdd,
+                toggleTagToRemove,
+                getTagName,
                 applyBulkEdit,
                 cancelBulkEdit,
             };

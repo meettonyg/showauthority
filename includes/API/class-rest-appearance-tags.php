@@ -181,6 +181,36 @@ class PIT_REST_Appearance_Tags {
                 ],
             ],
         ]);
+
+        // Bulk add/remove tags for multiple appearances
+        register_rest_route(self::NAMESPACE, '/appearances/tags/bulk', [
+            'methods' => 'PATCH',
+            'callback' => [__CLASS__, 'bulk_update_tags'],
+            'permission_callback' => [__CLASS__, 'check_permissions'],
+            'args' => [
+                'appearance_ids' => [
+                    'type' => 'array',
+                    'required' => true,
+                    'items' => [
+                        'type' => 'integer',
+                    ],
+                ],
+                'add_tag_ids' => [
+                    'type' => 'array',
+                    'default' => [],
+                    'items' => [
+                        'type' => 'integer',
+                    ],
+                ],
+                'remove_tag_ids' => [
+                    'type' => 'array',
+                    'default' => [],
+                    'items' => [
+                        'type' => 'integer',
+                    ],
+                ],
+            ],
+        ]);
     }
 
     /**
@@ -481,6 +511,67 @@ class PIT_REST_Appearance_Tags {
 
         return new WP_REST_Response([
             'data' => $data,
+        ], 200);
+    }
+
+    /**
+     * Bulk add/remove tags for multiple appearances
+     *
+     * Efficiently adds or removes tags from multiple appearances.
+     */
+    public static function bulk_update_tags($request) {
+        $user_id = get_current_user_id();
+        $appearance_ids = $request->get_param('appearance_ids');
+        $add_tag_ids = $request->get_param('add_tag_ids') ?: [];
+        $remove_tag_ids = $request->get_param('remove_tag_ids') ?: [];
+
+        if (empty($appearance_ids) || !is_array($appearance_ids)) {
+            return new WP_Error('invalid_data', 'No appearances specified', ['status' => 400]);
+        }
+
+        if (empty($add_tag_ids) && empty($remove_tag_ids)) {
+            return new WP_Error('invalid_data', 'No tags to add or remove', ['status' => 400]);
+        }
+
+        // Sanitize IDs
+        $appearance_ids = array_map('intval', $appearance_ids);
+        $appearance_ids = array_filter($appearance_ids, function($id) { return $id > 0; });
+        $add_tag_ids = array_map('intval', $add_tag_ids);
+        $add_tag_ids = array_filter($add_tag_ids, function($id) { return $id > 0; });
+        $remove_tag_ids = array_map('intval', $remove_tag_ids);
+        $remove_tag_ids = array_filter($remove_tag_ids, function($id) { return $id > 0; });
+
+        $added_count = 0;
+        $removed_count = 0;
+
+        // Process each appearance
+        foreach ($appearance_ids as $appearance_id) {
+            // Verify ownership
+            if (!self::verify_appearance_ownership($appearance_id)) {
+                continue;
+            }
+
+            // Add tags
+            foreach ($add_tag_ids as $tag_id) {
+                $result = PIT_Appearance_Tag_Repository::add_to_appearance($appearance_id, $tag_id, $user_id);
+                if ($result) {
+                    $added_count++;
+                }
+            }
+
+            // Remove tags
+            foreach ($remove_tag_ids as $tag_id) {
+                $result = PIT_Appearance_Tag_Repository::remove_from_appearance($appearance_id, $tag_id, $user_id);
+                if ($result) {
+                    $removed_count++;
+                }
+            }
+        }
+
+        return new WP_REST_Response([
+            'message' => 'Bulk tag update completed',
+            'added' => $added_count,
+            'removed' => $removed_count,
         ], 200);
     }
 }
