@@ -139,11 +139,20 @@ class PIT_Interview_Detail_Shortcode {
             true
         );
 
+        // Shared API utility
+        wp_enqueue_script(
+            'guestify-api',
+            PIT_PLUGIN_URL . 'assets/js/shared/api.js',
+            [],
+            PIT_VERSION,
+            true
+        );
+
         // Interview Detail App
         wp_enqueue_script(
             'pit-interview-detail',
             PIT_PLUGIN_URL . 'assets/js/interview-detail-vue.js',
-            ['vue', 'pinia'],
+            ['vue', 'pinia', 'guestify-api'],
             PIT_VERSION,
             true
         );

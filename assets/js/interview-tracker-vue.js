@@ -16,6 +16,14 @@
     const { createPinia, defineStore } = Pinia;
 
     // =====================================================
+    // API CLIENT
+    // =====================================================
+    const api = GuestifyApi.createClient({
+        restUrl: guestifyData.restUrl,
+        nonce: guestifyData.nonce,
+    });
+
+    // =====================================================
     // PINIA STORE
     // =====================================================
     const useInterviewStore = defineStore('interviews', {
@@ -152,26 +160,13 @@
         actions: {
             async fetchPipelineStages() {
                 if (this.statusColumns.length > 0) return;
-                
-                this.stagesLoading = true;
-                
-                try {
-                    const response = await fetch(
-                        `${guestifyData.restUrl}pipeline-stages`,
-                        {
-                            headers: {
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                        }
-                    );
 
-                    if (response.ok) {
-                        const data = await response.json();
-                        this.statusColumns = data.data || [];
-                        this.stagesAreCustom = data.is_custom || false;
-                    } else {
-                        throw new Error('Failed to load stages');
-                    }
+                this.stagesLoading = true;
+
+                try {
+                    const data = await api.get('pipeline-stages');
+                    this.statusColumns = data.data || [];
+                    this.stagesAreCustom = data.is_custom || false;
                 } catch (err) {
                     console.error('Failed to fetch pipeline stages:', err);
                     // Fallback to defaults if API fails
@@ -207,20 +202,7 @@
                         params.append('show_archived', 'true');
                     }
 
-                    const response = await fetch(
-                        `${guestifyData.restUrl}appearances?${params}`,
-                        {
-                            headers: {
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                        }
-                    );
-
-                    if (!response.ok) {
-                        throw new Error('Failed to fetch interviews');
-                    }
-
-                    const data = await response.json();
+                    const data = await api.get(`appearances?${params}`);
                     this.interviews = data.data || [];
                 } catch (err) {
                     this.error = err.message;
@@ -234,23 +216,12 @@
                 if (this.guestProfiles.length) return;
 
                 try {
-                    const response = await fetch(
-                        `${guestifyData.restUrl}guest-profiles`,
-                        {
-                            headers: {
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                        }
-                    );
-
-                    if (response.ok) {
-                        const data = await response.json();
-                        const profiles = data.data || [];
-                        this.guestProfiles = profiles.filter(profile => {
-                            if (!profile.author_id || !guestifyData.userId) return true;
-                            return parseInt(profile.author_id) === parseInt(guestifyData.userId);
-                        });
-                    }
+                    const data = await api.get('guest-profiles');
+                    const profiles = data.data || [];
+                    this.guestProfiles = profiles.filter(profile => {
+                        if (!profile.author_id || !guestifyData.userId) return true;
+                        return parseInt(profile.author_id) === parseInt(guestifyData.userId);
+                    });
                 } catch (err) {
                     console.error('Failed to fetch guest profiles:', err);
                 }
@@ -259,19 +230,8 @@
             // Tag methods (v3.4.0)
             async fetchAvailableTags() {
                 try {
-                    const response = await fetch(
-                        `${guestifyData.restUrl}tags`,
-                        {
-                            headers: {
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                        }
-                    );
-
-                    if (response.ok) {
-                        const data = await response.json();
-                        this.availableTags = data.data || [];
-                    }
+                    const data = await api.get('tags');
+                    this.availableTags = data.data || [];
                 } catch (err) {
                     console.error('Failed to fetch available tags:', err);
                 }
@@ -284,23 +244,11 @@
 
                 try {
                     // Use batch endpoint to fetch all tags in a single request
-                    const response = await fetch(
-                        `${guestifyData.restUrl}appearances/tags/batch`,
-                        {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                            body: JSON.stringify({ appearance_ids: appearanceIds }),
-                        }
-                    );
-
-                    if (response.ok) {
-                        const result = await response.json();
-                        // The API returns { data: { appearance_id: [tags], ... } }
-                        this.appearanceTags = result.data || {};
-                    }
+                    const result = await api.post('appearances/tags/batch', {
+                        appearance_ids: appearanceIds,
+                    });
+                    // The API returns { data: { appearance_id: [tags], ... } }
+                    this.appearanceTags = result.data || {};
                 } catch (err) {
                     console.error('Failed to fetch appearance tags:', err);
                 }
@@ -347,20 +295,7 @@
                         params.append('date_to', this.portfolioFilters.date_to);
                     }
 
-                    const response = await fetch(
-                        `${guestifyData.restUrl}portfolio?${params}`,
-                        {
-                            headers: {
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                        }
-                    );
-
-                    if (!response.ok) {
-                        throw new Error('Failed to fetch portfolio');
-                    }
-
-                    const data = await response.json();
+                    const data = await api.get(`portfolio?${params}`);
                     this.portfolio = data.data || [];
                     this.portfolioTotal = data.total || 0;
                     this.portfolioPage = data.page || 1;
@@ -382,20 +317,7 @@
 
             async exportPortfolio() {
                 try {
-                    const response = await fetch(
-                        `${guestifyData.restUrl}portfolio/export`,
-                        {
-                            headers: {
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                        }
-                    );
-
-                    if (!response.ok) {
-                        throw new Error('Failed to export portfolio');
-                    }
-
-                    const data = await response.json();
+                    const data = await api.get('portfolio/export');
 
                     // Create and download the CSV file
                     const blob = new Blob([data.content], { type: 'text/csv' });
@@ -421,21 +343,7 @@
                 interview.status = newStatus; // Optimistic update
 
                 try {
-                    const response = await fetch(
-                        `${guestifyData.restUrl}appearances/${id}`,
-                        {
-                            method: 'PATCH',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                            body: JSON.stringify({ status: newStatus }),
-                        }
-                    );
-
-                    if (!response.ok) {
-                        throw new Error('Failed to update status');
-                    }
+                    await api.patch(`appearances/${id}`, { status: newStatus });
                 } catch (err) {
                     interview.status = oldStatus; // Rollback
                     this.error = err.message;
@@ -447,24 +355,10 @@
                 if (this.selectedIds.length === 0) return;
 
                 try {
-                    const response = await fetch(
-                        `${guestifyData.restUrl}appearances/bulk`,
-                        {
-                            method: 'PATCH',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                            body: JSON.stringify({
-                                ids: this.selectedIds,
-                                updates: updates,
-                            }),
-                        }
-                    );
-
-                    if (!response.ok) {
-                        throw new Error('Failed to bulk update');
-                    }
+                    await api.patch('appearances/bulk', {
+                        ids: this.selectedIds,
+                        updates: updates,
+                    });
 
                     // Refresh data
                     await this.fetchInterviews();

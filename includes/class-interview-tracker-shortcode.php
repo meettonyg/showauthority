@@ -613,11 +613,20 @@ class PIT_Interview_Tracker_Shortcode {
             true
         );
 
+        // Shared API utility
+        wp_enqueue_script(
+            'guestify-api',
+            PIT_PLUGIN_URL . 'assets/js/shared/api.js',
+            [],
+            PIT_VERSION,
+            true
+        );
+
         // Interview Tracker App
         wp_enqueue_script(
             'pit-interview-tracker',
             PIT_PLUGIN_URL . 'assets/js/interview-tracker-vue.js',
-            ['vue', 'pinia'],
+            ['vue', 'pinia', 'guestify-api'],
             PIT_VERSION,
             true
         );

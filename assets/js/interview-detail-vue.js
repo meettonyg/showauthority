@@ -148,25 +148,16 @@
         actions: {
             initConfig(data) {
                 this.config = { ...this.config, ...data };
+                // Initialize shared API client with config
+                this._apiClient = GuestifyApi.createClient({
+                    restUrl: this.config.restUrl,
+                    nonce: this.config.nonce,
+                });
             },
 
             async api(endpoint, options = {}) {
-                const url = this.config.restUrl + endpoint;
-                const response = await fetch(url, {
-                    ...options,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-WP-Nonce': this.config.nonce,
-                        ...options.headers,
-                    },
-                });
-                
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.message || 'API request failed');
-                }
-                
-                return response.json();
+                // Use shared API client for consistent request handling
+                return this._apiClient.request(endpoint, options);
             },
 
             async loadStages() {
