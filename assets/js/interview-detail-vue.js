@@ -25,6 +25,7 @@
     // CONSTANTS
     // ==========================================================================
     const TAG_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+    const VALID_TABS = ['about', 'listen', 'contact', 'message', 'tasks', 'notes'];
 
     // ==========================================================================
     // PINIA STORE
@@ -153,6 +154,27 @@
                     restUrl: this.config.restUrl,
                     nonce: this.config.nonce,
                 });
+            },
+
+            /**
+             * Generate a unique storage key for tab persistence (namespaced by interview ID)
+             */
+            _getTabStorageKey() {
+                // Use explicit null check to handle interviewId of 0 correctly
+                return this.config.interviewId != null
+                    ? `pit_interview_detail_tab_${this.config.interviewId}`
+                    : 'pit_interview_detail_tab';
+            },
+
+            /**
+             * Load active tab from localStorage
+             */
+            loadActiveTabFromStorage() {
+                const savedTab = localStorage.getItem(this._getTabStorageKey());
+
+                if (savedTab && VALID_TABS.includes(savedTab)) {
+                    this.setActiveTab(savedTab);
+                }
             },
 
             async api(endpoint, options = {}) {
@@ -785,6 +807,8 @@
 
             setActiveTab(tab) {
                 this.activeTab = tab;
+                // Persist tab selection to localStorage
+                localStorage.setItem(this._getTabStorageKey(), tab);
                 // Load episodes when Listen tab is first accessed
                 if (tab === 'listen' && this.episodes.length === 0 && !this.episodesLoading) {
                     this.loadEpisodes();
@@ -3479,6 +3503,10 @@
                 if (typeof guestifyDetailData !== 'undefined') {
                     store.initConfig(guestifyDetailData);
                 }
+
+                // Load persisted tab state (must be after initConfig so interviewId is available)
+                store.loadActiveTabFromStorage();
+
                 store.loadInterview();
 
                 // Initialize email integration (non-blocking)
