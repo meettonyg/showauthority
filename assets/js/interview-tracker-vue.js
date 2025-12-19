@@ -16,6 +16,14 @@
     const { createPinia, defineStore } = Pinia;
 
     // =====================================================
+    // API CLIENT
+    // =====================================================
+    const api = GuestifyApi.createClient({
+        restUrl: guestifyData.restUrl,
+        nonce: guestifyData.nonce,
+    });
+
+    // =====================================================
     // PINIA STORE
     // =====================================================
     const useInterviewStore = defineStore('interviews', {
@@ -34,7 +42,11 @@
                 source: '',
                 guestProfileId: '',
                 showArchived: false,
+                tags: [], // Selected tag IDs for filtering
             },
+            // Tags (v3.4.0)
+            availableTags: [],
+            appearanceTags: {}, // Map of appearance_id -> tags array
             guestProfiles: [],
             // Pipeline stages loaded from database
             statusColumns: [],
@@ -85,6 +97,16 @@
 
                 if (!state.filters.showArchived) {
                     result = result.filter(i => !i.is_archived);
+                }
+
+                // Tag filter (v3.4.0)
+                if (state.filters.tags && state.filters.tags.length > 0) {
+                    result = result.filter(i => {
+                        const interviewTags = state.appearanceTags[i.id] || [];
+                        const interviewTagIds = interviewTags.map(t => t.id);
+                        // Check if any selected filter tag is applied to this interview
+                        return state.filters.tags.some(tagId => interviewTagIds.includes(tagId));
+                    });
                 }
 
                 return result;
@@ -138,26 +160,13 @@
         actions: {
             async fetchPipelineStages() {
                 if (this.statusColumns.length > 0) return;
-                
-                this.stagesLoading = true;
-                
-                try {
-                    const response = await fetch(
-                        `${guestifyData.restUrl}pipeline-stages`,
-                        {
-                            headers: {
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                        }
-                    );
 
-                    if (response.ok) {
-                        const data = await response.json();
-                        this.statusColumns = data.data || [];
-                        this.stagesAreCustom = data.is_custom || false;
-                    } else {
-                        throw new Error('Failed to load stages');
-                    }
+                this.stagesLoading = true;
+
+                try {
+                    const data = await api.get('pipeline-stages');
+                    this.statusColumns = data.data || [];
+                    this.stagesAreCustom = data.is_custom || false;
                 } catch (err) {
                     console.error('Failed to fetch pipeline stages:', err);
                     // Fallback to defaults if API fails
@@ -193,20 +202,7 @@
                         params.append('show_archived', 'true');
                     }
 
-                    const response = await fetch(
-                        `${guestifyData.restUrl}appearances?${params}`,
-                        {
-                            headers: {
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                        }
-                    );
-
-                    if (!response.ok) {
-                        throw new Error('Failed to fetch interviews');
-                    }
-
-                    const data = await response.json();
+                    const data = await api.get(`appearances?${params}`);
                     this.interviews = data.data || [];
                 } catch (err) {
                     this.error = err.message;
@@ -220,25 +216,77 @@
                 if (this.guestProfiles.length) return;
 
                 try {
-                    const response = await fetch(
-                        `${guestifyData.restUrl}guest-profiles`,
-                        {
-                            headers: {
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                        }
-                    );
-
-                    if (response.ok) {
-                        const data = await response.json();
-                        const profiles = data.data || [];
-                        this.guestProfiles = profiles.filter(profile => {
-                            if (!profile.author_id || !guestifyData.userId) return true;
-                            return parseInt(profile.author_id) === parseInt(guestifyData.userId);
-                        });
-                    }
+                    const data = await api.get('guest-profiles');
+                    const profiles = data.data || [];
+                    this.guestProfiles = profiles.filter(profile => {
+                        if (!profile.author_id || !guestifyData.userId) return true;
+                        return parseInt(profile.author_id) === parseInt(guestifyData.userId);
+                    });
                 } catch (err) {
                     console.error('Failed to fetch guest profiles:', err);
+                }
+            },
+
+            // Tag methods (v3.4.0)
+            async fetchAvailableTags() {
+                try {
+                    const data = await api.get('tags');
+                    this.availableTags = data.data || [];
+                } catch (err) {
+                    console.error('Failed to fetch available tags:', err);
+                }
+            },
+
+            async fetchAppearanceTags() {
+                // Get all appearance IDs
+                const appearanceIds = this.interviews.map(i => i.id);
+                if (appearanceIds.length === 0) return;
+
+                try {
+                    // Use batch endpoint to fetch all tags in a single request
+                    const result = await api.post('appearances/tags/batch', {
+                        appearance_ids: appearanceIds,
+                    });
+                    // The API returns { data: { appearance_id: [tags], ... } }
+                    this.appearanceTags = result.data || {};
+                } catch (err) {
+                    console.error('Failed to fetch appearance tags:', err);
+                }
+            },
+
+            toggleTagFilter(tagId) {
+                const index = this.filters.tags.indexOf(tagId);
+                if (index === -1) {
+                    this.filters.tags.push(tagId);
+                } else {
+                    this.filters.tags.splice(index, 1);
+                }
+            },
+
+            clearTagFilters() {
+                this.filters.tags = [];
+            },
+
+            getTagsForAppearance(appearanceId) {
+                return this.appearanceTags[appearanceId] || [];
+            },
+
+            async bulkUpdateTags(appearanceIds, addTagIds = [], removeTagIds = []) {
+                if (appearanceIds.length === 0) return;
+                if (addTagIds.length === 0 && removeTagIds.length === 0) return;
+
+                try {
+                    await api.patch('appearances/tags/bulk', {
+                        appearance_ids: appearanceIds,
+                        add_tag_ids: addTagIds,
+                        remove_tag_ids: removeTagIds,
+                    });
+
+                    // Refresh tags for all appearances
+                    await this.fetchAppearanceTags();
+                } catch (err) {
+                    console.error('Failed to bulk update tags:', err);
+                    throw err;
                 }
             },
 
@@ -266,20 +314,7 @@
                         params.append('date_to', this.portfolioFilters.date_to);
                     }
 
-                    const response = await fetch(
-                        `${guestifyData.restUrl}portfolio?${params}`,
-                        {
-                            headers: {
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                        }
-                    );
-
-                    if (!response.ok) {
-                        throw new Error('Failed to fetch portfolio');
-                    }
-
-                    const data = await response.json();
+                    const data = await api.get(`portfolio?${params}`);
                     this.portfolio = data.data || [];
                     this.portfolioTotal = data.total || 0;
                     this.portfolioPage = data.page || 1;
@@ -301,20 +336,7 @@
 
             async exportPortfolio() {
                 try {
-                    const response = await fetch(
-                        `${guestifyData.restUrl}portfolio/export`,
-                        {
-                            headers: {
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                        }
-                    );
-
-                    if (!response.ok) {
-                        throw new Error('Failed to export portfolio');
-                    }
-
-                    const data = await response.json();
+                    const data = await api.get('portfolio/export');
 
                     // Create and download the CSV file
                     const blob = new Blob([data.content], { type: 'text/csv' });
@@ -340,21 +362,7 @@
                 interview.status = newStatus; // Optimistic update
 
                 try {
-                    const response = await fetch(
-                        `${guestifyData.restUrl}appearances/${id}`,
-                        {
-                            method: 'PATCH',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                            body: JSON.stringify({ status: newStatus }),
-                        }
-                    );
-
-                    if (!response.ok) {
-                        throw new Error('Failed to update status');
-                    }
+                    await api.patch(`appearances/${id}`, { status: newStatus });
                 } catch (err) {
                     interview.status = oldStatus; // Rollback
                     this.error = err.message;
@@ -366,24 +374,10 @@
                 if (this.selectedIds.length === 0) return;
 
                 try {
-                    const response = await fetch(
-                        `${guestifyData.restUrl}appearances/bulk`,
-                        {
-                            method: 'PATCH',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-WP-Nonce': guestifyData.nonce,
-                            },
-                            body: JSON.stringify({
-                                ids: this.selectedIds,
-                                updates: updates,
-                            }),
-                        }
-                    );
-
-                    if (!response.ok) {
-                        throw new Error('Failed to bulk update');
-                    }
+                    await api.patch('appearances/bulk', {
+                        ids: this.selectedIds,
+                        updates: updates,
+                    });
 
                     // Refresh data
                     await this.fetchInterviews();
@@ -473,6 +467,65 @@
                     </option>
                 </select>
                 
+                <!-- Tag Filter (v3.4.0) -->
+                <div class="tag-filter-wrapper" style="position: relative;">
+                    <button
+                        type="button"
+                        @click="showTagDropdown = !showTagDropdown"
+                        style="padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px; background: white; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                            <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                        </svg>
+                        Tags
+                        <span v-if="selectedTagCount > 0" style="background: #3b82f6; color: white; padding: 1px 6px; border-radius: 10px; font-size: 11px;">
+                            {{ selectedTagCount }}
+                        </span>
+                    </button>
+
+                    <div
+                        v-if="showTagDropdown"
+                        style="position: absolute; top: 100%; left: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; min-width: 200px; max-height: 300px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                        <div v-if="store.availableTags.length === 0" style="padding: 12px; color: #94a3b8; font-size: 13px;">
+                            No tags created yet
+                        </div>
+                        <div v-else>
+                            <div
+                                v-for="tag in store.availableTags"
+                                :key="tag.id"
+                                @click="toggleTag(tag.id)"
+                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
+                                :style="{ background: isTagSelected(tag.id) ? '#f0f9ff' : 'white' }"
+                                @mouseenter="$event.target.style.background = isTagSelected(tag.id) ? '#e0f2fe' : '#f1f5f9'"
+                                @mouseleave="$event.target.style.background = isTagSelected(tag.id) ? '#f0f9ff' : 'white'">
+                                <input
+                                    type="checkbox"
+                                    :checked="isTagSelected(tag.id)"
+                                    style="pointer-events: none;">
+                                <span
+                                    style="width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;"
+                                    :style="{ backgroundColor: tag.color }"></span>
+                                <span style="font-size: 13px; flex: 1;">{{ tag.name }}</span>
+                                <span style="font-size: 11px; color: #94a3b8;">{{ tag.usage_count }}</span>
+                            </div>
+                            <div v-if="selectedTagCount > 0" style="padding: 8px 12px; border-top: 1px solid #e2e8f0;">
+                                <button
+                                    type="button"
+                                    @click="clearTags"
+                                    style="width: 100%; padding: 6px; background: #f1f5f9; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; color: #64748b;">
+                                    Clear All Tags
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Backdrop to close dropdown -->
+                    <div
+                        v-if="showTagDropdown"
+                        @click="showTagDropdown = false"
+                        style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;"></div>
+                </div>
+
                 <label style="display: flex; align-items: center; gap: 4px;">
                     <input type="checkbox" v-model="showArchived">
                     Show Archived
@@ -515,11 +568,41 @@
                 },
             });
 
+            // Tag filter state (v3.4.0)
+            const showTagDropdown = ref(false);
+
+            const selectedTagCount = computed(() => store.filters.tags.length);
+
+            const isTagSelected = (tagId) => store.filters.tags.includes(tagId);
+
+            const toggleTag = (tagId) => {
+                store.toggleTagFilter(tagId);
+            };
+
+            const clearTags = () => {
+                store.clearTagFilters();
+                showTagDropdown.value = false;
+            };
+
             onMounted(() => {
                 store.fetchGuestProfiles();
             });
 
-            return { store, searchQuery, statusFilter, priorityFilter, sourceFilter, guestProfileFilter, showArchived };
+            return {
+                store,
+                searchQuery,
+                statusFilter,
+                priorityFilter,
+                sourceFilter,
+                guestProfileFilter,
+                showArchived,
+                // Tag filter (v3.4.0)
+                showTagDropdown,
+                selectedTagCount,
+                isTagSelected,
+                toggleTag,
+                clearTags,
+            };
         },
     };
 
@@ -586,9 +669,26 @@
                     <span v-if="interview.source">{{ interview.source }}</span>
                     <span v-if="interview.episode_date">{{ formatDate(interview.episode_date) }}</span>
                 </div>
+                <!-- Tags (v3.4.0) -->
+                <div v-if="interviewTags.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;">
+                    <span
+                        v-for="tag in interviewTags.slice(0, 3)"
+                        :key="tag.id"
+                        :style="{ backgroundColor: tag.color + '20', color: tag.color, borderColor: tag.color }"
+                        style="display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 10px; border: 1px solid;">
+                        {{ tag.name }}
+                    </span>
+                    <span v-if="interviewTags.length > 3" style="font-size: 10px; color: #94a3b8; padding: 2px 4px;">
+                        +{{ interviewTags.length - 3 }}
+                    </span>
+                </div>
             </div>
         `,
         setup(props) {
+            const store = useInterviewStore();
+
+            const interviewTags = computed(() => store.getTagsForAppearance(props.interview.id));
+
             const formatDate = (dateStr) => {
                 if (!dateStr) return '';
                 const date = new Date(dateStr);
@@ -610,7 +710,7 @@
                 window.location.href = '/app/interview/detail/?id=' + props.interview.id;
             };
 
-            return { formatDate, onDragStart, onDragEnd, openDetail };
+            return { formatDate, onDragStart, onDragEnd, openDetail, interviewTags };
         },
     };
 
@@ -726,6 +826,22 @@
                     </span>
                 </td>
                 <td style="padding: 12px;">{{ interview.source || '-' }}</td>
+                <td style="padding: 12px;">
+                    <!-- Tags (v3.4.0) -->
+                    <div v-if="interviewTags.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px;">
+                        <span
+                            v-for="tag in interviewTags.slice(0, 2)"
+                            :key="tag.id"
+                            :style="{ backgroundColor: tag.color + '20', color: tag.color, borderColor: tag.color }"
+                            style="display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 10px; border: 1px solid;">
+                            {{ tag.name }}
+                        </span>
+                        <span v-if="interviewTags.length > 2" style="font-size: 10px; color: #94a3b8; padding: 2px 4px;">
+                            +{{ interviewTags.length - 2 }}
+                        </span>
+                    </div>
+                    <span v-else style="color: #94a3b8;">-</span>
+                </td>
                 <td style="padding: 12px;">{{ formatDate(interview.updated_at) }}</td>
             </tr>
         `,
@@ -733,6 +849,7 @@
             const store = useInterviewStore();
 
             const isSelected = computed(() => store.selectedIds.includes(props.interview.id));
+            const interviewTags = computed(() => store.getTagsForAppearance(props.interview.id));
 
             const toggleSelect = () => {
                 store.toggleSelection(props.interview.id);
@@ -765,7 +882,7 @@
                 window.location.href = '/app/interview/detail/?id=' + props.interview.id;
             };
 
-            return { store, isSelected, toggleSelect, priorityStar, statusColor, statusLabel, formatDate, onRowClick };
+            return { store, isSelected, toggleSelect, priorityStar, statusColor, statusLabel, formatDate, onRowClick, interviewTags };
         },
     };
 
@@ -788,6 +905,7 @@
                             <th style="padding: 12px; text-align: left;">Podcast Name</th>
                             <th style="padding: 12px; text-align: left;">Status</th>
                             <th style="padding: 12px; text-align: left;">Source</th>
+                            <th style="padding: 12px; text-align: left;">Tags</th>
                             <th style="padding: 12px; text-align: left;">Updated</th>
                         </tr>
                     </thead>
@@ -1035,7 +1153,7 @@
         template: `
             <div v-if="store.showBulkPanel" class="pit-bulk-panel">
                 <h3>Edit {{ store.selectedIds.length }} Items</h3>
-                
+
                 <div class="form-group">
                     <label>Interview Profile</label>
                     <select v-model="bulkGuestProfileId">
@@ -1045,7 +1163,7 @@
                         </option>
                     </select>
                 </div>
-                
+
                 <div class="form-group">
                     <label>Status</label>
                     <select v-model="bulkStatus">
@@ -1055,7 +1173,7 @@
                         </option>
                     </select>
                 </div>
-                
+
                 <div class="form-group">
                     <label>Priority</label>
                     <select v-model="bulkPriority">
@@ -1065,7 +1183,7 @@
                         <option value="low">Low</option>
                     </select>
                 </div>
-                
+
                 <div class="form-group">
                     <label>Source</label>
                     <select v-model="bulkSource">
@@ -1075,14 +1193,100 @@
                         </option>
                     </select>
                 </div>
-                
+
                 <div class="form-group">
-                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" v-model="bulkArchive" @change="archiveChanged = true">
-                        Archive
+                    <label>Add Tags</label>
+                    <div style="position: relative;">
+                        <button
+                            type="button"
+                            @click="showAddTagsDropdown = !showAddTagsDropdown"
+                            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px; background: white; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                            <span v-if="tagsToAdd.length === 0">Select tags to add...</span>
+                            <span v-else>{{ tagsToAdd.length }} tag{{ tagsToAdd.length > 1 ? 's' : '' }} selected</span>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
+                        <div
+                            v-if="showAddTagsDropdown"
+                            style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                            <div v-if="store.availableTags.length === 0" style="padding: 12px; color: #94a3b8; font-size: 13px;">
+                                No tags available
+                            </div>
+                            <label
+                                v-for="tag in store.availableTags"
+                                :key="tag.id"
+                                @click.prevent="toggleTagToAdd(tag.id)"
+                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
+                                :style="{ background: tagsToAdd.includes(tag.id) ? '#f0f9ff' : 'white' }">
+                                <input type="checkbox" :checked="tagsToAdd.includes(tag.id)" style="margin: 0; width: 14px; height: 14px;">
+                                <span style="width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;" :style="{ backgroundColor: tag.color }"></span>
+                                <span style="font-size: 13px; white-space: nowrap;">{{ tag.name }}</span>
+                            </label>
+                        </div>
+                        <div v-if="showAddTagsDropdown" @click="showAddTagsDropdown = false" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;"></div>
+                    </div>
+                    <div v-if="tagsToAdd.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;">
+                        <span
+                            v-for="tagId in tagsToAdd"
+                            :key="tagId"
+                            style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 11px; background: #e0f2fe; color: #0369a1;">
+                            {{ getTagName(tagId) }}
+                            <button type="button" @click="toggleTagToAdd(tagId)" style="background: none; border: none; cursor: pointer; padding: 0; color: #0369a1;">&times;</button>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Remove Tags</label>
+                    <div style="position: relative;">
+                        <button
+                            type="button"
+                            @click="showRemoveTagsDropdown = !showRemoveTagsDropdown"
+                            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px; background: white; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                            <span v-if="tagsToRemove.length === 0">Select tags to remove...</span>
+                            <span v-else>{{ tagsToRemove.length }} tag{{ tagsToRemove.length > 1 ? 's' : '' }} selected</span>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
+                        <div
+                            v-if="showRemoveTagsDropdown"
+                            style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                            <div v-if="store.availableTags.length === 0" style="padding: 12px; color: #94a3b8; font-size: 13px;">
+                                No tags available
+                            </div>
+                            <label
+                                v-for="tag in store.availableTags"
+                                :key="tag.id"
+                                @click.prevent="toggleTagToRemove(tag.id)"
+                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
+                                :style="{ background: tagsToRemove.includes(tag.id) ? '#fef2f2' : 'white' }">
+                                <input type="checkbox" :checked="tagsToRemove.includes(tag.id)" style="margin: 0; width: 14px; height: 14px;">
+                                <span style="width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;" :style="{ backgroundColor: tag.color }"></span>
+                                <span style="font-size: 13px; white-space: nowrap;">{{ tag.name }}</span>
+                            </label>
+                        </div>
+                        <div v-if="showRemoveTagsDropdown" @click="showRemoveTagsDropdown = false" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;"></div>
+                    </div>
+                    <div v-if="tagsToRemove.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;">
+                        <span
+                            v-for="tagId in tagsToRemove"
+                            :key="tagId"
+                            style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 11px; background: #fee2e2; color: #b91c1c;">
+                            {{ getTagName(tagId) }}
+                            <button type="button" @click="toggleTagToRemove(tagId)" style="background: none; border: none; cursor: pointer; padding: 0; color: #b91c1c;">&times;</button>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px;">
+                        <input type="checkbox" v-model="bulkArchive" @change="archiveChanged = true" style="width: 16px; height: 16px; flex-shrink: 0;">
+                        <span>Archive</span>
                     </label>
                 </div>
-                
+
                 <div class="actions">
                     <button class="btn-secondary" @click="cancelBulkEdit">Cancel</button>
                     <button class="btn-primary" @click="applyBulkEdit">Apply Changes</button>
@@ -1097,6 +1301,10 @@
             const bulkSource = ref('');
             const bulkArchive = ref(false);
             const archiveChanged = ref(false);
+            const tagsToAdd = ref([]);
+            const tagsToRemove = ref([]);
+            const showAddTagsDropdown = ref(false);
+            const showRemoveTagsDropdown = ref(false);
 
             const sourceOptions = [
                 'Direct Outreach',
@@ -1119,7 +1327,40 @@
                 }
             });
 
-            const applyBulkEdit = () => {
+            const toggleTagToAdd = (tagId) => {
+                const index = tagsToAdd.value.indexOf(tagId);
+                if (index === -1) {
+                    tagsToAdd.value.push(tagId);
+                    // Remove from tagsToRemove if present
+                    const removeIndex = tagsToRemove.value.indexOf(tagId);
+                    if (removeIndex !== -1) {
+                        tagsToRemove.value.splice(removeIndex, 1);
+                    }
+                } else {
+                    tagsToAdd.value.splice(index, 1);
+                }
+            };
+
+            const toggleTagToRemove = (tagId) => {
+                const index = tagsToRemove.value.indexOf(tagId);
+                if (index === -1) {
+                    tagsToRemove.value.push(tagId);
+                    // Remove from tagsToAdd if present
+                    const addIndex = tagsToAdd.value.indexOf(tagId);
+                    if (addIndex !== -1) {
+                        tagsToAdd.value.splice(addIndex, 1);
+                    }
+                } else {
+                    tagsToRemove.value.splice(index, 1);
+                }
+            };
+
+            const getTagName = (tagId) => {
+                const tag = store.availableTags.find(t => t.id === tagId);
+                return tag ? tag.name : '';
+            };
+
+            const applyBulkEdit = async () => {
                 const updates = {};
                 if (bulkGuestProfileId.value) updates.guest_profile_id = parseInt(bulkGuestProfileId.value);
                 if (bulkStatus.value) updates.status = bulkStatus.value;
@@ -1127,10 +1368,18 @@
                 if (bulkSource.value) updates.source = bulkSource.value;
                 if (archiveChanged.value) updates.is_archived = bulkArchive.value ? 1 : 0;
 
+                // Apply field updates
                 if (Object.keys(updates).length > 0) {
-                    store.bulkUpdate(updates);
+                    await store.bulkUpdate(updates);
                 }
 
+                // Apply tag updates
+                if (tagsToAdd.value.length > 0 || tagsToRemove.value.length > 0) {
+                    await store.bulkUpdateTags(store.selectedIds, tagsToAdd.value, tagsToRemove.value);
+                }
+
+                store.showBulkPanel = false;
+                store.selectedIds = [];
                 resetForm();
             };
 
@@ -1146,18 +1395,29 @@
                 bulkSource.value = '';
                 bulkArchive.value = false;
                 archiveChanged.value = false;
+                tagsToAdd.value = [];
+                tagsToRemove.value = [];
+                showAddTagsDropdown.value = false;
+                showRemoveTagsDropdown.value = false;
             };
 
-            return { 
-                store, 
+            return {
+                store,
                 bulkGuestProfileId,
-                bulkStatus, 
-                bulkPriority, 
+                bulkStatus,
+                bulkPriority,
                 bulkSource,
                 bulkArchive,
                 archiveChanged,
+                tagsToAdd,
+                tagsToRemove,
+                showAddTagsDropdown,
+                showRemoveTagsDropdown,
                 guestProfiles: computed(() => store.guestProfiles),
                 sourceOptions,
+                toggleTagToAdd,
+                toggleTagToRemove,
+                getTagName,
                 applyBulkEdit,
                 cancelBulkEdit,
             };
@@ -1253,6 +1513,59 @@
                                 </option>
                             </select>
                         </div>
+                        <div class="pit-filter-field">
+                            <label class="pit-filter-label">Tags</label>
+                            <div class="pit-tag-filter" style="position: relative;">
+                                <button
+                                    type="button"
+                                    @click="showTagDropdown = !showTagDropdown"
+                                    class="pit-select"
+                                    style="width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                                    <span v-if="store.filters.tags.length === 0">All Tags</span>
+                                    <span v-else>{{ store.filters.tags.length }} tag{{ store.filters.tags.length > 1 ? 's' : '' }} selected</span>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </button>
+                                <div
+                                    v-if="showTagDropdown"
+                                    style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 250px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                                    <div v-if="store.availableTags.length === 0" style="padding: 12px; color: #94a3b8; font-size: 13px;">
+                                        No tags created yet
+                                    </div>
+                                    <template v-else>
+                                        <div
+                                            v-for="tag in store.availableTags"
+                                            :key="tag.id"
+                                            @click="store.toggleTagFilter(tag.id)"
+                                            style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
+                                            :style="{ background: store.filters.tags.includes(tag.id) ? '#f0f9ff' : 'white' }">
+                                            <input
+                                                type="checkbox"
+                                                :checked="store.filters.tags.includes(tag.id)"
+                                                style="pointer-events: none;">
+                                            <span
+                                                style="width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;"
+                                                :style="{ backgroundColor: tag.color }"></span>
+                                            <span style="font-size: 13px; flex: 1;">{{ tag.name }}</span>
+                                            <span style="font-size: 11px; color: #94a3b8;">{{ tag.usage_count }}</span>
+                                        </div>
+                                        <div v-if="store.filters.tags.length > 0" style="padding: 8px 12px; border-top: 1px solid #e2e8f0;">
+                                            <button
+                                                type="button"
+                                                @click="store.clearTagFilters(); showTagDropdown = false;"
+                                                style="width: 100%; padding: 6px; background: #f1f5f9; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; color: #64748b;">
+                                                Clear Tag Filters
+                                            </button>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div
+                                    v-if="showTagDropdown"
+                                    @click="showTagDropdown = false"
+                                    style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;"></div>
+                            </div>
+                        </div>
                     </div>
                     <div class="pit-filter-footer">
                         <label class="pit-checkbox-label">
@@ -1286,6 +1599,7 @@
         setup() {
             const store = useInterviewStore();
             const showFilters = ref(false);
+            const showTagDropdown = ref(false);
 
             const searchQuery = computed({
                 get: () => store.filters.search,
@@ -1322,16 +1636,18 @@
                 store.setFilter('source', '');
                 store.setFilter('guestProfileId', '');
                 store.setFilter('showArchived', false);
+                store.clearTagFilters();
                 store.fetchInterviews();
             };
 
             onMounted(async () => {
                 // Load pipeline stages first (required for columns)
                 await store.fetchPipelineStages();
-                
+
                 // Then load other data
                 store.fetchGuestProfiles();
-                
+                store.fetchAvailableTags(); // Load available tags (v3.4.0)
+
                 // Check localStorage for saved view preference
                 const savedView = localStorage.getItem('pit_interview_view');
                 if (savedView && (savedView === 'kanban' || savedView === 'table' || savedView === 'portfolio')) {
@@ -1345,7 +1661,10 @@
                 }
 
                 // Fetch interviews
-                store.fetchInterviews();
+                await store.fetchInterviews();
+
+                // Load tags for appearances (v3.4.0)
+                store.fetchAppearanceTags();
             });
 
             // Watch for view changes and save to localStorage
@@ -1353,7 +1672,7 @@
                 localStorage.setItem('pit_interview_view', newView);
             });
 
-            return { store, searchQuery, statusFilter, priorityFilter, sourceFilter, guestProfileFilter, showArchived, showFilters, resetFilters };
+            return { store, searchQuery, statusFilter, priorityFilter, sourceFilter, guestProfileFilter, showArchived, showFilters, showTagDropdown, resetFilters };
         },
     };
 

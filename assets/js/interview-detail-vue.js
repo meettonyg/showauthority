@@ -22,6 +22,11 @@
     const { createPinia, defineStore } = Pinia;
 
     // ==========================================================================
+    // CONSTANTS
+    // ==========================================================================
+    const TAG_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+
+    // ==========================================================================
     // PINIA STORE
     // ==========================================================================
     const useDetailStore = defineStore('interviewDetail', {
@@ -90,6 +95,13 @@
             campaignsLoading: false,
             startingCampaign: false,
 
+            // Tags (v3.4.0)
+            tags: [],
+            availableTags: [],
+            tagsLoading: false,
+            tagInput: '',
+            showTagDropdown: false,
+
             // Config from WordPress
             config: {
                 restUrl: '',
@@ -136,25 +148,16 @@
         actions: {
             initConfig(data) {
                 this.config = { ...this.config, ...data };
+                // Initialize shared API client with config
+                this._apiClient = GuestifyApi.createClient({
+                    restUrl: this.config.restUrl,
+                    nonce: this.config.nonce,
+                });
             },
 
             async api(endpoint, options = {}) {
-                const url = this.config.restUrl + endpoint;
-                const response = await fetch(url, {
-                    ...options,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-WP-Nonce': this.config.nonce,
-                        ...options.headers,
-                    },
-                });
-                
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.message || 'API request failed');
-                }
-                
-                return response.json();
+                // Use shared API client for consistent request handling
+                return this._apiClient.request(endpoint, options);
             },
 
             async loadStages() {
@@ -200,6 +203,8 @@
                     await Promise.all([
                         this.loadTasks(),
                         this.loadNotes(),
+                        this.loadTags(),
+                        this.loadAvailableTags(),
                     ]);
                 } catch (err) {
                     this.error = err.message;
@@ -1033,6 +1038,139 @@
                 } finally {
                     this.startingCampaign = false;
                 }
+            },
+
+            // =================================================================
+            // TAGS (v3.4.0)
+            // =================================================================
+
+            /**
+             * Load tags for this appearance
+             */
+            async loadTags() {
+                this.tagsLoading = true;
+                try {
+                    const response = await this.api(`appearances/${this.config.interviewId}/tags`);
+                    this.tags = response.data || [];
+                } catch (err) {
+                    console.error('Failed to load tags:', err);
+                } finally {
+                    this.tagsLoading = false;
+                }
+            },
+
+            /**
+             * Load all available tags for the user
+             */
+            async loadAvailableTags() {
+                try {
+                    const response = await this.api('tags');
+                    this.availableTags = response.data || [];
+                } catch (err) {
+                    console.error('Failed to load available tags:', err);
+                }
+            },
+
+            /**
+             * Add a tag to this appearance
+             * Can use existing tag_id or create new tag with name
+             */
+            async addTag(tagData) {
+                this.tagsLoading = true;
+                try {
+                    const response = await this.api(`appearances/${this.config.interviewId}/tags`, {
+                        method: 'POST',
+                        body: JSON.stringify(tagData),
+                    });
+                    // Update local tags with the returned list
+                    this.tags = response.all_tags || [];
+                    // Refresh available tags (new tag may have been created)
+                    await this.loadAvailableTags();
+                    this.tagInput = '';
+                    this.showTagDropdown = false;
+                    return response.data;
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                } finally {
+                    this.tagsLoading = false;
+                }
+            },
+
+            /**
+             * Remove a tag from this appearance
+             */
+            async removeTag(tagId) {
+                this.tagsLoading = true;
+                try {
+                    const response = await this.api(`appearances/${this.config.interviewId}/tags/${tagId}`, {
+                        method: 'DELETE',
+                    });
+                    // Update local tags with the returned list
+                    this.tags = response.all_tags || [];
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                } finally {
+                    this.tagsLoading = false;
+                }
+            },
+
+            /**
+             * Create a new tag (master list)
+             */
+            async createTag(tagData) {
+                try {
+                    const response = await this.api('tags', {
+                        method: 'POST',
+                        body: JSON.stringify(tagData),
+                    });
+                    await this.loadAvailableTags();
+                    return response.data;
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                }
+            },
+
+            /**
+             * Delete a tag from master list
+             */
+            async deleteTag(tagId) {
+                try {
+                    await this.api(`tags/${tagId}`, {
+                        method: 'DELETE',
+                    });
+                    await this.loadAvailableTags();
+                    // Also refresh appearance tags in case removed tag was applied
+                    await this.loadTags();
+                } catch (err) {
+                    this.error = err.message;
+                    throw err;
+                }
+            },
+
+            /**
+             * Get filtered available tags based on search input
+             */
+            getFilteredTags() {
+                const appliedIds = new Set(this.tags.map(t => t.id));
+                const search = this.tagInput?.toLowerCase() || '';
+
+                return this.availableTags.filter(t => {
+                    if (appliedIds.has(t.id)) return false;
+                    if (search && !t.name.toLowerCase().includes(search)) return false;
+                    return true;
+                });
+            },
+
+            /**
+             * Check if current input matches an existing tag
+             */
+            tagInputMatchesExisting() {
+                if (!this.tagInput) return false;
+                const search = this.tagInput.toLowerCase().trim();
+                return this.availableTags.some(t => t.name.toLowerCase() === search);
             }
         }
     });
@@ -1530,6 +1668,84 @@
                                             <div class="tag-content">
                                                 <p>{{ interview?.source || 'Not specified' }}</p>
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tags Card -->
+                                    <div class="sidebar-card">
+                                        <div class="sidebar-header">
+                                            <h3 class="sidebar-title">Tags</h3>
+                                        </div>
+                                        <div class="sidebar-content">
+                                            <!-- Applied Tags -->
+                                            <div class="applied-tags">
+                                                <span
+                                                    v-for="tag in tags"
+                                                    :key="tag.id"
+                                                    class="appearance-tag"
+                                                    :style="{ backgroundColor: tag.color + '20', color: tag.color, borderColor: tag.color }">
+                                                    {{ tag.name }}
+                                                    <button
+                                                        type="button"
+                                                        @click="handleRemoveTag(tag.id)"
+                                                        class="appearance-tag-remove"
+                                                        :style="{ color: tag.color }"
+                                                        title="Remove tag">
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                        </svg>
+                                                    </button>
+                                                </span>
+                                                <span v-if="tags.length === 0 && !tagsLoading" class="tags-empty-text">
+                                                    No tags applied
+                                                </span>
+                                            </div>
+
+                                            <!-- Tag Input -->
+                                            <div class="tag-input-wrapper">
+                                                <div class="tag-input-row">
+                                                    <input
+                                                        type="text"
+                                                        v-model="tagInput"
+                                                        placeholder="Add a tag..."
+                                                        class="tag-input"
+                                                        @focus="showTagDropdown = true"
+                                                        @keydown.enter.prevent="handleTagInputEnter"
+                                                        @keydown.escape="showTagDropdown = false">
+                                                    <button
+                                                        v-if="tagInput && !tagInputMatchesExisting"
+                                                        type="button"
+                                                        @click="handleCreateAndAddTag"
+                                                        class="button small"
+                                                        :disabled="tagsLoading">
+                                                        Create
+                                                    </button>
+                                                </div>
+
+                                                <!-- Tag Dropdown -->
+                                                <div
+                                                    v-if="showTagDropdown && filteredTags.length > 0"
+                                                    class="tag-dropdown">
+                                                    <div
+                                                        v-for="tag in filteredTags"
+                                                        :key="tag.id"
+                                                        @click="handleSelectTag(tag)"
+                                                        class="tag-dropdown-item">
+                                                        <span
+                                                            class="tag-color-dot"
+                                                            :style="{ backgroundColor: tag.color }"></span>
+                                                        <span class="tag-dropdown-name">{{ tag.name }}</span>
+                                                        <span class="tag-dropdown-count">{{ tag.usage_count }} uses</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Close dropdown when clicking outside -->
+                                            <div
+                                                v-if="showTagDropdown"
+                                                @click="showTagDropdown = false"
+                                                class="tag-dropdown-backdrop"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -3012,6 +3228,67 @@
             };
 
             // =================================================================
+            // TAG METHODS (v3.4.0)
+            // =================================================================
+
+            const handleRemoveTag = async (tagId) => {
+                try {
+                    await store.removeTag(tagId);
+                    showSuccessMessage('Tag removed');
+                } catch (err) {
+                    console.error('Failed to remove tag:', err);
+                    showErrorMessage('Failed to remove tag');
+                }
+            };
+
+            const handleSelectTag = async (tag) => {
+                try {
+                    await store.addTag({ tag_id: tag.id });
+                    showSuccessMessage('Tag added');
+                } catch (err) {
+                    console.error('Failed to add tag:', err);
+                    showErrorMessage('Failed to add tag');
+                }
+            };
+
+            const handleTagInputEnter = async () => {
+                const trimmedInput = store.tagInput.trim();
+                if (!trimmedInput) return;
+
+                // Check if input matches an existing tag
+                const existingTag = store.availableTags.find(
+                    t => t.name.toLowerCase() === trimmedInput.toLowerCase()
+                );
+
+                if (existingTag) {
+                    // Add existing tag
+                    await handleSelectTag(existingTag);
+                } else {
+                    // Create new tag and add it
+                    await handleCreateAndAddTag();
+                }
+            };
+
+            const handleCreateAndAddTag = async () => {
+                const trimmedInput = store.tagInput.trim();
+                if (!trimmedInput) return;
+
+                try {
+                    // Generate a random color from the palette constant
+                    const randomColor = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)];
+
+                    await store.addTag({
+                        name: trimmedInput,
+                        color: randomColor,
+                    });
+                    showSuccessMessage('Tag created and added');
+                } catch (err) {
+                    console.error('Failed to create tag:', err);
+                    showErrorMessage('Failed to create tag');
+                }
+            };
+
+            // =================================================================
             // EMAIL COMPOSE METHODS
             // =================================================================
 
@@ -3387,6 +3664,27 @@
                 applyTemplate,
                 handleSendEmail,
                 handleStartCampaign,
+
+                // Tags state (v3.4.0)
+                tags: computed(() => store.tags),
+                availableTags: computed(() => store.availableTags),
+                tagsLoading: computed(() => store.tagsLoading),
+                tagInput: computed({
+                    get: () => store.tagInput,
+                    set: (val) => store.tagInput = val,
+                }),
+                showTagDropdown: computed({
+                    get: () => store.showTagDropdown,
+                    set: (val) => store.showTagDropdown = val,
+                }),
+                filteredTags: computed(() => store.getFilteredTags()),
+                tagInputMatchesExisting: computed(() => store.tagInputMatchesExisting()),
+
+                // Tag methods
+                handleRemoveTag,
+                handleSelectTag,
+                handleTagInputEnter,
+                handleCreateAndAddTag,
             };
         }
     };
