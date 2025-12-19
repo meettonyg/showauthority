@@ -173,11 +173,7 @@
                 const savedTab = localStorage.getItem(this._getTabStorageKey());
 
                 if (savedTab && VALID_TABS.includes(savedTab)) {
-                    this.activeTab = savedTab;
-                    // Trigger lazy loading for tabs that need it
-                    if (savedTab === 'listen' && this.episodes.length === 0 && !this.episodesLoading) {
-                        this.loadEpisodes();
-                    }
+                    this.setActiveTab(savedTab);
                 }
             },
 
