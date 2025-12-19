@@ -1209,7 +1209,7 @@
                         </button>
                         <div
                             v-if="showAddTagsDropdown"
-                            style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                            style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1); min-width: 200px;">
                             <div v-if="store.availableTags.length === 0" style="padding: 12px; color: #94a3b8; font-size: 13px;">
                                 No tags available
                             </div>
@@ -1217,10 +1217,10 @@
                                 v-for="tag in store.availableTags"
                                 :key="tag.id"
                                 @click="toggleTagToAdd(tag.id)"
-                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
+                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap;"
                                 :style="{ background: tagsToAdd.includes(tag.id) ? '#f0f9ff' : 'white' }">
-                                <input type="checkbox" :checked="tagsToAdd.includes(tag.id)" style="pointer-events: none;">
-                                <span style="width: 12px; height: 12px; border-radius: 3px;" :style="{ backgroundColor: tag.color }"></span>
+                                <input type="checkbox" :checked="tagsToAdd.includes(tag.id)" style="pointer-events: none; flex-shrink: 0;">
+                                <span style="width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;" :style="{ backgroundColor: tag.color }"></span>
                                 <span style="font-size: 13px;">{{ tag.name }}</span>
                             </div>
                         </div>
@@ -1252,7 +1252,7 @@
                         </button>
                         <div
                             v-if="showRemoveTagsDropdown"
-                            style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                            style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1); min-width: 200px;">
                             <div v-if="store.availableTags.length === 0" style="padding: 12px; color: #94a3b8; font-size: 13px;">
                                 No tags available
                             </div>
@@ -1260,10 +1260,10 @@
                                 v-for="tag in store.availableTags"
                                 :key="tag.id"
                                 @click="toggleTagToRemove(tag.id)"
-                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
+                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap;"
                                 :style="{ background: tagsToRemove.includes(tag.id) ? '#fef2f2' : 'white' }">
-                                <input type="checkbox" :checked="tagsToRemove.includes(tag.id)" style="pointer-events: none;">
-                                <span style="width: 12px; height: 12px; border-radius: 3px;" :style="{ backgroundColor: tag.color }"></span>
+                                <input type="checkbox" :checked="tagsToRemove.includes(tag.id)" style="pointer-events: none; flex-shrink: 0;">
+                                <span style="width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;" :style="{ backgroundColor: tag.color }"></span>
                                 <span style="font-size: 13px;">{{ tag.name }}</span>
                             </div>
                         </div>
@@ -1280,10 +1280,10 @@
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" v-model="bulkArchive" @change="archiveChanged = true">
-                        Archive
+                <div class="form-group" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px;">
+                        <input type="checkbox" v-model="bulkArchive" @change="archiveChanged = true" style="width: 16px; height: 16px; flex-shrink: 0;">
+                        <span>Archive</span>
                     </label>
                 </div>
 
