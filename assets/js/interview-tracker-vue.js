@@ -1209,20 +1209,20 @@
                         </button>
                         <div
                             v-if="showAddTagsDropdown"
-                            style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1); min-width: 200px;">
+                            style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                             <div v-if="store.availableTags.length === 0" style="padding: 12px; color: #94a3b8; font-size: 13px;">
                                 No tags available
                             </div>
-                            <div
+                            <label
                                 v-for="tag in store.availableTags"
                                 :key="tag.id"
-                                @click="toggleTagToAdd(tag.id)"
-                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap;"
+                                @click.prevent="toggleTagToAdd(tag.id)"
+                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
                                 :style="{ background: tagsToAdd.includes(tag.id) ? '#f0f9ff' : 'white' }">
-                                <input type="checkbox" :checked="tagsToAdd.includes(tag.id)" style="pointer-events: none; flex-shrink: 0;">
-                                <span style="width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;" :style="{ backgroundColor: tag.color }"></span>
-                                <span style="font-size: 13px;">{{ tag.name }}</span>
-                            </div>
+                                <input type="checkbox" :checked="tagsToAdd.includes(tag.id)" style="margin: 0; width: 14px; height: 14px;">
+                                <span style="width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;" :style="{ backgroundColor: tag.color }"></span>
+                                <span style="font-size: 13px; white-space: nowrap;">{{ tag.name }}</span>
+                            </label>
                         </div>
                         <div v-if="showAddTagsDropdown" @click="showAddTagsDropdown = false" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;"></div>
                     </div>
@@ -1252,20 +1252,20 @@
                         </button>
                         <div
                             v-if="showRemoveTagsDropdown"
-                            style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1); min-width: 200px;">
+                            style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #d1d5db; border-radius: 6px; margin-top: 4px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                             <div v-if="store.availableTags.length === 0" style="padding: 12px; color: #94a3b8; font-size: 13px;">
                                 No tags available
                             </div>
-                            <div
+                            <label
                                 v-for="tag in store.availableTags"
                                 :key="tag.id"
-                                @click="toggleTagToRemove(tag.id)"
-                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; white-space: nowrap;"
+                                @click.prevent="toggleTagToRemove(tag.id)"
+                                style="padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;"
                                 :style="{ background: tagsToRemove.includes(tag.id) ? '#fef2f2' : 'white' }">
-                                <input type="checkbox" :checked="tagsToRemove.includes(tag.id)" style="pointer-events: none; flex-shrink: 0;">
-                                <span style="width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;" :style="{ backgroundColor: tag.color }"></span>
-                                <span style="font-size: 13px;">{{ tag.name }}</span>
-                            </div>
+                                <input type="checkbox" :checked="tagsToRemove.includes(tag.id)" style="margin: 0; width: 14px; height: 14px;">
+                                <span style="width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;" :style="{ backgroundColor: tag.color }"></span>
+                                <span style="font-size: 13px; white-space: nowrap;">{{ tag.name }}</span>
+                            </label>
                         </div>
                         <div v-if="showRemoveTagsDropdown" @click="showRemoveTagsDropdown = false" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;"></div>
                     </div>
