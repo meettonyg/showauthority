@@ -155,6 +155,31 @@
                 });
             },
 
+            /**
+             * Generate a unique storage key for tab persistence (namespaced by interview ID)
+             */
+            _getTabStorageKey() {
+                return this.config.interviewId
+                    ? `pit_interview_detail_tab_${this.config.interviewId}`
+                    : 'pit_interview_detail_tab';
+            },
+
+            /**
+             * Load active tab from localStorage
+             */
+            loadActiveTabFromStorage() {
+                const validTabs = ['about', 'listen', 'contact', 'message', 'tasks', 'notes'];
+                const savedTab = localStorage.getItem(this._getTabStorageKey());
+
+                if (savedTab && validTabs.includes(savedTab)) {
+                    this.activeTab = savedTab;
+                    // Trigger lazy loading for tabs that need it
+                    if (savedTab === 'listen' && this.episodes.length === 0 && !this.episodesLoading) {
+                        this.loadEpisodes();
+                    }
+                }
+            },
+
             async api(endpoint, options = {}) {
                 // Use shared API client for consistent request handling
                 return this._apiClient.request(endpoint, options);
@@ -785,6 +810,8 @@
 
             setActiveTab(tab) {
                 this.activeTab = tab;
+                // Persist tab selection to localStorage
+                localStorage.setItem(this._getTabStorageKey(), tab);
                 // Load episodes when Listen tab is first accessed
                 if (tab === 'listen' && this.episodes.length === 0 && !this.episodesLoading) {
                     this.loadEpisodes();
@@ -3479,6 +3506,10 @@
                 if (typeof guestifyDetailData !== 'undefined') {
                     store.initConfig(guestifyDetailData);
                 }
+
+                // Load persisted tab state (must be after initConfig so interviewId is available)
+                store.loadActiveTabFromStorage();
+
                 store.loadInterview();
 
                 // Initialize email integration (non-blocking)
