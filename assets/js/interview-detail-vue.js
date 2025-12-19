@@ -25,6 +25,7 @@
     // CONSTANTS
     // ==========================================================================
     const TAG_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+    const VALID_TABS = ['about', 'listen', 'contact', 'message', 'tasks', 'notes'];
 
     // ==========================================================================
     // PINIA STORE
@@ -159,7 +160,8 @@
              * Generate a unique storage key for tab persistence (namespaced by interview ID)
              */
             _getTabStorageKey() {
-                return this.config.interviewId
+                // Use explicit null check to handle interviewId of 0 correctly
+                return this.config.interviewId != null
                     ? `pit_interview_detail_tab_${this.config.interviewId}`
                     : 'pit_interview_detail_tab';
             },
@@ -168,10 +170,9 @@
              * Load active tab from localStorage
              */
             loadActiveTabFromStorage() {
-                const validTabs = ['about', 'listen', 'contact', 'message', 'tasks', 'notes'];
                 const savedTab = localStorage.getItem(this._getTabStorageKey());
 
-                if (savedTab && validTabs.includes(savedTab)) {
+                if (savedTab && VALID_TABS.includes(savedTab)) {
                     this.activeTab = savedTab;
                     // Trigger lazy loading for tabs that need it
                     if (savedTab === 'listen' && this.episodes.length === 0 && !this.episodesLoading) {
