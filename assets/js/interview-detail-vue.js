@@ -2580,12 +2580,13 @@
                 </div>
 
                 <!-- Compose Email Modal -->
-                <div id="composeModal" class="custom-modal compose-modal" :class="{ active: showComposeModal }">
-                    <div class="custom-modal-content">
+                <div id="composeModal" class="custom-modal compose-modal" :class="{ active: showComposeModal, 'has-sidebar': showVariableSidebar }">
+                    <div class="custom-modal-content" :class="{ 'with-sidebar': showVariableSidebar }">
                         <div class="custom-modal-header">
                             <h2 id="modal-title">{{ composeMode === 'campaign' ? 'Start Campaign' : 'Compose Email' }}</h2>
                             <span class="custom-modal-close" @click="closeComposeModal">&times;</span>
                         </div>
+                        <div class="compose-modal-body-wrapper">
                         <div class="custom-modal-body">
                             <!-- Mode Toggle (when campaigns available) -->
                             <div class="form-group compose-mode-toggle" v-if="emailFeatures.campaigns && sequences.length > 0">
@@ -2671,12 +2672,12 @@
 
                                 <div class="form-group">
                                     <label>Subject <span class="required">*</span></label>
-                                    <input type="text" v-model="composeEmail.subject" class="field-input" placeholder="Subject line..." />
+                                    <input ref="subjectInputRef" type="text" v-model="composeEmail.subject" class="field-input" placeholder="Subject line..." @focus="handleFieldFocus('subject')" />
                                 </div>
 
                                 <div class="form-group">
                                     <label>Message <span class="required">*</span></label>
-                                    <textarea v-model="composeEmail.body" class="field-input email-body-textarea" rows="8" placeholder="Write your message here..."></textarea>
+                                    <textarea ref="bodyInputRef" v-model="composeEmail.body" class="field-input email-body-textarea" rows="8" placeholder="Write your message here..." @focus="handleFieldFocus('body')"></textarea>
                                 </div>
 
                                 <div class="custom-modal-actions">
@@ -2687,6 +2688,69 @@
                                     </button>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Variable Sidebar -->
+                        <div v-if="showVariableSidebar" class="variable-sidebar">
+                            <div class="sidebar-header">
+                                <h3 class="sidebar-title">Personalization</h3>
+                                <p class="sidebar-subtitle">Click to insert variable tag</p>
+                            </div>
+
+                            <div class="search-wrapper">
+                                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <path d="m21 21-4.35-4.35"></path>
+                                </svg>
+                                <input v-model="variablesSearchQuery" type="text" class="search-input" placeholder="Search variables..." />
+                            </div>
+
+                            <div v-if="variablesLoading" class="sidebar-loading">
+                                <div class="loading-spinner"></div>
+                                <span>Loading variables...</span>
+                            </div>
+
+                            <div v-else-if="filteredVariableCategories.length > 0" class="variables-list">
+                                <div v-for="category in filteredVariableCategories" :key="category.name" class="variable-category">
+                                    <button class="category-header" @click="toggleVariableCategory(category.name)">
+                                        <svg class="category-chevron" :class="{ expanded: expandedCategories.includes(category.name) }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polyline points="9 18 15 12 9 6"></polyline>
+                                        </svg>
+                                        <span class="category-name">{{ category.name }}</span>
+                                        <span class="category-count">{{ category.variables.length }}</span>
+                                    </button>
+                                    <div v-if="expandedCategories.includes(category.name)" class="category-variables">
+                                        <div v-for="variable in category.variables" :key="variable.tag" class="variable-item" :class="{ 'is-used': isVariableUsed(variable.tag) }">
+                                            <button class="variable-main" @click="insertVariable(variable.tag)" :title="'Click to insert ' + variable.tag">
+                                                <span class="variable-label">{{ variable.label }}</span>
+                                                <span class="variable-tag">{{ variable.tag }}</span>
+                                                <span v-if="variable.value" class="variable-value" :title="variable.value">{{ truncateVariableValue(variable.value) }}</span>
+                                                <span v-else class="variable-empty">(empty)</span>
+                                            </button>
+                                            <button v-if="variable.value" class="copy-btn" @click.stop="copyVariableValue(variable.value, variable.tag)" :title="'Copy value: ' + variable.value">
+                                                <svg v-if="copiedVariableTag !== variable.tag" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                                </svg>
+                                                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-else class="sidebar-empty">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                                </svg>
+                                <p>No variables available</p>
+                            </div>
+                        </div>
                         </div>
                     </div>
                 </div>
@@ -2738,6 +2802,118 @@
                 body: '',
                 sequenceId: null, // For campaign mode
             });
+
+            // Variable sidebar state
+            const variablesData = ref({});
+            const variablesLoading = ref(false);
+            const variablesSearchQuery = ref('');
+            const expandedCategories = ref(['Podcast Information', 'Guest Information']);
+            const copiedVariableTag = ref(null);
+            const lastFocusedField = ref('body'); // 'subject' or 'body'
+
+            // Refs for input elements (for cursor position insertion)
+            const subjectInputRef = ref(null);
+            const bodyInputRef = ref(null);
+
+            // Show sidebar only in single email mode
+            const showVariableSidebar = computed(() => {
+                return composeMode.value === 'single';
+            });
+
+            // Filtered variable categories based on search
+            const filteredVariableCategories = computed(() => {
+                if (!variablesData.value?.categories) return [];
+                const query = variablesSearchQuery.value.toLowerCase().trim();
+                if (!query) return variablesData.value.categories;
+                return variablesData.value.categories
+                    .map(cat => ({
+                        ...cat,
+                        variables: cat.variables.filter(v =>
+                            v.label.toLowerCase().includes(query) ||
+                            v.tag.toLowerCase().includes(query) ||
+                            (v.value && v.value.toLowerCase().includes(query))
+                        )
+                    }))
+                    .filter(cat => cat.variables.length > 0);
+            });
+
+            // Check if a variable is used in subject or body
+            const isVariableUsed = (tag) => {
+                const text = (composeEmail.subject + ' ' + composeEmail.body).toLowerCase();
+                return text.includes(tag.toLowerCase());
+            };
+
+            // Toggle category expansion
+            const toggleVariableCategory = (categoryName) => {
+                const idx = expandedCategories.value.indexOf(categoryName);
+                if (idx === -1) {
+                    expandedCategories.value.push(categoryName);
+                } else {
+                    expandedCategories.value.splice(idx, 1);
+                }
+            };
+
+            // Truncate long values
+            const truncateVariableValue = (value, max = 25) => {
+                if (!value || value.length <= max) return value;
+                return value.substring(0, max) + '...';
+            };
+
+            // Handle input focus
+            const handleFieldFocus = (field) => {
+                lastFocusedField.value = field;
+            };
+
+            // Insert variable tag at cursor
+            const insertVariable = (tag) => {
+                const field = lastFocusedField.value;
+                const inputEl = field === 'subject' ? subjectInputRef.value : bodyInputRef.value;
+
+                if (!inputEl) {
+                    composeEmail.body += tag;
+                    return;
+                }
+
+                const start = inputEl.selectionStart || 0;
+                const end = inputEl.selectionEnd || 0;
+                const current = composeEmail[field];
+                composeEmail[field] = current.substring(0, start) + tag + current.substring(end);
+
+                // Restore cursor position
+                const newPos = start + tag.length;
+                setTimeout(() => {
+                    inputEl.focus();
+                    inputEl.setSelectionRange(newPos, newPos);
+                }, 0);
+            };
+
+            // Copy variable value to clipboard
+            const copyVariableValue = async (value, tag) => {
+                try {
+                    await navigator.clipboard.writeText(value);
+                    copiedVariableTag.value = tag;
+                    setTimeout(() => { copiedVariableTag.value = null; }, 2000);
+                } catch (err) {
+                    console.error('Failed to copy:', err);
+                }
+            };
+
+            // Fetch personalization variables
+            const fetchVariables = async () => {
+                const interviewId = window.guestifyDetailData?.interviewId;
+                if (!interviewId) return;
+
+                variablesLoading.value = true;
+                try {
+                    const response = await GuestifyAPI.get(`/appearances/${interviewId}/variables`);
+                    variablesData.value = response?.data || {};
+                } catch (error) {
+                    console.error('Failed to fetch variables:', error);
+                    variablesData.value = {};
+                } finally {
+                    variablesLoading.value = false;
+                }
+            };
 
             // Computed for compose validation
             const isComposeValid = computed(() => {
@@ -3325,6 +3501,8 @@
                     composeEmail.toName = store.interview.host_name;
                 }
                 showComposeModal.value = true;
+                // Fetch personalization variables
+                fetchVariables();
             };
 
             const closeComposeModal = () => {
@@ -3337,6 +3515,10 @@
                 composeEmail.subject = '';
                 composeEmail.body = '';
                 composeEmail.sequenceId = null;
+                // Reset variables state
+                variablesData.value = {};
+                variablesSearchQuery.value = '';
+                lastFocusedField.value = 'body';
             };
 
             const applyTemplate = () => {
@@ -3685,6 +3867,24 @@
                 composeEmail,
                 isComposeValid,
                 isCampaignValid,
+
+                // Variable sidebar state
+                variablesData,
+                variablesLoading,
+                variablesSearchQuery,
+                expandedCategories,
+                copiedVariableTag,
+                lastFocusedField,
+                subjectInputRef,
+                bodyInputRef,
+                showVariableSidebar,
+                filteredVariableCategories,
+                isVariableUsed,
+                toggleVariableCategory,
+                truncateVariableValue,
+                handleFieldFocus,
+                insertVariable,
+                copyVariableValue,
 
                 // Email methods
                 openComposeModal,
