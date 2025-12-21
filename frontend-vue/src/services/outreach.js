@@ -214,5 +214,20 @@ export default {
   async getUnifiedStats(appearanceId) {
     const response = await api.get(`/pit-bridge/appearances/${appearanceId}/unified-stats`)
     return response.data
+  },
+
+  // =========================================================================
+  // Personalization Variables (v5.3.0+)
+  // =========================================================================
+
+  /**
+   * Get personalization variables for an appearance
+   * Returns template variables with their actual populated values from podcast/guest data
+   * @param {number} appearanceId - The appearance/opportunity ID
+   * @returns {Promise<{success: boolean, data: {categories: Array<{name: string, variables: Array<{tag: string, label: string, value: string}>}>}}>}
+   */
+  async getVariables(appearanceId) {
+    const response = await api.get(`/appearances/${appearanceId}/variables`)
+    return response.data
   }
 }

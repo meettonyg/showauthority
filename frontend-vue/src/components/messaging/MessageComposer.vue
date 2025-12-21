@@ -2,7 +2,7 @@
   <Teleport to="body">
     <Transition name="modal">
       <div v-if="show" class="modal-overlay" @click.self="handleClose">
-        <div class="modal-container">
+        <div class="modal-container" :class="{ 'has-sidebar': showSidebar }">
           <div class="modal-header">
             <h2 class="modal-title">{{ modalTitle }}</h2>
             <button class="modal-close" @click="handleClose" :disabled="sending">
@@ -13,9 +13,10 @@
             </button>
           </div>
 
-          <div class="modal-body">
-            <!-- Mode Toggle (only show if sequences available) -->
-            <div v-if="hasSequences" class="mode-toggle">
+          <div class="modal-body-wrapper">
+            <div class="modal-body">
+              <!-- Mode Toggle (only show if sequences available) -->
+              <div v-if="hasSequences" class="mode-toggle">
               <button
                 class="mode-btn"
                 :class="{ active: mode === 'email' }"
@@ -86,12 +87,14 @@
                   Subject <span class="required">*</span>
                 </label>
                 <input
+                  ref="subjectInputRef"
                   v-model="form.subject"
                   type="text"
                   class="form-input"
                   placeholder="Subject line..."
                   :disabled="sending"
                   required
+                  @focus="handleInputFocus('subject')"
                 />
               </div>
 
@@ -101,12 +104,14 @@
                   Message <span class="required">*</span>
                 </label>
                 <textarea
+                  ref="bodyInputRef"
                   v-model="form.body"
                   class="form-input form-textarea"
                   rows="8"
                   placeholder="Write your message here..."
                   :disabled="sending"
                   required
+                  @focus="handleInputFocus('body')"
                 ></textarea>
               </div>
             </template>
@@ -167,10 +172,21 @@
               </div>
             </template>
 
-            <!-- Error Message -->
-            <div v-if="error" class="form-error">
-              {{ error }}
+              <!-- Error Message -->
+              <div v-if="error" class="form-error">
+                {{ error }}
+              </div>
             </div>
+
+            <!-- Variable Sidebar -->
+            <VariableSidebar
+              v-if="showSidebar"
+              :variables-data="variablesData"
+              :loading="variablesLoading"
+              :subject="form.subject"
+              :body="form.body"
+              @insert="handleInsertVariable"
+            />
           </div>
 
           <div class="modal-footer">
@@ -211,11 +227,20 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import TemplateSelector from './TemplateSelector.vue'
 import SequenceSelector from './SequenceSelector.vue'
+import VariableSidebar from './VariableSidebar.vue'
+import outreachService from '../../services/outreach'
 
 const props = defineProps({
   show: {
     type: Boolean,
     default: false
+  },
+  /**
+   * Appearance ID for fetching personalization variables
+   */
+  appearanceId: {
+    type: Number,
+    default: null
   },
   templates: {
     type: Array,
@@ -261,6 +286,18 @@ const form = reactive({
   body: ''
 })
 
+// Variables sidebar state
+const variablesData = ref({})
+const variablesLoading = ref(false)
+const subjectInputRef = ref(null)
+const bodyInputRef = ref(null)
+const lastFocusedInput = ref(null)
+
+// Show sidebar only in email mode with appearance ID
+const showSidebar = computed(() => {
+  return mode.value === 'email' && props.appearanceId
+})
+
 // Check if sequences are available
 const hasSequences = computed(() => {
   return props.sequences && props.sequences.length > 0
@@ -293,11 +330,15 @@ const isValid = computed(() => {
   return form.toEmail?.trim() && form.subject?.trim() && form.body?.trim()
 })
 
-// Pre-fill defaults when modal opens
+// Pre-fill defaults and fetch variables when modal opens
 watch(() => props.show, (isShown) => {
   if (isShown) {
     form.toEmail = props.defaultEmail || ''
     form.toName = props.defaultName || ''
+    // Fetch variables when modal opens
+    if (props.appearanceId) {
+      fetchVariables()
+    }
   }
 })
 
@@ -349,6 +390,56 @@ function resetForm() {
   form.toName = ''
   form.subject = ''
   form.body = ''
+  variablesData.value = {}
+  lastFocusedInput.value = null
+}
+
+// Fetch personalization variables
+async function fetchVariables() {
+  if (!props.appearanceId) return
+
+  variablesLoading.value = true
+  try {
+    const response = await outreachService.getVariables(props.appearanceId)
+    variablesData.value = response.data || response || {}
+  } catch (error) {
+    console.error('Failed to fetch variables:', error)
+    variablesData.value = {}
+  } finally {
+    variablesLoading.value = false
+  }
+}
+
+// Handle input focus to track last focused field
+function handleInputFocus(inputType) {
+  lastFocusedInput.value = inputType
+}
+
+// Insert variable tag at cursor position
+function handleInsertVariable(tag) {
+  const targetRef = lastFocusedInput.value === 'subject' ? subjectInputRef.value : bodyInputRef.value
+  const targetField = lastFocusedInput.value === 'subject' ? 'subject' : 'body'
+
+  if (!targetRef) {
+    // Default to body if no field was focused
+    form.body = form.body + tag
+    return
+  }
+
+  const input = targetRef
+  const start = input.selectionStart || 0
+  const end = input.selectionEnd || 0
+  const currentValue = form[targetField]
+
+  // Insert tag at cursor position
+  form[targetField] = currentValue.substring(0, start) + tag + currentValue.substring(end)
+
+  // Set cursor position after inserted tag
+  const newPos = start + tag.length
+  setTimeout(() => {
+    input.focus()
+    input.setSelectionRange(newPos, newPos)
+  }, 0)
 }
 
 // Handle Escape key to close modal
@@ -396,6 +487,11 @@ defineExpose({ resetForm })
   overflow: hidden;
 }
 
+/* Wider modal when sidebar is shown */
+.modal-container.has-sidebar {
+  max-width: 900px;
+}
+
 /* Header */
 .modal-header {
   display: flex;
@@ -436,11 +532,20 @@ defineExpose({ resetForm })
   cursor: not-allowed;
 }
 
+/* Body Wrapper - two-column layout when sidebar is shown */
+.modal-body-wrapper {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
 /* Body */
 .modal-body {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
+  min-width: 0;
 }
 
 /* Form */

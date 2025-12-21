@@ -72,6 +72,13 @@ class PIT_REST_Appearances {
             'callback' => [__CLASS__, 'delete_appearance'],
             'permission_callback' => [__CLASS__, 'check_permissions'],
         ]);
+
+        // Get personalization variables
+        register_rest_route(self::NAMESPACE, '/appearances/(?P<id>\d+)/variables', [
+            'methods' => 'GET',
+            'callback' => [__CLASS__, 'get_appearance_variables'],
+            'permission_callback' => [__CLASS__, 'check_permissions'],
+        ]);
     }
 
     public static function check_permissions() {
@@ -374,6 +381,194 @@ class PIT_REST_Appearances {
         $wpdb->delete($table, ['id' => $id]);
 
         return new WP_REST_Response(['message' => 'Opportunity deleted'], 200);
+    }
+
+    /**
+     * Get personalization variables for an appearance
+     * Returns template variables with their actual populated values
+     */
+    public static function get_appearance_variables($request) {
+        global $wpdb;
+
+        $id = (int) $request->get_param('id');
+        $user_id = get_current_user_id();
+
+        $table = $wpdb->prefix . 'pit_opportunities';
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+
+        $sql = "SELECT o.*,
+                       p.title as podcast_name,
+                       p.author as host_name,
+                       p.email as host_email,
+                       p.website_url as website,
+                       p.description,
+                       p.category,
+                       p.language,
+                       p.episode_count,
+                       p.frequency,
+                       p.average_duration
+                FROM {$table} o
+                LEFT JOIN {$podcasts_table} p ON o.podcast_id = p.id
+                WHERE o.id = %d";
+
+        // Non-admins can only see their own
+        if (!current_user_can('manage_options')) {
+            $sql .= " AND o.user_id = %d";
+            $row = $wpdb->get_row($wpdb->prepare($sql, $id, $user_id));
+        } else {
+            $row = $wpdb->get_row($wpdb->prepare($sql, $id));
+        }
+
+        if (!$row) {
+            return new WP_Error('not_found', 'Appearance not found', ['status' => 404]);
+        }
+
+        // Try to get variables from Guestify Profile Variables if available
+        if (class_exists('Guestify_Profile_Variables')) {
+            try {
+                $variables = Guestify_Profile_Variables::get_variables_json($row->guest_profile_id ?? 0, $row);
+                if (!empty($variables)) {
+                    return new WP_REST_Response([
+                        'success' => true,
+                        'data' => $variables,
+                    ], 200);
+                }
+            } catch (Exception $e) {
+                // Fall through to local variables
+            }
+        }
+
+        // Build local variables from podcast/guest data
+        $variables = self::build_local_variables($row);
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => $variables,
+        ], 200);
+    }
+
+    /**
+     * Build personalization variables from local data
+     */
+    private static function build_local_variables($row) {
+        $user = wp_get_current_user();
+
+        // Get guest profile data if available
+        $guest_name = '';
+        $guest_title = '';
+        $guest_bio = '';
+        $guest_email = '';
+
+        if (!empty($row->guest_profile_id)) {
+            $profile_id = (int) $row->guest_profile_id;
+            $guest_name = get_the_title($profile_id);
+            $guest_title = get_post_meta($profile_id, '_guestify_title', true) ?: '';
+            $guest_bio = get_post_meta($profile_id, '_guestify_bio', true) ?: '';
+            $guest_email = get_post_meta($profile_id, '_guestify_email', true) ?: '';
+        }
+
+        // Fallback to user data if no guest profile
+        if (empty($guest_name)) {
+            $guest_name = $user->display_name ?: '';
+        }
+        if (empty($guest_email)) {
+            $guest_email = $user->user_email ?: '';
+        }
+
+        $categories = [
+            [
+                'name' => 'Podcast Information',
+                'variables' => [
+                    [
+                        'tag' => '{{podcast_name}}',
+                        'label' => 'Podcast Name',
+                        'value' => $row->podcast_name ?? '',
+                    ],
+                    [
+                        'tag' => '{{host_name}}',
+                        'label' => 'Host Name',
+                        'value' => $row->host_name ?? '',
+                    ],
+                    [
+                        'tag' => '{{host_email}}',
+                        'label' => 'Host Email',
+                        'value' => $row->host_email ?? '',
+                    ],
+                    [
+                        'tag' => '{{podcast_website}}',
+                        'label' => 'Podcast Website',
+                        'value' => $row->website ?? '',
+                    ],
+                    [
+                        'tag' => '{{podcast_category}}',
+                        'label' => 'Category',
+                        'value' => $row->category ?? '',
+                    ],
+                    [
+                        'tag' => '{{podcast_description}}',
+                        'label' => 'Description',
+                        'value' => $row->description ?? '',
+                    ],
+                    [
+                        'tag' => '{{episode_count}}',
+                        'label' => 'Episode Count',
+                        'value' => $row->episode_count ? (string) $row->episode_count : '',
+                    ],
+                ],
+            ],
+            [
+                'name' => 'Guest Information',
+                'variables' => [
+                    [
+                        'tag' => '{{guest_name}}',
+                        'label' => 'Guest Name',
+                        'value' => $guest_name,
+                    ],
+                    [
+                        'tag' => '{{guest_title}}',
+                        'label' => 'Guest Title',
+                        'value' => $guest_title,
+                    ],
+                    [
+                        'tag' => '{{guest_email}}',
+                        'label' => 'Guest Email',
+                        'value' => $guest_email,
+                    ],
+                    [
+                        'tag' => '{{guest_bio}}',
+                        'label' => 'Guest Bio',
+                        'value' => $guest_bio,
+                    ],
+                    [
+                        'tag' => '{{sender_name}}',
+                        'label' => 'Sender Name',
+                        'value' => $user->display_name ?: '',
+                    ],
+                    [
+                        'tag' => '{{sender_email}}',
+                        'label' => 'Sender Email',
+                        'value' => $user->user_email ?: '',
+                    ],
+                ],
+            ],
+            [
+                'name' => 'System',
+                'variables' => [
+                    [
+                        'tag' => '{{current_date}}',
+                        'label' => 'Current Date',
+                        'value' => date_i18n(get_option('date_format')),
+                    ],
+                    [
+                        'tag' => '{{current_year}}',
+                        'label' => 'Current Year',
+                        'value' => date('Y'),
+                    ],
+                ],
+            ],
+        ];
+
+        return ['categories' => $categories];
     }
 
     /**
