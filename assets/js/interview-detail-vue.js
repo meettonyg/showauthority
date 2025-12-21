@@ -2900,12 +2900,12 @@
 
             // Fetch personalization variables
             const fetchVariables = async () => {
-                const interviewId = window.guestifyDetailData?.interviewId;
+                const interviewId = store.config?.interviewId;
                 if (!interviewId) return;
 
                 variablesLoading.value = true;
                 try {
-                    const response = await GuestifyAPI.get(`/appearances/${interviewId}/variables`);
+                    const response = await store.api(`appearances/${interviewId}/variables`);
                     variablesData.value = response?.data || {};
                 } catch (error) {
                     console.error('Failed to fetch variables:', error);
