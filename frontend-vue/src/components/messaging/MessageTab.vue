@@ -67,6 +67,7 @@
     <MessageComposer
       ref="composerRef"
       :show="showComposer"
+      :appearance-id="appearanceId"
       :templates="messagesStore.templates"
       :sequences="messagesStore.sequences"
       :sequences-loading="messagesStore.sequencesLoading"
