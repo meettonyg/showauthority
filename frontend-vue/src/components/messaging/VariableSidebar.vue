@@ -78,7 +78,7 @@
               <button
                 v-if="variable.value"
                 class="copy-btn"
-                @click.stop="handleCopy(variable.value)"
+                @click.stop="handleCopy(variable.value, variable.tag)"
                 :title="`Copy value: ${variable.value}`"
               >
                 <svg v-if="copiedTag !== variable.tag" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -212,20 +212,13 @@ function handleInsert(tag) {
 }
 
 // Handle copy to clipboard
-async function handleCopy(value) {
+async function handleCopy(value, tag) {
   try {
     await navigator.clipboard.writeText(value)
-    // Find the tag for this value to show checkmark
-    for (const category of props.variablesData?.categories || []) {
-      const variable = category.variables.find(v => v.value === value)
-      if (variable) {
-        copiedTag.value = variable.tag
-        setTimeout(() => {
-          copiedTag.value = null
-        }, 2000)
-        break
-      }
-    }
+    copiedTag.value = tag
+    setTimeout(() => {
+      copiedTag.value = null
+    }, 2000)
   } catch (err) {
     console.error('Failed to copy:', err)
   }

@@ -401,7 +401,7 @@ async function fetchVariables() {
   variablesLoading.value = true
   try {
     const response = await outreachService.getVariables(props.appearanceId)
-    variablesData.value = response.data || response || {}
+    variablesData.value = response.data || {}
   } catch (error) {
     console.error('Failed to fetch variables:', error)
     variablesData.value = {}

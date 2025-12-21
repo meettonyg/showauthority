@@ -434,6 +434,7 @@ class PIT_REST_Appearances {
                     ], 200);
                 }
             } catch (Exception $e) {
+                error_log('Failed to get variables from Guestify Profile: ' . $e->getMessage());
                 // Fall through to local variables
             }
         }
