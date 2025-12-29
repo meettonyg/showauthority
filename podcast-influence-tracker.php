@@ -147,6 +147,9 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-guestify-outreach-bridge.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-guestify-bridge.php';
 
+        // v5.4.0 AI REFINEMENT (Email AI Features)
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-ai.php';
+
         // MIGRATIONS
         require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
         require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-events-schema.php';

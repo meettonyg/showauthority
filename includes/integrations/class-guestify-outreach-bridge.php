@@ -1071,4 +1071,270 @@ class PIT_Guestify_Outreach_Bridge {
             ],
         ];
     }
+
+    // =========================================================================
+    // Template CRUD Operations (v5.4.0+)
+    // =========================================================================
+
+    /**
+     * Create a new email template
+     *
+     * Routes through Guestify Outreach Public API if available,
+     * otherwise creates directly in the database.
+     *
+     * @param array $args Template data
+     * @return array Result with success, message, template_id
+     */
+    public static function create_template(array $args): array {
+        if (!self::is_active()) {
+            return [
+                'success' => false,
+                'message' => 'Guestify Outreach plugin is not active.'
+            ];
+        }
+
+        // Validate required fields
+        if (empty($args['name'])) {
+            return ['success' => false, 'message' => 'Template name is required'];
+        }
+        if (empty($args['subject'])) {
+            return ['success' => false, 'message' => 'Subject is required'];
+        }
+
+        // Use Public API if available
+        if (self::has_public_api() && method_exists('Guestify_Outreach_Public_API', 'create_template')) {
+            return Guestify_Outreach_Public_API::create_template([
+                'name'        => sanitize_text_field($args['name']),
+                'subject'     => sanitize_text_field($args['subject']),
+                'body_html'   => wp_kses_post($args['body_html'] ?? ''),
+                'category'    => sanitize_text_field($args['category'] ?? 'Custom'),
+                'user_id'     => get_current_user_id(),
+            ]);
+        }
+
+        // Fallback: Direct database insert
+        return self::create_template_legacy($args);
+    }
+
+    /**
+     * Legacy template creation via direct database insert
+     */
+    private static function create_template_legacy(array $args): array {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_email_templates';
+
+        // Check if table exists
+        $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+        if (!$table_exists) {
+            return [
+                'success' => false,
+                'message' => 'Email templates table not found. Please ensure Guestify Outreach is properly installed.'
+            ];
+        }
+
+        $user_id = get_current_user_id();
+
+        // Check for duplicate name for this user
+        $existing = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$table} WHERE template_name = %s AND user_id = %d",
+            $args['name'],
+            $user_id
+        ));
+
+        if ($existing) {
+            return [
+                'success' => false,
+                'message' => 'A template with this name already exists.'
+            ];
+        }
+
+        $result = $wpdb->insert($table, [
+            'template_name'     => sanitize_text_field($args['name']),
+            'category'          => sanitize_text_field($args['category'] ?? 'Custom'),
+            'subject'           => sanitize_text_field($args['subject']),
+            'body_html'         => wp_kses_post($args['body_html'] ?? ''),
+            'variables_schema'  => wp_json_encode([]),
+            'user_id'           => $user_id,
+            'is_default'        => 0,
+            'is_active'         => 1,
+            'created_at'        => current_time('mysql'),
+            'updated_at'        => current_time('mysql'),
+        ]);
+
+        if ($result === false) {
+            return [
+                'success' => false,
+                'message' => 'Failed to create template: ' . $wpdb->last_error
+            ];
+        }
+
+        return [
+            'success'     => true,
+            'message'     => 'Template created successfully',
+            'template_id' => $wpdb->insert_id
+        ];
+    }
+
+    /**
+     * Update an existing template
+     *
+     * @param int   $template_id Template ID
+     * @param array $args        Updated template data
+     * @return array Result with success and message
+     */
+    public static function update_template(int $template_id, array $args): array {
+        if (!self::is_active()) {
+            return [
+                'success' => false,
+                'message' => 'Guestify Outreach plugin is not active.'
+            ];
+        }
+
+        // Use Public API if available
+        if (self::has_public_api() && method_exists('Guestify_Outreach_Public_API', 'update_template')) {
+            return Guestify_Outreach_Public_API::update_template($template_id, [
+                'subject'   => sanitize_text_field($args['subject'] ?? ''),
+                'body_html' => wp_kses_post($args['body_html'] ?? ''),
+            ]);
+        }
+
+        // Fallback: Direct database update
+        return self::update_template_legacy($template_id, $args);
+    }
+
+    /**
+     * Legacy template update via direct database query
+     */
+    private static function update_template_legacy(int $template_id, array $args): array {
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_email_templates';
+
+        // Check if table exists
+        $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+        if (!$table_exists) {
+            return [
+                'success' => false,
+                'message' => 'Email templates table not found.'
+            ];
+        }
+
+        $user_id = get_current_user_id();
+
+        // Check if user owns the template or is admin
+        $template = $wpdb->get_row($wpdb->prepare(
+            "SELECT user_id FROM {$table} WHERE id = %d",
+            $template_id
+        ));
+
+        if (!$template) {
+            return [
+                'success' => false,
+                'message' => 'Template not found.'
+            ];
+        }
+
+        // Only allow update if user owns template or is admin
+        if ((int) $template->user_id !== $user_id && !current_user_can('manage_options')) {
+            return [
+                'success' => false,
+                'message' => 'You do not have permission to update this template.'
+            ];
+        }
+
+        // Build update data
+        $update_data = ['updated_at' => current_time('mysql')];
+        $update_format = ['%s'];
+
+        if (isset($args['subject'])) {
+            $update_data['subject'] = sanitize_text_field($args['subject']);
+            $update_format[] = '%s';
+        }
+
+        if (isset($args['body_html'])) {
+            $update_data['body_html'] = wp_kses_post($args['body_html']);
+            $update_format[] = '%s';
+        }
+
+        if (isset($args['name'])) {
+            $update_data['template_name'] = sanitize_text_field($args['name']);
+            $update_format[] = '%s';
+        }
+
+        if (isset($args['category'])) {
+            $update_data['category'] = sanitize_text_field($args['category']);
+            $update_format[] = '%s';
+        }
+
+        $result = $wpdb->update(
+            $table,
+            $update_data,
+            ['id' => $template_id],
+            $update_format,
+            ['%d']
+        );
+
+        if ($result === false) {
+            return [
+                'success' => false,
+                'message' => 'Failed to update template: ' . $wpdb->last_error
+            ];
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Template updated successfully'
+        ];
+    }
+
+    /**
+     * Get a single template by ID
+     *
+     * @param int $template_id Template ID
+     * @return array|null Template data or null if not found
+     */
+    public static function get_template(int $template_id): ?array {
+        if (!self::is_active()) {
+            return null;
+        }
+
+        // Use Public API if available
+        if (self::has_public_api() && method_exists('Guestify_Outreach_Public_API', 'get_template')) {
+            return Guestify_Outreach_Public_API::get_template($template_id);
+        }
+
+        // Fallback: Direct database query
+        global $wpdb;
+        $table = $wpdb->prefix . 'guestify_email_templates';
+
+        $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+        if (!$table_exists) {
+            return null;
+        }
+
+        $user_id = get_current_user_id();
+
+        $template = $wpdb->get_row($wpdb->prepare(
+            "SELECT id, template_name, category, subject, body_html, variables_schema, is_default
+             FROM {$table}
+             WHERE id = %d
+             AND (user_id = %d OR user_id = 0 OR %d = 1)",
+            $template_id,
+            $user_id,
+            current_user_can('manage_options') ? 1 : 0
+        ), ARRAY_A);
+
+        if (!$template) {
+            return null;
+        }
+
+        return [
+            'id'         => (int) $template['id'],
+            'name'       => $template['template_name'],
+            'category'   => $template['category'],
+            'subject'    => $template['subject'],
+            'body_html'  => $template['body_html'],
+            'variables'  => json_decode($template['variables_schema'], true) ?: [],
+            'is_default' => (bool) $template['is_default'],
+        ];
+    }
 }

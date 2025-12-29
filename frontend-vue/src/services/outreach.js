@@ -229,5 +229,114 @@ export default {
   async getVariables(appearanceId) {
     const response = await api.get(`/appearances/${appearanceId}/variables`)
     return response.data
+  },
+
+  // =========================================================================
+  // Template CRUD (v5.4.0+)
+  // =========================================================================
+
+  /**
+   * Get a single template by ID
+   * @param {number} templateId - The template ID
+   * @returns {Promise<{success: boolean, data: Object}>}
+   */
+  async getTemplate(templateId) {
+    const response = await api.get(`/pit-bridge/templates/${templateId}`)
+    return response.data
+  },
+
+  /**
+   * Create a new email template
+   * Routes through Bridge to Guestify Outreach
+   * @param {Object} payload - Template data
+   * @param {string} payload.name - Template name
+   * @param {string} payload.subject - Email subject
+   * @param {string} payload.body - Email body HTML
+   * @param {string} [payload.description] - Template description
+   * @param {string} [payload.category] - Template category
+   * @returns {Promise<{success: boolean, message: string, template_id?: number}>}
+   */
+  async createTemplate(payload) {
+    const response = await api.post('/pit-bridge/templates', payload)
+    return response.data
+  },
+
+  /**
+   * Update an existing email template
+   * Routes through Bridge to Guestify Outreach
+   * @param {number} templateId - The template ID
+   * @param {Object} payload - Updated template data
+   * @param {string} [payload.name] - Template name
+   * @param {string} [payload.subject] - Email subject
+   * @param {string} [payload.body] - Email body HTML
+   * @param {string} [payload.description] - Template description
+   * @param {string} [payload.category] - Template category
+   * @returns {Promise<{success: boolean, message: string}>}
+   */
+  async updateTemplate(templateId, payload) {
+    const response = await api.put(`/pit-bridge/templates/${templateId}`, payload)
+    return response.data
+  },
+
+  // =========================================================================
+  // Draft Management (v5.4.0+)
+  // =========================================================================
+
+  /**
+   * Get drafts for an appearance
+   * @param {number} appearanceId - The appearance ID
+   * @returns {Promise<{success: boolean, data: Array}>}
+   */
+  async getDrafts(appearanceId) {
+    const response = await api.get(`/pit-bridge/appearances/${appearanceId}/drafts`)
+    return response.data
+  },
+
+  /**
+   * Save a draft email
+   * Creates or updates a draft for the appearance
+   * @param {number} appearanceId - The appearance ID
+   * @param {Object} payload - Draft data
+   * @param {number} [payload.draft_id] - Existing draft ID (for updates)
+   * @param {string} [payload.draft_type] - 'single_email' or 'campaign_step'
+   * @param {number} [payload.sequence_id] - Sequence ID (for campaign steps)
+   * @param {number} [payload.step_number] - Step number (for campaign steps)
+   * @param {string} [payload.recipient_email] - Recipient email
+   * @param {string} [payload.recipient_name] - Recipient name
+   * @param {string} [payload.subject] - Email subject
+   * @param {string} [payload.body_html] - Email body HTML
+   * @param {number} [payload.template_id] - Template ID used
+   * @returns {Promise<{success: boolean, message: string, draft_id?: number}>}
+   */
+  async saveDraft(appearanceId, payload) {
+    const response = await api.post(`/pit-bridge/appearances/${appearanceId}/drafts`, payload)
+    return response.data
+  },
+
+  /**
+   * Mark an email as manually sent
+   * Creates a record without actually sending through the system
+   * @param {number} appearanceId - The appearance ID
+   * @param {Object} payload - Email data to record
+   * @param {string} payload.recipient_email - Recipient email
+   * @param {string} [payload.recipient_name] - Recipient name
+   * @param {string} payload.subject - Email subject
+   * @param {string} payload.body_html - Email body HTML
+   * @param {number} [payload.draft_id] - Draft ID to convert to marked_sent
+   * @returns {Promise<{success: boolean, message: string, draft_id?: number}>}
+   */
+  async markAsSent(appearanceId, payload) {
+    const response = await api.post(`/pit-bridge/appearances/${appearanceId}/mark-sent`, payload)
+    return response.data
+  },
+
+  /**
+   * Delete a draft
+   * @param {number} draftId - The draft ID
+   * @returns {Promise<{success: boolean, message: string}>}
+   */
+  async deleteDraft(draftId) {
+    const response = await api.delete(`/pit-bridge/drafts/${draftId}`)
+    return response.data
   }
 }
