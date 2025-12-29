@@ -23,9 +23,9 @@
       </svg>
     </button>
 
-    <!-- Expanded Content -->
-    <Transition name="expand">
-      <div v-if="expanded" class="step-content">
+    <!-- Expanded Content with CSS Grid transition for natural height -->
+    <div class="step-content-wrapper" :class="{ expanded: expanded }">
+      <div class="step-content">
         <!-- Step Toolbar -->
         <div class="step-toolbar">
           <!-- Preview/Edit Toggle -->
@@ -139,7 +139,7 @@
           <span>Changes apply to this campaign only.</span>
         </div>
       </div>
-    </Transition>
+    </div>
   </div>
 </template>
 
@@ -563,24 +563,26 @@ function formatDelay(delay) {
   font-size: 12px;
 }
 
-/* Expand Transition */
-.expand-enter-active,
-.expand-leave-active {
-  transition: all 0.2s ease;
+/* Expand Transition using CSS Grid for natural height animation */
+.step-content-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.2s ease-out;
   overflow: hidden;
 }
 
-.expand-enter-from,
-.expand-leave-to {
-  opacity: 0;
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
+.step-content-wrapper.expanded {
+  grid-template-rows: 1fr;
 }
 
-.expand-enter-to,
-.expand-leave-from {
-  opacity: 1;
-  max-height: 800px;
+.step-content-wrapper > .step-content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.step-content-wrapper:not(.expanded) > .step-content {
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-width: 0;
 }
 </style>

@@ -283,6 +283,7 @@ class PIT_REST_AI {
                 ],
                 'temperature' => 0.7,
                 'max_tokens'  => 2000,
+                'response_format' => ['type' => 'json_object'],
             ]),
         ]);
 
@@ -355,10 +356,8 @@ Guidelines:
 - Keep emails concise - busy podcast hosts appreciate brevity
 - Focus on value proposition and relevance to the podcast
 
-Output format:
-SUBJECT: [refined subject line]
-BODY:
-[refined email body]
+You MUST respond with a valid JSON object containing exactly two keys: "subject" and "body".
+Example: {"subject": "Your refined subject", "body": "Your refined email body text..."}
 PROMPT;
     }
 
@@ -378,10 +377,8 @@ Guidelines:
 - Keep emails concise (under 200 words typically)
 - Use template variables where appropriate: {{host_name}}, {{podcast_name}}, {{guest_name}}, etc.
 
-Output format:
-SUBJECT: [subject line]
-BODY:
-[email body]
+You MUST respond with a valid JSON object containing exactly two keys: "subject" and "body".
+Example: {"subject": "Great opportunity for your podcast", "body": "Hi {{host_name}},\n\nYour email body..."}
 PROMPT;
     }
 
@@ -462,20 +459,28 @@ PROMPT;
     }
 
     /**
-     * Parse email response from AI
+     * Parse email response from AI (JSON format)
      */
     private static function parse_email_response($content) {
+        // Parse JSON response
+        $parsed = json_decode($content, true);
+
+        if (json_last_error() === JSON_ERROR_NONE && is_array($parsed)) {
+            return [
+                'subject' => isset($parsed['subject']) ? trim($parsed['subject']) : '',
+                'body'    => isset($parsed['body']) ? trim($parsed['body']) : '',
+            ];
+        }
+
+        // Fallback: If JSON parsing fails, try legacy regex parsing for backwards compatibility
         $subject = '';
         $body = $content;
 
-        // Try to extract subject
         if (preg_match('/^SUBJECT:\s*(.+?)(?:\n|$)/im', $content, $matches)) {
             $subject = trim($matches[1]);
-            // Remove the subject line from content
             $content = preg_replace('/^SUBJECT:\s*.+?(?:\n|$)/im', '', $content);
         }
 
-        // Try to extract body after BODY: marker
         if (preg_match('/BODY:\s*\n(.+)$/is', $content, $matches)) {
             $body = trim($matches[1]);
         } else {

@@ -1,5 +1,3 @@
-import axios from 'axios'
-
 /**
  * AI Service
  *
@@ -10,35 +8,10 @@ import axios from 'axios'
  * @since 5.4.0
  */
 
-// WordPress REST API configuration
-const getApiBase = () => {
-  const config = window.guestifyDetailData || window.pitConfig || window.guestifyData
-  if (config?.restUrl) {
-    return config.restUrl.replace(/\/$/, '')
-  }
-  return import.meta.env.VITE_API_URL || '/wp-json/guestify/v1'
-}
+import { createApiClient } from '../utils/apiConfig'
 
-const getNonce = () => {
-  const config = window.guestifyDetailData || window.pitConfig || window.guestifyData
-  return config?.nonce || ''
-}
-
-const api = axios.create({
-  headers: {
-    'Content-Type': 'application/json'
-  }
-})
-
-// Add nonce to all requests
-api.interceptors.request.use(config => {
-  config.baseURL = getApiBase()
-  const nonce = getNonce()
-  if (nonce) {
-    config.headers['X-WP-Nonce'] = nonce
-  }
-  return config
-})
+// Create API client using shared configuration
+const api = createApiClient()
 
 export default {
   /**

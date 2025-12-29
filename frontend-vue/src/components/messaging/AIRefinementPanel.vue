@@ -2,11 +2,7 @@
   <div class="ai-panel">
     <div class="ai-panel-header">
       <div class="ai-icon">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-          <path d="M2 17l10 5 10-5"></path>
-          <path d="M2 12l10 5 10-5"></path>
-        </svg>
+        <Icon name="layers" :size="16" />
       </div>
       <span class="ai-label">AI Assistant</span>
     </div>
@@ -20,43 +16,7 @@
         :disabled="loading || !hasContent"
         @click="handleQuickAction(action)"
       >
-        <svg v-if="action.icon === 'wand'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M15 4V2"></path>
-          <path d="M15 16v-2"></path>
-          <path d="M8 9h2"></path>
-          <path d="M20 9h2"></path>
-          <path d="M17.8 11.8L19 13"></path>
-          <path d="M15 9h0"></path>
-          <path d="M17.8 6.2L19 5"></path>
-          <path d="m3 21 9-9"></path>
-          <path d="M12.2 6.2 11 5"></path>
-        </svg>
-        <svg v-else-if="action.icon === 'compress'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="m15 9-6 6"></path>
-          <path d="M18 6L6 18"></path>
-          <path d="M21 3L3 21"></path>
-          <path d="m4 8 4-4"></path>
-          <path d="m16 20 4-4"></path>
-        </svg>
-        <svg v-else-if="action.icon === 'expand'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 11V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6"></path>
-          <path d="m12 12 4 10 1.7-4.3L22 16Z"></path>
-        </svg>
-        <svg v-else-if="action.icon === 'formal'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="2" y="6" width="20" height="12" rx="2"></rect>
-          <path d="M22 10c-1.2.33-3 .33-4.2.33-1.2 0-3 0-4.2-.33"></path>
-          <path d="M2 10c1.2.33 3 .33 4.2.33 1.2 0 3 0 4.2-.33"></path>
-        </svg>
-        <svg v-else-if="action.icon === 'casual'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
-          <line x1="9" y1="9" x2="9.01" y2="9"></line>
-          <line x1="15" y1="9" x2="15.01" y2="9"></line>
-        </svg>
-        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 20h9"></path>
-          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-        </svg>
+        <Icon :name="action.icon" :size="14" />
         {{ action.label }}
       </button>
     </div>
@@ -80,10 +40,7 @@
           <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" opacity="0.3"></circle>
           <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"></path>
         </svg>
-        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="22" y1="2" x2="11" y2="13"></line>
-          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-        </svg>
+        <Icon v-else name="send" :size="14" />
         Apply
       </button>
     </div>
@@ -103,7 +60,8 @@
           <button class="reject-btn" @click="rejectSuggestion">Reject</button>
         </div>
       </div>
-      <div class="suggestion-content" v-html="formattedSuggestion"></div>
+      <!-- Render as plain text with CSS whitespace handling to prevent XSS -->
+      <div class="suggestion-content">{{ suggestion?.body || '' }}</div>
     </div>
   </div>
 </template>
@@ -120,6 +78,7 @@
  */
 
 import { ref, computed } from 'vue'
+import Icon from '../common/Icon.vue'
 import aiService from '../../services/ai'
 
 const props = defineProps({
@@ -151,7 +110,7 @@ const emit = defineEmits([
   'loading' // Emitted when loading state changes
 ])
 
-// Quick action definitions
+// Quick action definitions - icon names match Icon component
 const quickActions = [
   { id: 'polish', label: 'Polish', icon: 'wand', instruction: 'Polish and improve the email while maintaining the core message. Fix grammar, improve flow, and make it more engaging.' },
   { id: 'shorten', label: 'Shorten', icon: 'compress', instruction: 'Make the email more concise by removing unnecessary words and phrases. Keep the key points but reduce length by about 30%.' },
@@ -169,13 +128,6 @@ const suggestion = ref(null)
 // Check if there's content to refine
 const hasContent = computed(() => {
   return (props.subject?.trim() || props.body?.trim())
-})
-
-// Format suggestion for display
-const formattedSuggestion = computed(() => {
-  if (!suggestion.value) return ''
-  // Convert newlines to <br> for display
-  return suggestion.value.body?.replace(/\n/g, '<br>') || ''
 })
 
 /**
@@ -462,5 +414,8 @@ function rejectSuggestion() {
   color: var(--color-text-primary, #374151);
   max-height: 200px;
   overflow-y: auto;
+  /* Preserve whitespace and newlines safely without using v-html */
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 </style>

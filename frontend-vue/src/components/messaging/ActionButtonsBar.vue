@@ -205,7 +205,8 @@ function handleOpenInEmail() {
   const subject = encodeURIComponent(props.subject || '')
   const body = encodeURIComponent(props.body || '')
   const mailto = `mailto:${props.toEmail}?subject=${subject}&body=${body}`
-  window.open(mailto, '_self')
+  // Use location.href for mailto to open email client without disrupting the app
+  window.location.href = mailto
   emit('open-in-email')
 }
 
