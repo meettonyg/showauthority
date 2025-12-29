@@ -1290,7 +1290,7 @@
                                         :disabled="profilesLoading">
                                         <option value="">Not Connected</option>
                                         <option v-for="profile in availableProfiles" :key="profile.id" :value="profile.id">
-                                            {{ profile.name }}
+                                            {{ formatProfileDropdownLabel(profile) }}
                                         </option>
                                     </select>
                                     <p v-if="profilesError" class="error-text">{{ profilesError }}</p>
@@ -2807,7 +2807,7 @@
             const variablesData = ref({});
             const variablesLoading = ref(false);
             const variablesSearchQuery = ref('');
-            const expandedCategories = ref(['Podcast Information', 'Guest Information']);
+            const expandedCategories = ref(['Messaging & Positioning', 'Topics', 'Podcast Information', 'Guest Information']);
             const copiedVariableTag = ref(null);
             const lastFocusedField = ref('body'); // 'subject' or 'body'
 
@@ -3130,7 +3130,24 @@
                 if (!name) return '?';
                 return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
             };
-            
+
+            /**
+             * Format profile label for dropdown display.
+             * Shows: "Name — Tagline" or "Name (#ID)" as fallback
+             */
+            const formatProfileDropdownLabel = (profile) => {
+                if (!profile) return '';
+                const name = profile.name || `Profile #${profile.id}`;
+
+                // Prefer tagline if available
+                if (profile.tagline && profile.tagline.trim()) {
+                    return `${name} — ${profile.tagline}`;
+                }
+
+                // Fall back to showing ID in parentheses
+                return `${name} (#${profile.id})`;
+            };
+
             const handleImageError = (e) => {
                 e.target.style.display = 'none';
             };
@@ -3790,6 +3807,7 @@
                 selectedProfileId,
                 profileSaving,
                 getProfileInitials,
+                formatProfileDropdownLabel,
                 descriptionContent,
                 showDescriptionToggle,
 

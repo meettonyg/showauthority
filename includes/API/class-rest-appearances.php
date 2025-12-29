@@ -450,121 +450,189 @@ class PIT_REST_Appearances {
 
     /**
      * Build personalization variables from local data
+     * Matches the variable structure from Guestify_Profile_Variables class
+     * to ensure consistency between template editor and compose email modal.
      */
     private static function build_local_variables($row) {
         $user = wp_get_current_user();
+        $profile_id = !empty($row->guest_profile_id) ? (int) $row->guest_profile_id : 0;
 
-        // Get guest profile data if available
-        $guest_name = '';
-        $guest_title = '';
-        $guest_bio = '';
-        $guest_email = '';
+        // Helper function to get profile meta with multiple key fallbacks
+        $get_meta = function($key, $fallback_key = null, $fallback_key2 = null) use ($profile_id) {
+            if (!$profile_id) return '';
+            $value = get_post_meta($profile_id, $key, true);
+            if (empty($value) && $fallback_key) {
+                $value = get_post_meta($profile_id, $fallback_key, true);
+            }
+            if (empty($value) && $fallback_key2) {
+                $value = get_post_meta($profile_id, $fallback_key2, true);
+            }
+            return $value ?: '';
+        };
 
-        if (!empty($row->guest_profile_id)) {
-            $profile_id = (int) $row->guest_profile_id;
-            $guest_name = get_the_title($profile_id);
-            $guest_title = get_post_meta($profile_id, '_guestify_title', true) ?: '';
-            $guest_bio = get_post_meta($profile_id, '_guestify_bio', true) ?: '';
-            $guest_email = get_post_meta($profile_id, '_guestify_email', true) ?: '';
+        // Get guest name with fallbacks
+        $first_name = $get_meta('first_name');
+        $last_name = $get_meta('last_name');
+        $full_name = $get_meta('full_name');
+        if (empty($full_name)) {
+            $full_name = trim($first_name . ' ' . $last_name);
+        }
+        if (empty($full_name) && $profile_id) {
+            $full_name = get_the_title($profile_id);
+        }
+        if (empty($full_name)) {
+            $full_name = $user->display_name ?: '';
         }
 
-        // Fallback to user data if no guest profile
-        if (empty($guest_name)) {
-            $guest_name = $user->display_name ?: '';
-        }
+        // Get guest email with fallback
+        $guest_email = $get_meta('email', '_guestify_email');
         if (empty($guest_email)) {
             $guest_email = $user->user_email ?: '';
         }
 
         $categories = [
+            // =====================
+            // Messaging & Positioning (matches email plugin exactly)
+            // =====================
             [
-                'name' => 'Podcast Information',
+                'name' => 'Messaging & Positioning',
                 'variables' => [
-                    [
-                        'tag' => '{{podcast_name}}',
-                        'label' => 'Podcast Name',
-                        'value' => $row->podcast_name ?? '',
-                    ],
-                    [
-                        'tag' => '{{host_name}}',
-                        'label' => 'Host Name',
-                        'value' => $row->host_name ?? '',
-                    ],
-                    [
-                        'tag' => '{{host_email}}',
-                        'label' => 'Host Email',
-                        'value' => $row->host_email ?? '',
-                    ],
-                    [
-                        'tag' => '{{podcast_website}}',
-                        'label' => 'Podcast Website',
-                        'value' => $row->website ?? '',
-                    ],
-                    [
-                        'tag' => '{{podcast_category}}',
-                        'label' => 'Category',
-                        'value' => $row->category ?? '',
-                    ],
-                    [
-                        'tag' => '{{podcast_description}}',
-                        'label' => 'Description',
-                        'value' => $row->description ?? '',
-                    ],
-                    [
-                        'tag' => '{{episode_count}}',
-                        'label' => 'Episode Count',
-                        'value' => $row->episode_count ? (string) $row->episode_count : '',
-                    ],
+                    ['tag' => '{{authority_hook}}', 'label' => 'Your Authority Hook', 'value' => $get_meta('authority_hook')],
+                    ['tag' => '{{impact_intro}}', 'label' => 'Your Impact Intro', 'value' => $get_meta('impact_intro')],
+                    ['tag' => '{{who_you_help}}', 'label' => 'WHO do you help? (specific niches)', 'value' => $get_meta('hook_who')],
+                    ['tag' => '{{when_they_need}}', 'label' => 'WHEN do they need you?', 'value' => $get_meta('hook_when')],
+                    ['tag' => '{{what_result}}', 'label' => 'WHAT result do you help them achieve?', 'value' => $get_meta('hook_what')],
+                    ['tag' => '{{how_you_help}}', 'label' => 'HOW do you help them achieve this result?', 'value' => $get_meta('hook_how')],
+                    ['tag' => '{{where_authority}}', 'label' => 'WHERE have you demonstrated results/credentials?', 'value' => $get_meta('hook_where')],
+                    ['tag' => '{{why_passionate}}', 'label' => 'WHY are you passionate about what you do?', 'value' => $get_meta('hook_why')],
+                    ['tag' => '{{why_book_you}}', 'label' => 'Why Should a Podcast Book You?', 'value' => $get_meta('why_book_you')],
+                    ['tag' => '{{expertise_highlighted}}', 'label' => 'Audience / Expertise Highlighted', 'value' => $get_meta('audience_expertise_highlighted')],
                 ],
             ],
+
+            // =====================
+            // Guest Information (matches email plugin exactly)
+            // =====================
             [
                 'name' => 'Guest Information',
                 'variables' => [
-                    [
-                        'tag' => '{{guest_name}}',
-                        'label' => 'Guest Name',
-                        'value' => $guest_name,
-                    ],
-                    [
-                        'tag' => '{{guest_title}}',
-                        'label' => 'Guest Title',
-                        'value' => $guest_title,
-                    ],
-                    [
-                        'tag' => '{{guest_email}}',
-                        'label' => 'Guest Email',
-                        'value' => $guest_email,
-                    ],
-                    [
-                        'tag' => '{{guest_bio}}',
-                        'label' => 'Guest Bio',
-                        'value' => $guest_bio,
-                    ],
-                    [
-                        'tag' => '{{sender_name}}',
-                        'label' => 'Sender Name',
-                        'value' => $user->display_name ?: '',
-                    ],
-                    [
-                        'tag' => '{{sender_email}}',
-                        'label' => 'Sender Email',
-                        'value' => $user->user_email ?: '',
-                    ],
+                    ['tag' => '{{guest_prefix}}', 'label' => 'Prefix', 'value' => $get_meta('prefix')],
+                    ['tag' => '{{guest_first}}', 'label' => 'First Name', 'value' => $first_name],
+                    ['tag' => '{{guest_last}}', 'label' => 'Last Name', 'value' => $last_name],
+                    ['tag' => '{{guest_suffix}}', 'label' => 'Suffix', 'value' => $get_meta('suffix')],
+                    ['tag' => '{{guest_full_name}}', 'label' => 'Full Name', 'value' => $full_name],
+                    ['tag' => '{{guest_title}}', 'label' => 'Position / Title', 'value' => $get_meta('guest_title', '_guestify_title')],
+                    ['tag' => '{{guest_organization}}', 'label' => 'Organization', 'value' => $get_meta('company')],
+                    ['tag' => '{{guest_expertise}}', 'label' => 'Your Expertise', 'value' => $get_meta('expertise_tags')],
+                    ['tag' => '{{guest_tagline}}', 'label' => 'Tagline', 'value' => $get_meta('tagline')],
+                    ['tag' => '{{guest_phonetic}}', 'label' => 'Phonetic Spelling', 'value' => $get_meta('phonetic')],
+                    ['tag' => '{{guest_phone}}', 'label' => 'Phone', 'value' => $get_meta('phone')],
+                    ['tag' => '{{guest_email}}', 'label' => 'Email', 'value' => $guest_email],
+                    ['tag' => '{{guest_skype}}', 'label' => 'Skype', 'value' => $get_meta('skype')],
+                    ['tag' => '{{guest_public_phone}}', 'label' => 'Public Phone or Text', 'value' => $get_meta('public_phone')],
+                    ['tag' => '{{guest_public_email}}', 'label' => 'Public Email', 'value' => $get_meta('public_email')],
+                    ['tag' => '{{guest_bio_short}}', 'label' => 'Podcast Intro (short bio less than 50 words)', 'value' => $get_meta('podcast_intro', 'biography')],
                 ],
             ],
+
+            // =====================
+            // Websites & Social Media (matches email plugin exactly)
+            // =====================
             [
-                'name' => 'System',
+                'name' => 'Websites & Social Media',
                 'variables' => [
-                    [
-                        'tag' => '{{current_date}}',
-                        'label' => 'Current Date',
-                        'value' => date_i18n(get_option('date_format')),
-                    ],
-                    [
-                        'tag' => '{{current_year}}',
-                        'label' => 'Current Year',
-                        'value' => date('Y'),
-                    ],
+                    ['tag' => '{{guest_website1}}', 'label' => 'Website/URL 1', 'value' => $get_meta('website_primary', '1_website')],
+                    ['tag' => '{{guest_website2}}', 'label' => 'Website/URL 2', 'value' => $get_meta('website_secondary', '2_website')],
+                    ['tag' => '{{guest_website3}}', 'label' => 'Website/URL 3', 'value' => $get_meta('website_secondary_alt')],
+                    ['tag' => '{{guest_linkedin}}', 'label' => 'LinkedIn', 'value' => $get_meta('social_linkedin', '1_linkedin')],
+                    ['tag' => '{{guest_twitter}}', 'label' => 'Twitter', 'value' => $get_meta('social_twitter', '1_twitter')],
+                    ['tag' => '{{guest_facebook}}', 'label' => 'Facebook', 'value' => $get_meta('social_facebook', '1_facebook')],
+                    ['tag' => '{{guest_instagram}}', 'label' => 'Instagram', 'value' => $get_meta('social_instagram', '1_instagram')],
+                    ['tag' => '{{guest_youtube}}', 'label' => 'YouTube', 'value' => $get_meta('social_youtube', 'guest_youtube')],
+                    ['tag' => '{{guest_pinterest}}', 'label' => 'Pinterest', 'value' => $get_meta('social_pinterest', '1_pinterest')],
+                    ['tag' => '{{guest_tiktok}}', 'label' => 'TikTok', 'value' => $get_meta('social_tiktok', '1_tiktok')],
+                ],
+            ],
+
+            // =====================
+            // Topics & Questions (matches email plugin exactly)
+            // =====================
+            [
+                'name' => 'Topics & Questions',
+                'variables' => [
+                    // Topic 1 with questions
+                    ['tag' => '{{guest_topic1}}', 'label' => 'Topic 1', 'value' => $get_meta('topic_1')],
+                    ['tag' => '{{question_01}}', 'label' => 'Question 1', 'value' => $get_meta('question_1')],
+                    ['tag' => '{{question_02}}', 'label' => 'Question 2', 'value' => $get_meta('question_2')],
+                    ['tag' => '{{question_03}}', 'label' => 'Question 3', 'value' => $get_meta('question_3')],
+                    ['tag' => '{{question_04}}', 'label' => 'Question 4', 'value' => $get_meta('question_4')],
+                    ['tag' => '{{question_05}}', 'label' => 'Question 5', 'value' => $get_meta('question_5')],
+                    // Topic 2 with questions
+                    ['tag' => '{{guest_topic2}}', 'label' => 'Topic 2', 'value' => $get_meta('topic_2')],
+                    ['tag' => '{{question_06}}', 'label' => 'Question 6', 'value' => $get_meta('question_6')],
+                    ['tag' => '{{question_07}}', 'label' => 'Question 7', 'value' => $get_meta('question_7')],
+                    ['tag' => '{{question_08}}', 'label' => 'Question 8', 'value' => $get_meta('question_8')],
+                    ['tag' => '{{question_09}}', 'label' => 'Question 9', 'value' => $get_meta('question_9')],
+                    ['tag' => '{{question_10}}', 'label' => 'Question 10', 'value' => $get_meta('question_10')],
+                    // Topic 3 with questions
+                    ['tag' => '{{guest_topic3}}', 'label' => 'Topic 3', 'value' => $get_meta('topic_3')],
+                    ['tag' => '{{question_11}}', 'label' => 'Question 11', 'value' => $get_meta('question_11')],
+                    ['tag' => '{{question_12}}', 'label' => 'Question 12', 'value' => $get_meta('question_12')],
+                    ['tag' => '{{question_13}}', 'label' => 'Question 13', 'value' => $get_meta('question_13')],
+                    ['tag' => '{{question_14}}', 'label' => 'Question 14', 'value' => $get_meta('question_14')],
+                    ['tag' => '{{question_15}}', 'label' => 'Question 15', 'value' => $get_meta('question_15')],
+                    // Topic 4 with questions
+                    ['tag' => '{{guest_topic4}}', 'label' => 'Topic 4', 'value' => $get_meta('topic_4')],
+                    ['tag' => '{{question_16}}', 'label' => 'Question 16', 'value' => $get_meta('question_16')],
+                    ['tag' => '{{question_17}}', 'label' => 'Question 17', 'value' => $get_meta('question_17')],
+                    ['tag' => '{{question_18}}', 'label' => 'Question 18', 'value' => $get_meta('question_18')],
+                    ['tag' => '{{question_19}}', 'label' => 'Question 19', 'value' => $get_meta('question_19')],
+                    ['tag' => '{{question_20}}', 'label' => 'Question 20', 'value' => $get_meta('question_20')],
+                    // Topic 5 with questions
+                    ['tag' => '{{guest_topic5}}', 'label' => 'Topic 5', 'value' => $get_meta('topic_5')],
+                    ['tag' => '{{question_21}}', 'label' => 'Question 21', 'value' => $get_meta('question_21')],
+                    ['tag' => '{{question_22}}', 'label' => 'Question 22', 'value' => $get_meta('question_22')],
+                    ['tag' => '{{question_23}}', 'label' => 'Question 23', 'value' => $get_meta('question_23')],
+                    ['tag' => '{{question_24}}', 'label' => 'Question 24', 'value' => $get_meta('question_24')],
+                    ['tag' => '{{question_25}}', 'label' => 'Question 25', 'value' => $get_meta('question_25')],
+                ],
+            ],
+
+            // =====================
+            // Offers (matches email plugin exactly)
+            // =====================
+            [
+                'name' => 'Offers',
+                'variables' => [
+                    ['tag' => '{{offer_landing_page}}', 'label' => 'Offer Landing Page', 'value' => $get_meta('offer_1_link', 'offer_1')],
+                    ['tag' => '{{offer_code}}', 'label' => 'Offer Code', 'value' => $get_meta('offer_code')],
+                    ['tag' => '{{offer_commission}}', 'label' => 'Commission', 'value' => $get_meta('offer_commission')],
+                ],
+            ],
+
+            // =====================
+            // Interview Tracker Fields (matches email plugin exactly)
+            // =====================
+            [
+                'name' => 'Interview Tracker Fields',
+                'variables' => [
+                    ['tag' => '{{podcast_description}}', 'label' => 'Podcast Description', 'value' => $row->description ?? ''],
+                    ['tag' => '{{podcast_host}}', 'label' => 'Podcast Host', 'value' => $row->host_name ?? ''],
+                    ['tag' => '{{jv_affiliate_code}}', 'label' => 'JV / Affiliate Offer Code', 'value' => ''],
+                ],
+            ],
+
+            // =====================
+            // System Variables (matches email plugin exactly)
+            // =====================
+            [
+                'name' => 'System Variables',
+                'variables' => [
+                    ['tag' => '{{current_date}}', 'label' => 'Current Date', 'value' => date_i18n('F j, Y')],
+                    ['tag' => '{{current_time}}', 'label' => 'Current Time', 'value' => date_i18n('g:i A')],
+                    ['tag' => '{{current_year}}', 'label' => 'Current Year', 'value' => date('Y')],
+                    ['tag' => '{{current_day}}', 'label' => 'Current Day', 'value' => date_i18n('l')],
+                    ['tag' => '{{current_month}}', 'label' => 'Current Month', 'value' => date_i18n('F')],
                 ],
             ],
         ];

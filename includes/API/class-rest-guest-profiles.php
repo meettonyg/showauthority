@@ -220,6 +220,7 @@ class PIT_REST_Guest_Profiles {
             'email'        => get_post_meta($post_id, 'email', true),
             'company'      => get_post_meta($post_id, 'company', true),
             'guest_title'  => get_post_meta($post_id, 'guest_title', true),
+            'tagline'      => get_post_meta($post_id, 'tagline', true),
             'thumbnail'    => get_the_post_thumbnail_url($post_id, 'thumbnail'),
             'permalink'    => get_permalink($post_id),
         ];
