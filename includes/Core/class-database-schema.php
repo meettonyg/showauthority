@@ -20,7 +20,7 @@ class Database_Schema {
     /**
      * Database version for migrations
      */
-    const DB_VERSION = '3.4.0';
+    const DB_VERSION = '3.5.0';
 
     /**
      * Create all database tables
@@ -37,6 +37,7 @@ class Database_Schema {
         self::create_appearance_tag_tables($charset_collate);
         self::create_social_metrics_tables($charset_collate);
         self::create_job_tables($charset_collate);
+        self::create_messaging_tables($charset_collate);
 
         update_option('pit_db_version', self::DB_VERSION);
     }
@@ -822,7 +823,7 @@ class Database_Schema {
             podcast_id bigint(20) UNSIGNED DEFAULT NULL,
             job_id bigint(20) UNSIGNED DEFAULT NULL,
 
-            action_type enum('discovery', 'enrichment', 'refresh', 'manual') NOT NULL,
+            action_type enum('discovery', 'enrichment', 'refresh', 'manual', 'ai_generation') NOT NULL,
             platform varchar(50) DEFAULT NULL,
             cost_usd decimal(10,4) NOT NULL,
 
@@ -842,6 +843,56 @@ class Database_Schema {
         ) $charset_collate;";
 
         dbDelta($sql_costs);
+    }
+
+    /**
+     * Create messaging-related tables (drafts, etc.)
+     *
+     * @since 5.4.0
+     */
+    private static function create_messaging_tables($charset_collate) {
+        global $wpdb;
+
+        // Email drafts table - USER OWNED
+        // Stores email drafts and manually marked-as-sent emails
+        $table_drafts = $wpdb->prefix . 'pit_email_drafts';
+        $sql_drafts = "CREATE TABLE $table_drafts (
+            id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+            -- User Ownership
+            user_id bigint(20) UNSIGNED NOT NULL,
+
+            -- Context
+            appearance_id bigint(20) UNSIGNED NOT NULL,
+
+            -- Draft Type
+            draft_type enum('single_email', 'campaign_step') DEFAULT 'single_email',
+            sequence_id bigint(20) UNSIGNED DEFAULT NULL,
+            step_number int(11) DEFAULT NULL,
+
+            -- Content
+            recipient_email varchar(255) DEFAULT NULL,
+            recipient_name varchar(255) DEFAULT NULL,
+            subject varchar(500) DEFAULT NULL,
+            body_html text DEFAULT NULL,
+            template_id bigint(20) UNSIGNED DEFAULT NULL,
+
+            -- Status
+            status enum('draft', 'marked_sent') DEFAULT 'draft',
+            marked_sent_at datetime DEFAULT NULL,
+
+            -- Timestamps
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+            PRIMARY KEY (id),
+            KEY user_id_idx (user_id),
+            KEY appearance_id_idx (appearance_id),
+            KEY status_idx (status),
+            KEY draft_type_idx (draft_type)
+        ) $charset_collate;";
+
+        dbDelta($sql_drafts);
     }
 
     /**
@@ -891,6 +942,8 @@ class Database_Schema {
             // Job tables
             'pit_jobs',
             'pit_cost_log',
+            // Messaging tables
+            'pit_email_drafts',
         ];
 
         foreach ($tables as $table) {

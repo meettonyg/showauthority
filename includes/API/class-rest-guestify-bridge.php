@@ -264,6 +264,177 @@ class PIT_REST_Guestify_Bridge {
                 ],
             ],
         ]);
+
+        // =========================================================================
+        // Template CRUD Endpoints (v5.4.0+)
+        // =========================================================================
+
+        // Create a new template
+        register_rest_route(self::NAMESPACE, '/pit-bridge/templates', [
+            [
+                'methods'             => 'GET',
+                'callback'            => [__CLASS__, 'get_templates'],
+                'permission_callback' => [__CLASS__, 'check_permission'],
+            ],
+            [
+                'methods'             => 'POST',
+                'callback'            => [__CLASS__, 'create_template'],
+                'permission_callback' => [__CLASS__, 'check_permission'],
+                'args' => [
+                    'name' => [
+                        'required'          => true,
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                    'subject' => [
+                        'required'          => true,
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                    'body_html' => [
+                        'required'          => true,
+                        'type'              => 'string',
+                    ],
+                    'category' => [
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                        'default'           => 'Custom',
+                    ],
+                ],
+            ],
+        ]);
+
+        // Update an existing template
+        register_rest_route(self::NAMESPACE, '/pit-bridge/templates/(?P<id>\d+)', [
+            [
+                'methods'             => 'GET',
+                'callback'            => [__CLASS__, 'get_template'],
+                'permission_callback' => [__CLASS__, 'check_permission'],
+                'args' => [
+                    'id' => [
+                        'required'          => true,
+                        'type'              => 'integer',
+                        'sanitize_callback' => 'absint',
+                    ],
+                ],
+            ],
+            [
+                'methods'             => 'PUT',
+                'callback'            => [__CLASS__, 'update_template'],
+                'permission_callback' => [__CLASS__, 'check_permission'],
+                'args' => [
+                    'id' => [
+                        'required'          => true,
+                        'type'              => 'integer',
+                        'sanitize_callback' => 'absint',
+                    ],
+                    'subject' => [
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                    'body_html' => [
+                        'type'              => 'string',
+                    ],
+                ],
+            ],
+        ]);
+
+        // =========================================================================
+        // Draft Management Endpoints (v5.4.0+)
+        // =========================================================================
+
+        // Get/Save drafts for an appearance
+        register_rest_route(self::NAMESPACE, '/pit-bridge/appearances/(?P<id>\d+)/drafts', [
+            [
+                'methods'             => 'GET',
+                'callback'            => [__CLASS__, 'get_drafts'],
+                'permission_callback' => [__CLASS__, 'check_permission'],
+                'args' => [
+                    'id' => [
+                        'required'          => true,
+                        'type'              => 'integer',
+                        'sanitize_callback' => 'absint',
+                    ],
+                ],
+            ],
+            [
+                'methods'             => 'POST',
+                'callback'            => [__CLASS__, 'save_draft'],
+                'permission_callback' => [__CLASS__, 'check_permission'],
+                'args' => [
+                    'id' => [
+                        'required'          => true,
+                        'type'              => 'integer',
+                        'sanitize_callback' => 'absint',
+                    ],
+                    'draft_type' => [
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                        'default'           => 'single_email',
+                    ],
+                    'recipient_email' => [
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_email',
+                    ],
+                    'recipient_name' => [
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                    'subject' => [
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                    'body_html' => [
+                        'type'              => 'string',
+                    ],
+                    'template_id' => [
+                        'type'              => 'integer',
+                        'sanitize_callback' => 'absint',
+                    ],
+                ],
+            ],
+        ]);
+
+        // Mark email as sent (manual tracking)
+        register_rest_route(self::NAMESPACE, '/pit-bridge/appearances/(?P<id>\d+)/mark-sent', [
+            'methods'             => 'POST',
+            'callback'            => [__CLASS__, 'mark_as_sent'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args' => [
+                'id' => [
+                    'required'          => true,
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                ],
+                'recipient_email' => [
+                    'required'          => true,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_email',
+                ],
+                'subject' => [
+                    'required'          => true,
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'body_html' => [
+                    'type'              => 'string',
+                ],
+            ],
+        ]);
+
+        // Delete a draft
+        register_rest_route(self::NAMESPACE, '/pit-bridge/drafts/(?P<draft_id>\d+)', [
+            'methods'             => 'DELETE',
+            'callback'            => [__CLASS__, 'delete_draft'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args' => [
+                'draft_id' => [
+                    'required'          => true,
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                ],
+            ],
+        ]);
     }
 
     /**
@@ -676,6 +847,283 @@ class PIT_REST_Guestify_Bridge {
             ],
             'raw_sequences'    => $raw_sequences,
             'bridge_sequences' => $bridge_sequences,
+        ]);
+    }
+
+    // =========================================================================
+    // Template CRUD Endpoint Callbacks (v5.4.0+)
+    // =========================================================================
+
+    /**
+     * Get a single template by ID
+     */
+    public static function get_template(WP_REST_Request $request): WP_REST_Response {
+        $template_id = (int) $request->get_param('id');
+        $template = PIT_Guestify_Outreach_Bridge::get_template($template_id);
+
+        if (!$template) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Template not found.',
+            ], 404);
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data'    => $template,
+        ]);
+    }
+
+    /**
+     * Create a new template
+     */
+    public static function create_template(WP_REST_Request $request): WP_REST_Response {
+        $result = PIT_Guestify_Outreach_Bridge::create_template([
+            'name'      => $request->get_param('name'),
+            'subject'   => $request->get_param('subject'),
+            'body_html' => wp_kses_post($request->get_param('body_html')),
+            'category'  => $request->get_param('category'),
+        ]);
+
+        $status = !empty($result['success']) ? 201 : 400;
+        return new WP_REST_Response($result, $status);
+    }
+
+    /**
+     * Update an existing template
+     */
+    public static function update_template(WP_REST_Request $request): WP_REST_Response {
+        $template_id = (int) $request->get_param('id');
+
+        $args = [];
+        if ($request->has_param('subject')) {
+            $args['subject'] = $request->get_param('subject');
+        }
+        if ($request->has_param('body_html')) {
+            $args['body_html'] = wp_kses_post($request->get_param('body_html'));
+        }
+
+        $result = PIT_Guestify_Outreach_Bridge::update_template($template_id, $args);
+
+        $status = !empty($result['success']) ? 200 : 400;
+        return new WP_REST_Response($result, $status);
+    }
+
+    // =========================================================================
+    // Draft Management Endpoint Callbacks (v5.4.0+)
+    // =========================================================================
+
+    /**
+     * Get drafts for an appearance
+     */
+    public static function get_drafts(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $appearance_id = (int) $request->get_param('id');
+
+        if (!self::verify_appearance_ownership($appearance_id)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 403);
+        }
+
+        $table = $wpdb->prefix . 'pit_email_drafts';
+
+        // Check if table exists
+        $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+        if (!$table_exists) {
+            return new WP_REST_Response([
+                'success' => true,
+                'data'    => [],
+            ]);
+        }
+
+        $user_id = get_current_user_id();
+
+        $drafts = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM {$table}
+             WHERE appearance_id = %d AND user_id = %d AND status = 'draft'
+             ORDER BY updated_at DESC",
+            $appearance_id,
+            $user_id
+        ), ARRAY_A);
+
+        return new WP_REST_Response([
+            'success' => true,
+            'data'    => $drafts ?: [],
+        ]);
+    }
+
+    /**
+     * Save a draft
+     */
+    public static function save_draft(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $appearance_id = (int) $request->get_param('id');
+
+        if (!self::verify_appearance_ownership($appearance_id)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 403);
+        }
+
+        $table = $wpdb->prefix . 'pit_email_drafts';
+
+        // Check if table exists
+        $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+        if (!$table_exists) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Drafts table not found. Please update the plugin.',
+            ], 500);
+        }
+
+        $result = $wpdb->insert($table, [
+            'user_id'         => get_current_user_id(),
+            'appearance_id'   => $appearance_id,
+            'draft_type'      => sanitize_text_field($request->get_param('draft_type') ?? 'single_email'),
+            'recipient_email' => sanitize_email($request->get_param('recipient_email') ?? ''),
+            'recipient_name'  => sanitize_text_field($request->get_param('recipient_name') ?? ''),
+            'subject'         => sanitize_text_field($request->get_param('subject') ?? ''),
+            'body_html'       => wp_kses_post($request->get_param('body_html') ?? ''),
+            'template_id'     => absint($request->get_param('template_id') ?? 0) ?: null,
+            'status'          => 'draft',
+            'created_at'      => current_time('mysql'),
+            'updated_at'      => current_time('mysql'),
+        ]);
+
+        if ($result === false) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Failed to save draft',
+            ], 500);
+        }
+
+        return new WP_REST_Response([
+            'success'  => true,
+            'draft_id' => $wpdb->insert_id,
+            'message'  => 'Draft saved',
+        ], 201);
+    }
+
+    /**
+     * Mark email as sent (manual tracking without actually sending)
+     */
+    public static function mark_as_sent(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $appearance_id = (int) $request->get_param('id');
+
+        if (!self::verify_appearance_ownership($appearance_id)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Unauthorized',
+            ], 403);
+        }
+
+        $table = $wpdb->prefix . 'pit_email_drafts';
+
+        // Check if table exists
+        $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+        if (!$table_exists) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Drafts table not found. Please update the plugin.',
+            ], 500);
+        }
+
+        // Insert record with status='marked_sent'
+        $result = $wpdb->insert($table, [
+            'user_id'         => get_current_user_id(),
+            'appearance_id'   => $appearance_id,
+            'draft_type'      => 'single_email',
+            'recipient_email' => sanitize_email($request->get_param('recipient_email')),
+            'subject'         => sanitize_text_field($request->get_param('subject')),
+            'body_html'       => wp_kses_post($request->get_param('body_html') ?? ''),
+            'status'          => 'marked_sent',
+            'marked_sent_at'  => current_time('mysql'),
+            'created_at'      => current_time('mysql'),
+            'updated_at'      => current_time('mysql'),
+        ]);
+
+        if ($result === false) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Failed to mark as sent',
+            ], 500);
+        }
+
+        // Log to activity feed
+        $notes_table = $wpdb->prefix . 'pit_appearance_notes';
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $notes_table)) === $notes_table) {
+            $wpdb->insert($notes_table, [
+                'appearance_id' => $appearance_id,
+                'title'         => 'Email marked as sent: ' . wp_trim_words($request->get_param('subject'), 8),
+                'content'       => sprintf('Sent to %s (manual tracking)', $request->get_param('recipient_email')),
+                'note_type'     => 'email',
+                'created_by'    => get_current_user_id(),
+                'created_at'    => current_time('mysql'),
+            ]);
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => 'Email marked as sent',
+        ], 201);
+    }
+
+    /**
+     * Delete a draft
+     */
+    public static function delete_draft(WP_REST_Request $request): WP_REST_Response {
+        global $wpdb;
+        $draft_id = (int) $request->get_param('draft_id');
+
+        $table = $wpdb->prefix . 'pit_email_drafts';
+
+        // Check if table exists
+        $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+        if (!$table_exists) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Drafts table not found.',
+            ], 500);
+        }
+
+        $user_id = get_current_user_id();
+
+        // Verify ownership (user must own the draft or be admin)
+        $draft = $wpdb->get_row($wpdb->prepare(
+            "SELECT user_id, appearance_id FROM {$table} WHERE id = %d",
+            $draft_id
+        ));
+
+        if (!$draft) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Draft not found.',
+            ], 404);
+        }
+
+        if ((int) $draft->user_id !== $user_id && !current_user_can('manage_options')) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'You do not have permission to delete this draft.',
+            ], 403);
+        }
+
+        $result = $wpdb->delete($table, ['id' => $draft_id], ['%d']);
+
+        if ($result === false) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Failed to delete draft',
+            ], 500);
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => 'Draft deleted',
         ]);
     }
 }

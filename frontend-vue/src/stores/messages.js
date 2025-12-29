@@ -64,7 +64,18 @@ export const useMessagesStore = defineStore('messages', {
     // Sending state
     sending: false,
     sendError: null,
-    lastSentResult: null
+    lastSentResult: null,
+
+    // Template CRUD state (v5.4.0+)
+    templateSaving: false,
+    templateSaveError: null,
+
+    // Drafts (per appearance, v5.4.0+)
+    draftsByAppearance: {}, // { [appearanceId]: Draft[] }
+    draftsLoading: false,
+    draftsError: null,
+    draftSaving: false,
+    draftSaveError: null
   }),
 
   getters: {
@@ -169,6 +180,37 @@ export const useMessagesStore = defineStore('messages', {
         grouped[category].push(template)
       }
       return grouped
+    },
+
+    /**
+     * Get drafts for a specific appearance
+     */
+    getDraftsForAppearance: (state) => (appearanceId) => {
+      return state.draftsByAppearance[appearanceId] || []
+    },
+
+    /**
+     * Get active drafts (status = 'draft') for an appearance
+     */
+    getActiveDraftsForAppearance: (state) => (appearanceId) => {
+      const drafts = state.draftsByAppearance[appearanceId] || []
+      return drafts.filter(d => d.status === 'draft')
+    },
+
+    /**
+     * Get sent drafts (status = 'marked_sent') for an appearance
+     */
+    getMarkedSentForAppearance: (state) => (appearanceId) => {
+      const drafts = state.draftsByAppearance[appearanceId] || []
+      return drafts.filter(d => d.status === 'marked_sent')
+    },
+
+    /**
+     * Get draft count for an appearance (active drafts only)
+     */
+    getDraftCountForAppearance: (state) => (appearanceId) => {
+      const drafts = state.draftsByAppearance[appearanceId] || []
+      return drafts.filter(d => d.status === 'draft').length
     }
   },
 
@@ -378,7 +420,8 @@ export const useMessagesStore = defineStore('messages', {
           this.loadTemplates(),
           this.loadMessages(appearanceId),
           this.loadStats(appearanceId),
-          this.loadUnifiedStats(appearanceId)
+          this.loadUnifiedStats(appearanceId),
+          this.loadDrafts(appearanceId)
         ]
 
         // Load campaigns and sequences if v2.0 API is available
@@ -400,6 +443,7 @@ export const useMessagesStore = defineStore('messages', {
       delete this.statsByAppearance[appearanceId]
       delete this.campaignsByAppearance[appearanceId]
       delete this.unifiedStatsByAppearance[appearanceId]
+      delete this.draftsByAppearance[appearanceId]
     },
 
     // =========================================================================
@@ -675,6 +719,212 @@ export const useMessagesStore = defineStore('messages', {
       }
     },
 
+    // =========================================================================
+    // Template CRUD (v5.4.0+)
+    // =========================================================================
+
+    /**
+     * Create a new email template
+     * @param {Object} templateData
+     * @param {string} templateData.name - Template name
+     * @param {string} templateData.subject - Email subject
+     * @param {string} templateData.body - Email body HTML
+     * @param {string} [templateData.description] - Description
+     * @param {string} [templateData.category] - Category
+     * @returns {Promise<{success: boolean, message: string, template_id?: number}>}
+     */
+    async createTemplate(templateData) {
+      if (!this.available) {
+        return {
+          success: false,
+          message: 'Email integration is not available'
+        }
+      }
+
+      this.templateSaving = true
+      this.templateSaveError = null
+
+      try {
+        const result = await outreachApi.createTemplate(templateData)
+
+        if (result.success) {
+          // Reload templates to include the new one
+          await this.loadTemplates()
+        }
+
+        return result
+      } catch (error) {
+        return this._handleApiError(error, 'templateSaveError', 'Failed to create template')
+      } finally {
+        this.templateSaving = false
+      }
+    },
+
+    /**
+     * Update an existing email template
+     * @param {number} templateId - Template ID
+     * @param {Object} templateData - Updated data
+     * @returns {Promise<{success: boolean, message: string}>}
+     */
+    async updateTemplate(templateId, templateData) {
+      if (!this.available) {
+        return {
+          success: false,
+          message: 'Email integration is not available'
+        }
+      }
+
+      this.templateSaving = true
+      this.templateSaveError = null
+
+      try {
+        const result = await outreachApi.updateTemplate(templateId, templateData)
+
+        if (result.success) {
+          // Reload templates to reflect changes
+          await this.loadTemplates()
+        }
+
+        return result
+      } catch (error) {
+        return this._handleApiError(error, 'templateSaveError', 'Failed to update template')
+      } finally {
+        this.templateSaving = false
+      }
+    },
+
+    // =========================================================================
+    // Draft Management (v5.4.0+)
+    // =========================================================================
+
+    /**
+     * Load drafts for an appearance
+     * @param {number} appearanceId
+     * @param {boolean} force - Force reload even if cached
+     */
+    async loadDrafts(appearanceId, force = false) {
+      if (!this.available) return
+
+      // Skip if already loaded and not forcing
+      if (!force && this.draftsByAppearance[appearanceId]) {
+        return
+      }
+
+      this.draftsLoading = true
+      this.draftsError = null
+
+      try {
+        const result = await outreachApi.getDrafts(appearanceId)
+        this.draftsByAppearance[appearanceId] = result.data || []
+      } catch (error) {
+        console.error('Failed to load drafts:', error)
+        this.draftsError = error.message || 'Failed to load drafts'
+      } finally {
+        this.draftsLoading = false
+      }
+    },
+
+    /**
+     * Save a draft email
+     * @param {number} appearanceId
+     * @param {Object} draftData
+     * @returns {Promise<{success: boolean, message: string, draft_id?: number}>}
+     */
+    async saveDraft(appearanceId, draftData) {
+      if (!this.available) {
+        return {
+          success: false,
+          message: 'Email integration is not available'
+        }
+      }
+
+      this.draftSaving = true
+      this.draftSaveError = null
+
+      try {
+        const result = await outreachApi.saveDraft(appearanceId, draftData)
+
+        if (result.success) {
+          // Reload drafts to reflect changes
+          await this.loadDrafts(appearanceId, true)
+        }
+
+        return result
+      } catch (error) {
+        return this._handleApiError(error, 'draftSaveError', 'Failed to save draft')
+      } finally {
+        this.draftSaving = false
+      }
+    },
+
+    /**
+     * Mark an email as manually sent
+     * @param {number} appearanceId
+     * @param {Object} emailData
+     * @returns {Promise<{success: boolean, message: string, draft_id?: number}>}
+     */
+    async markAsSent(appearanceId, emailData) {
+      if (!this.available) {
+        return {
+          success: false,
+          message: 'Email integration is not available'
+        }
+      }
+
+      this.draftSaving = true
+      this.draftSaveError = null
+
+      try {
+        const result = await outreachApi.markAsSent(appearanceId, emailData)
+
+        if (result.success) {
+          // Reload drafts and messages to reflect changes
+          await Promise.all([
+            this.loadDrafts(appearanceId, true),
+            this.loadMessages(appearanceId, true)
+          ])
+        }
+
+        return result
+      } catch (error) {
+        return this._handleApiError(error, 'draftSaveError', 'Failed to mark as sent')
+      } finally {
+        this.draftSaving = false
+      }
+    },
+
+    /**
+     * Delete a draft
+     * @param {number} draftId
+     * @param {number} [appearanceId] - If provided, refreshes drafts for this appearance
+     * @returns {Promise<{success: boolean, message: string}>}
+     */
+    async deleteDraft(draftId, appearanceId = null) {
+      if (!this.available) {
+        return {
+          success: false,
+          message: 'Email integration is not available'
+        }
+      }
+
+      try {
+        const result = await outreachApi.deleteDraft(draftId)
+
+        if (result.success && appearanceId) {
+          // Reload drafts if appearanceId provided
+          await this.loadDrafts(appearanceId, true)
+        }
+
+        return result
+      } catch (error) {
+        console.error('Failed to delete draft:', error)
+        return {
+          success: false,
+          message: error.response?.data?.message || error.message || 'Failed to delete draft'
+        }
+      }
+    },
+
     /**
      * Reset the entire store
      */
@@ -705,6 +955,15 @@ export const useMessagesStore = defineStore('messages', {
       this.lastSentResult = null
       this.campaignActionLoading = false
       this.campaignActionError = null
+      // Template CRUD state
+      this.templateSaving = false
+      this.templateSaveError = null
+      // Draft state
+      this.draftsByAppearance = {}
+      this.draftsLoading = false
+      this.draftsError = null
+      this.draftSaving = false
+      this.draftSaveError = null
     }
   }
 })

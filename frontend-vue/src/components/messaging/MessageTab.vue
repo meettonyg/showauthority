@@ -47,7 +47,11 @@
       <!-- Header with Compose Button -->
       <div class="interface-header">
         <h3 class="section-title">Messages</h3>
-        <button class="btn btn-primary" @click="showComposer = true">
+        <button
+          v-if="!isComposing"
+          class="btn btn-primary"
+          @click="openComposeModal"
+        >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -56,29 +60,35 @@
         </button>
       </div>
 
+      <!-- Inline Composer (replaces modal) -->
+      <InlineComposer
+        v-if="isComposing"
+        ref="composerRef"
+        :appearance-id="appearanceId"
+        :templates="messagesStore.templates"
+        :sequences="messagesStore.sequences"
+        :sequences-loading="messagesStore.sequencesLoading"
+        :default-email="defaultRecipientEmail"
+        :default-name="defaultRecipientName"
+        :error="messagesStore.sendError || messagesStore.campaignActionError"
+        :draft-data="resumeDraftData"
+        @cancel="handleComposerClose"
+        @email-sent="handleEmailSent"
+        @draft-saved="handleDraftSaved"
+        @mark-as-sent="handleMarkAsSent"
+        @start-campaign="handleStartSequenceCampaign"
+        @mode-switched="handleModeSwitched"
+      />
+
       <!-- Message List -->
       <MessageList
         :messages="messages"
+        :drafts="drafts"
         :loading="messagesStore.messagesLoading"
+        @resume-draft="handleResumeDraft"
+        @delete-draft="handleDeleteDraft"
       />
     </div>
-
-    <!-- Compose Modal -->
-    <MessageComposer
-      ref="composerRef"
-      :show="showComposer"
-      :appearance-id="appearanceId"
-      :templates="messagesStore.templates"
-      :sequences="messagesStore.sequences"
-      :sequences-loading="messagesStore.sequencesLoading"
-      :default-email="defaultRecipientEmail"
-      :default-name="defaultRecipientName"
-      :sending="messagesStore.sending || messagesStore.campaignActionLoading"
-      :error="messagesStore.sendError || messagesStore.campaignActionError"
-      @close="handleComposerClose"
-      @send="handleSendEmail"
-      @start-campaign="handleStartSequenceCampaign"
-    />
   </div>
 </template>
 
@@ -92,13 +102,14 @@
  * @package ShowAuthority
  * @since 5.0.0
  * @updated 5.1.0 - Added campaign management support
+ * @updated 5.4.0 - Replaced modal with inline composer
  */
 
 import { ref, computed, onMounted, watch } from 'vue'
 import { useMessagesStore } from '../../stores/messages'
 import MessageStats from './MessageStats.vue'
 import MessageList from './MessageList.vue'
-import MessageComposer from './MessageComposer.vue'
+import InlineComposer from './InlineComposer.vue'
 import CampaignManager from './CampaignManager.vue'
 
 const props = defineProps({
@@ -125,19 +136,24 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['email-sent', 'campaign-started', 'campaign-updated'])
+const emit = defineEmits(['email-sent', 'campaign-started', 'campaign-updated', 'draft-saved', 'mode-switched'])
 
 // Store
 const messagesStore = useMessagesStore()
 
 // UI state
-const showComposer = ref(false)
+const isComposing = ref(false)
 const composerRef = ref(null)
 const campaignManagerRef = ref(null)
+const resumeDraftData = ref(null)
 
 // Computed
 const messages = computed(() => {
   return messagesStore.getMessagesForAppearance(props.appearanceId)
+})
+
+const drafts = computed(() => {
+  return messagesStore.getDraftsForAppearance?.(props.appearanceId) || []
 })
 
 const stats = computed(() => {
@@ -166,34 +182,94 @@ onMounted(async () => {
 // Re-initialize if appearanceId changes
 watch(() => props.appearanceId, async (newId, oldId) => {
   if (newId !== oldId) {
+    isComposing.value = false
+    resumeDraftData.value = null
     await messagesStore.initialize(newId)
   }
 })
 
-// Handle composer close
-function handleComposerClose() {
-  showComposer.value = false
+// Open composer (called by Compose Email button)
+function openComposeModal() {
+  resumeDraftData.value = null
+  isComposing.value = true
 }
 
-// Handle send email
-async function handleSendEmail(emailData) {
-  const result = await messagesStore.sendEmail(props.appearanceId, emailData)
+// Handle composer close
+function handleComposerClose() {
+  isComposing.value = false
+  resumeDraftData.value = null
+}
 
-  if (result.success) {
-    showComposer.value = false
+// Handle email sent (including 'opened_in_email' type)
+function handleEmailSent(result) {
+  emit('email-sent', result)
+  // If it was just opened in email client, don't close composer
+  if (result.type !== 'opened_in_email') {
+    isComposing.value = false
     composerRef.value?.resetForm()
-    emit('email-sent', result)
   }
 }
 
-// Handle start sequence campaign (from MessageComposer)
+// Handle draft saved
+async function handleDraftSaved(draftData) {
+  // Call store to save draft (will be implemented in Phase 6)
+  if (messagesStore.saveDraft) {
+    const result = await messagesStore.saveDraft(props.appearanceId, draftData)
+    if (result?.success) {
+      emit('draft-saved', result)
+    }
+  } else {
+    // Fallback - just emit the event
+    emit('draft-saved', draftData)
+  }
+}
+
+// Handle mark as sent
+async function handleMarkAsSent(messageData) {
+  // Call store to mark as sent (will be implemented in Phase 6)
+  if (messagesStore.markAsSent) {
+    const result = await messagesStore.markAsSent(props.appearanceId, messageData)
+    if (result?.success) {
+      isComposing.value = false
+      composerRef.value?.resetForm()
+      emit('email-sent', { ...result, type: 'marked_sent' })
+    }
+  } else {
+    // Fallback - close composer and emit event
+    isComposing.value = false
+    composerRef.value?.resetForm()
+    emit('email-sent', { success: true, type: 'marked_sent', ...messageData })
+  }
+}
+
+// Handle start sequence campaign (from InlineComposer)
 async function handleStartSequenceCampaign(campaignData) {
+  composerRef.value?.setLoading?.(true)
   const result = await messagesStore.startSequenceCampaign(props.appearanceId, campaignData)
+  composerRef.value?.setLoading?.(false)
 
   if (result.success) {
-    showComposer.value = false
+    isComposing.value = false
     composerRef.value?.resetForm()
     emit('campaign-started', result)
+  }
+}
+
+// Handle mode switched (single email <-> campaign)
+function handleModeSwitched(mode) {
+  emit('mode-switched', mode)
+}
+
+// Handle resume draft
+function handleResumeDraft(draft) {
+  resumeDraftData.value = draft
+  isComposing.value = true
+}
+
+// Handle delete draft
+async function handleDeleteDraft(draftId) {
+  if (messagesStore.deleteDraft) {
+    await messagesStore.deleteDraft(draftId, props.appearanceId)
   }
 }
 
@@ -214,7 +290,8 @@ function handleCampaignUpdated(event) {
 // Expose methods for parent components
 defineExpose({
   refresh: () => messagesStore.initialize(props.appearanceId),
-  refreshCampaigns: () => campaignManagerRef.value?.refresh()
+  refreshCampaigns: () => campaignManagerRef.value?.refresh(),
+  openComposer: openComposeModal
 })
 </script>
 
