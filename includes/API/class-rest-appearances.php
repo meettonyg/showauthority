@@ -430,10 +430,17 @@ class PIT_REST_Appearances {
                 if (!empty($variables)) {
                     // Transform the response to categories array format expected by JS
                     $categories = self::transform_variables_to_categories($variables);
-                    return new WP_REST_Response([
-                        'success' => true,
-                        'data' => ['categories' => $categories],
-                    ], 200);
+
+                    // Check if any values are actually populated
+                    $has_values = self::categories_have_values($categories);
+
+                    if ($has_values) {
+                        return new WP_REST_Response([
+                            'success' => true,
+                            'data' => ['categories' => $categories],
+                        ], 200);
+                    }
+                    // Fall through to local variables if no values populated
                 }
             } catch (Exception $e) {
                 error_log('Failed to get variables from Guestify Profile: ' . $e->getMessage());
@@ -496,6 +503,30 @@ class PIT_REST_Appearances {
     }
 
     /**
+     * Check if categories have any populated values (excluding system variables like date/time)
+     */
+    private static function categories_have_values($categories) {
+        $system_labels = ['Current Date', 'Current Time', 'Current Year', 'Current Day', 'Current Month'];
+
+        foreach ($categories as $category) {
+            if (!isset($category['variables']) || !is_array($category['variables'])) {
+                continue;
+            }
+            foreach ($category['variables'] as $var) {
+                // Skip system variables
+                if (in_array($var['label'] ?? '', $system_labels)) {
+                    continue;
+                }
+                // If any non-system variable has a value, return true
+                if (!empty($var['value'])) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Build personalization variables from local data
      * Matches the variable structure from Guestify_Profile_Variables class
      * to ensure consistency between template editor and compose email modal.
@@ -544,14 +575,14 @@ class PIT_REST_Appearances {
             [
                 'name' => 'Messaging & Positioning',
                 'variables' => [
-                    ['tag' => '{{authority_hook}}', 'label' => 'Your Authority Hook', 'value' => $get_meta('authority_hook')],
-                    ['tag' => '{{impact_intro}}', 'label' => 'Your Impact Intro', 'value' => $get_meta('impact_intro')],
-                    ['tag' => '{{who_you_help}}', 'label' => 'WHO do you help? (specific niches)', 'value' => $get_meta('hook_who')],
-                    ['tag' => '{{when_they_need}}', 'label' => 'WHEN do they need you?', 'value' => $get_meta('hook_when')],
-                    ['tag' => '{{what_result}}', 'label' => 'WHAT result do you help them achieve?', 'value' => $get_meta('hook_what')],
-                    ['tag' => '{{how_you_help}}', 'label' => 'HOW do you help them achieve this result?', 'value' => $get_meta('hook_how')],
-                    ['tag' => '{{where_authority}}', 'label' => 'WHERE have you demonstrated results/credentials?', 'value' => $get_meta('hook_where')],
-                    ['tag' => '{{why_passionate}}', 'label' => 'WHY are you passionate about what you do?', 'value' => $get_meta('hook_why')],
+                    ['tag' => '{{authority_hook}}', 'label' => 'Your Authority Hook', 'value' => $get_meta('mkcg_authority_hook_complete', '_authority_hook_complete', 'authority_hook')],
+                    ['tag' => '{{impact_intro}}', 'label' => 'Your Impact Intro', 'value' => $get_meta('_impact_intro_complete', 'impact_intro')],
+                    ['tag' => '{{who_you_help}}', 'label' => 'WHO do you help? (specific niches)', 'value' => $get_meta('hook_who', 'mkcg_authority_hook_who', '_authority_hook_who')],
+                    ['tag' => '{{when_they_need}}', 'label' => 'WHEN do they need you?', 'value' => $get_meta('hook_when', 'mkcg_authority_hook_when', '_authority_hook_when')],
+                    ['tag' => '{{what_result}}', 'label' => 'WHAT result do you help them achieve?', 'value' => $get_meta('hook_what', 'mkcg_authority_hook_what', '_authority_hook_what')],
+                    ['tag' => '{{how_you_help}}', 'label' => 'HOW do you help them achieve this result?', 'value' => $get_meta('hook_how', 'mkcg_authority_hook_how', '_authority_hook_how')],
+                    ['tag' => '{{where_authority}}', 'label' => 'WHERE have you demonstrated results/credentials?', 'value' => $get_meta('hook_where', 'impact_where')],
+                    ['tag' => '{{why_passionate}}', 'label' => 'WHY are you passionate about what you do?', 'value' => $get_meta('hook_why', 'impact_why')],
                     ['tag' => '{{why_book_you}}', 'label' => 'Why Should a Podcast Book You?', 'value' => $get_meta('why_book_you')],
                     ['tag' => '{{expertise_highlighted}}', 'label' => 'Audience / Expertise Highlighted', 'value' => $get_meta('audience_expertise_highlighted')],
                 ],
@@ -578,7 +609,7 @@ class PIT_REST_Appearances {
                     ['tag' => '{{guest_skype}}', 'label' => 'Skype', 'value' => $get_meta('skype')],
                     ['tag' => '{{guest_public_phone}}', 'label' => 'Public Phone or Text', 'value' => $get_meta('public_phone')],
                     ['tag' => '{{guest_public_email}}', 'label' => 'Public Email', 'value' => $get_meta('public_email')],
-                    ['tag' => '{{guest_bio_short}}', 'label' => 'Podcast Intro (short bio less than 50 words)', 'value' => $get_meta('podcast_intro', 'biography')],
+                    ['tag' => '{{guest_bio_short}}', 'label' => 'Podcast Intro (short bio less than 50 words)', 'value' => $get_meta('introduction', '_biography_short', 'biography')],
                 ],
             ],
 
@@ -588,7 +619,7 @@ class PIT_REST_Appearances {
             [
                 'name' => 'Websites & Social Media',
                 'variables' => [
-                    ['tag' => '{{guest_website1}}', 'label' => 'Website/URL 1', 'value' => $get_meta('website_primary', '1_website')],
+                    ['tag' => '{{guest_website1}}', 'label' => 'Website/URL 1', 'value' => $get_meta('website', 'website_primary', '1_website')],
                     ['tag' => '{{guest_website2}}', 'label' => 'Website/URL 2', 'value' => $get_meta('website_secondary', '2_website')],
                     ['tag' => '{{guest_website3}}', 'label' => 'Website/URL 3', 'value' => $get_meta('website_secondary_alt')],
                     ['tag' => '{{guest_linkedin}}', 'label' => 'LinkedIn', 'value' => $get_meta('social_linkedin', '1_linkedin')],
@@ -608,35 +639,35 @@ class PIT_REST_Appearances {
                 'name' => 'Topics & Questions',
                 'variables' => [
                     // Topic 1 with questions
-                    ['tag' => '{{guest_topic1}}', 'label' => 'Topic 1', 'value' => $get_meta('topic_1')],
+                    ['tag' => '{{guest_topic1}}', 'label' => 'Topic 1', 'value' => $get_meta('topic_1', 'mkcg_topic_1')],
                     ['tag' => '{{question_01}}', 'label' => 'Question 1', 'value' => $get_meta('question_1')],
                     ['tag' => '{{question_02}}', 'label' => 'Question 2', 'value' => $get_meta('question_2')],
                     ['tag' => '{{question_03}}', 'label' => 'Question 3', 'value' => $get_meta('question_3')],
                     ['tag' => '{{question_04}}', 'label' => 'Question 4', 'value' => $get_meta('question_4')],
                     ['tag' => '{{question_05}}', 'label' => 'Question 5', 'value' => $get_meta('question_5')],
                     // Topic 2 with questions
-                    ['tag' => '{{guest_topic2}}', 'label' => 'Topic 2', 'value' => $get_meta('topic_2')],
+                    ['tag' => '{{guest_topic2}}', 'label' => 'Topic 2', 'value' => $get_meta('topic_2', 'mkcg_topic_2')],
                     ['tag' => '{{question_06}}', 'label' => 'Question 6', 'value' => $get_meta('question_6')],
                     ['tag' => '{{question_07}}', 'label' => 'Question 7', 'value' => $get_meta('question_7')],
                     ['tag' => '{{question_08}}', 'label' => 'Question 8', 'value' => $get_meta('question_8')],
                     ['tag' => '{{question_09}}', 'label' => 'Question 9', 'value' => $get_meta('question_9')],
                     ['tag' => '{{question_10}}', 'label' => 'Question 10', 'value' => $get_meta('question_10')],
                     // Topic 3 with questions
-                    ['tag' => '{{guest_topic3}}', 'label' => 'Topic 3', 'value' => $get_meta('topic_3')],
+                    ['tag' => '{{guest_topic3}}', 'label' => 'Topic 3', 'value' => $get_meta('topic_3', 'mkcg_topic_3')],
                     ['tag' => '{{question_11}}', 'label' => 'Question 11', 'value' => $get_meta('question_11')],
                     ['tag' => '{{question_12}}', 'label' => 'Question 12', 'value' => $get_meta('question_12')],
                     ['tag' => '{{question_13}}', 'label' => 'Question 13', 'value' => $get_meta('question_13')],
                     ['tag' => '{{question_14}}', 'label' => 'Question 14', 'value' => $get_meta('question_14')],
                     ['tag' => '{{question_15}}', 'label' => 'Question 15', 'value' => $get_meta('question_15')],
                     // Topic 4 with questions
-                    ['tag' => '{{guest_topic4}}', 'label' => 'Topic 4', 'value' => $get_meta('topic_4')],
+                    ['tag' => '{{guest_topic4}}', 'label' => 'Topic 4', 'value' => $get_meta('topic_4', 'mkcg_topic_4')],
                     ['tag' => '{{question_16}}', 'label' => 'Question 16', 'value' => $get_meta('question_16')],
                     ['tag' => '{{question_17}}', 'label' => 'Question 17', 'value' => $get_meta('question_17')],
                     ['tag' => '{{question_18}}', 'label' => 'Question 18', 'value' => $get_meta('question_18')],
                     ['tag' => '{{question_19}}', 'label' => 'Question 19', 'value' => $get_meta('question_19')],
                     ['tag' => '{{question_20}}', 'label' => 'Question 20', 'value' => $get_meta('question_20')],
                     // Topic 5 with questions
-                    ['tag' => '{{guest_topic5}}', 'label' => 'Topic 5', 'value' => $get_meta('topic_5')],
+                    ['tag' => '{{guest_topic5}}', 'label' => 'Topic 5', 'value' => $get_meta('topic_5', 'mkcg_topic_5')],
                     ['tag' => '{{question_21}}', 'label' => 'Question 21', 'value' => $get_meta('question_21')],
                     ['tag' => '{{question_22}}', 'label' => 'Question 22', 'value' => $get_meta('question_22')],
                     ['tag' => '{{question_23}}', 'label' => 'Question 23', 'value' => $get_meta('question_23')],
