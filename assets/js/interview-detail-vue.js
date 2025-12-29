@@ -2900,12 +2900,20 @@
 
             // Fetch personalization variables
             const fetchVariables = async () => {
-                const interviewId = store.config?.interviewId;
-                if (!interviewId) return;
+                // Get interview ID from store or fallback to global config
+                const interviewId = store.config?.interviewId ||
+                    (typeof guestifyDetailData !== 'undefined' ? guestifyDetailData.interviewId : null);
 
+                if (!interviewId) {
+                    console.warn('fetchVariables: No interview ID available');
+                    return;
+                }
+
+                console.log('fetchVariables: Fetching for interview', interviewId);
                 variablesLoading.value = true;
                 try {
                     const response = await store.api(`appearances/${interviewId}/variables`);
+                    console.log('fetchVariables: Response', response);
                     variablesData.value = response?.data || {};
                 } catch (error) {
                     console.error('Failed to fetch variables:', error);

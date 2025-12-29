@@ -428,9 +428,11 @@ class PIT_REST_Appearances {
             try {
                 $variables = Guestify_Profile_Variables::get_variables_json($row->guest_profile_id ?? 0, $row);
                 if (!empty($variables)) {
+                    // Transform the response to categories array format expected by JS
+                    $categories = self::transform_variables_to_categories($variables);
                     return new WP_REST_Response([
                         'success' => true,
-                        'data' => $variables,
+                        'data' => ['categories' => $categories],
                     ], 200);
                 }
             } catch (Exception $e) {
@@ -446,6 +448,51 @@ class PIT_REST_Appearances {
             'success' => true,
             'data' => $variables,
         ], 200);
+    }
+
+    /**
+     * Transform variables from Guestify_Profile_Variables format to categories array format
+     * Expected by the JS frontend for the compose email modal
+     *
+     * Input format from Guestify_Profile_Variables::get_variables_json():
+     * [
+     *   'messaging' => [
+     *     'label' => 'Messaging & Positioning',
+     *     'variables' => [
+     *       ['name' => 'authority_hook', 'label' => 'Your Authority Hook', 'tag' => '{{authority_hook}}', 'value' => '...'],
+     *       ...
+     *     ]
+     *   ],
+     *   ...
+     * ]
+     */
+    private static function transform_variables_to_categories($variables) {
+        $categories = [];
+
+        foreach ($variables as $category_key => $category_data) {
+            if (!is_array($category_data) || !isset($category_data['variables'])) {
+                continue;
+            }
+
+            $vars = [];
+            foreach ($category_data['variables'] as $var) {
+                if (!is_array($var)) continue;
+                $vars[] = [
+                    'tag' => $var['tag'] ?? ('{{' . ($var['name'] ?? '') . '}}'),
+                    'label' => $var['label'] ?? $var['name'] ?? '',
+                    'value' => $var['value'] ?? '',
+                ];
+            }
+
+            if (!empty($vars)) {
+                $categories[] = [
+                    'name' => $category_data['label'] ?? ucwords(str_replace('_', ' ', $category_key)),
+                    'variables' => $vars,
+                ];
+            }
+        }
+
+        return $categories;
     }
 
     /**
