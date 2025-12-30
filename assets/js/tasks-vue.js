@@ -185,12 +185,6 @@
             const store = useTasksStore();
             const searchDebounce = ref(null);
 
-            // Translation helper - must be defined in setup to be available in template
-            const translate = (key) => {
-                const i18n = pitTasksData.i18n || {};
-                return i18n[key] || key;
-            };
-
             onMounted(() => {
                 store.fetchTasks();
                 store.fetchStats();
@@ -221,14 +215,14 @@
 
                 const diffDays = Math.floor((taskDate - today) / (1000 * 60 * 60 * 24));
 
-                if (diffDays === 0) return translate('today');
-                if (diffDays === 1) return translate('tomorrow');
-                if (diffDays === -1) return translate('yesterday');
+                if (diffDays === 0) return __('today');
+                if (diffDays === 1) return __('tomorrow');
+                if (diffDays === -1) return __('yesterday');
                 if (diffDays < -1) {
-                    return translate('daysAgo').replace('%d', Math.abs(diffDays));
+                    return __('daysAgo').replace('%d', Math.abs(diffDays));
                 }
                 if (diffDays < 7) {
-                    return translate('inDays').replace('%d', diffDays);
+                    return __('inDays').replace('%d', diffDays);
                 }
 
                 return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -252,23 +246,23 @@
 
             const getPriorityLabel = (priority) => {
                 const labels = {
-                    urgent: translate('urgent'),
-                    high: translate('high'),
-                    medium: translate('medium'),
-                    low: translate('low'),
+                    urgent: __('urgent'),
+                    high: __('high'),
+                    medium: __('medium'),
+                    low: __('low'),
                 };
                 return labels[priority] || priority;
             };
 
             const formatPageInfo = () => {
-                return translate('pageOf')
+                return __('pageOf')
                     .replace('%1$d', store.pagination.page)
                     .replace('%2$d', store.pagination.total_pages);
             };
 
             return {
                 store,
-                __: translate,
+                t: __,
                 handleSearch,
                 formatDate,
                 getDueClass,
@@ -282,30 +276,30 @@
             <div class="pit-tasks-dashboard">
                 <!-- Header -->
                 <div class="pit-tasks-header">
-                    <h1>{{ __('tasks') }}</h1>
+                    <h1>{{ t('tasks') }}</h1>
                 </div>
 
                 <!-- Stats Cards -->
                 <div class="pit-tasks-stats" v-if="store.stats">
                     <div class="pit-stat-card" @click="store.setFilter('status', '')">
                         <div class="pit-stat-value">{{ store.stats.total || 0 }}</div>
-                        <div class="pit-stat-label">{{ __('totalTasks') }}</div>
+                        <div class="pit-stat-label">{{ t('totalTasks') }}</div>
                     </div>
                     <div class="pit-stat-card" @click="store.setFilter('status', 'pending')">
                         <div class="pit-stat-value">{{ store.stats.by_status?.pending || 0 }}</div>
-                        <div class="pit-stat-label">{{ __('pending') }}</div>
+                        <div class="pit-stat-label">{{ t('pending') }}</div>
                     </div>
                     <div class="pit-stat-card" @click="store.setFilter('status', 'in_progress')">
                         <div class="pit-stat-value">{{ store.stats.by_status?.in_progress || 0 }}</div>
-                        <div class="pit-stat-label">{{ __('inProgress') }}</div>
+                        <div class="pit-stat-label">{{ t('inProgress') }}</div>
                     </div>
                     <div class="pit-stat-card overdue" @click="store.setOverdueFilter()">
                         <div class="pit-stat-value">{{ store.stats.overdue || 0 }}</div>
-                        <div class="pit-stat-label">{{ __('overdue') }}</div>
+                        <div class="pit-stat-label">{{ t('overdue') }}</div>
                     </div>
                     <div class="pit-stat-card" @click="store.setFilter('status', 'completed')">
                         <div class="pit-stat-value">{{ store.stats.by_status?.completed || 0 }}</div>
-                        <div class="pit-stat-label">{{ __('completed') }}</div>
+                        <div class="pit-stat-label">{{ t('completed') }}</div>
                     </div>
                 </div>
 
@@ -320,7 +314,7 @@
                         <input
                             type="text"
                             class="pit-search-input"
-                            :placeholder="__('searchTasks')"
+                            :placeholder="t('searchTasks')"
                             :value="store.filters.search"
                             @input="handleSearch"
                         />
@@ -328,45 +322,45 @@
 
                     <!-- Status Filter -->
                     <select class="pit-select" v-model="store.filters.status" @change="store.setFilter('status', $event.target.value)">
-                        <option value="">{{ __('allStatuses') }}</option>
-                        <option value="pending">{{ __('pending') }}</option>
-                        <option value="in_progress">{{ __('inProgress') }}</option>
-                        <option value="completed">{{ __('completed') }}</option>
-                        <option value="cancelled">{{ __('cancelled') }}</option>
+                        <option value="">{{ t('allStatuses') }}</option>
+                        <option value="pending">{{ t('pending') }}</option>
+                        <option value="in_progress">{{ t('inProgress') }}</option>
+                        <option value="completed">{{ t('completed') }}</option>
+                        <option value="cancelled">{{ t('cancelled') }}</option>
                     </select>
 
                     <!-- Priority Filter -->
                     <select class="pit-select" v-model="store.filters.priority" @change="store.setFilter('priority', $event.target.value)">
-                        <option value="">{{ __('allPriorities') }}</option>
-                        <option value="urgent">{{ __('urgent') }}</option>
-                        <option value="high">{{ __('high') }}</option>
-                        <option value="medium">{{ __('medium') }}</option>
-                        <option value="low">{{ __('low') }}</option>
+                        <option value="">{{ t('allPriorities') }}</option>
+                        <option value="urgent">{{ t('urgent') }}</option>
+                        <option value="high">{{ t('high') }}</option>
+                        <option value="medium">{{ t('medium') }}</option>
+                        <option value="low">{{ t('low') }}</option>
                     </select>
 
                     <!-- Sort -->
                     <select class="pit-select" @change="store.setSort($event.target.value)">
-                        <option value="created_at">{{ __('newestFirst') }}</option>
-                        <option value="due_date">{{ __('dueDate') }}</option>
-                        <option value="priority">{{ __('priority') }}</option>
+                        <option value="created_at">{{ t('newestFirst') }}</option>
+                        <option value="due_date">{{ t('dueDate') }}</option>
+                        <option value="priority">{{ t('priority') }}</option>
                     </select>
 
                     <!-- Clear Filters -->
                     <button v-if="store.hasFilters" class="pit-btn-link" @click="store.clearFilters()">
-                        {{ __('clearFilters') }}
+                        {{ t('clearFilters') }}
                     </button>
                 </div>
 
                 <!-- Loading -->
                 <div v-if="store.loading" class="pit-loading">
                     <div class="pit-loading-spinner"></div>
-                    <p>{{ __('loadingTasks') }}</p>
+                    <p>{{ t('loadingTasks') }}</p>
                 </div>
 
                 <!-- Error -->
                 <div v-else-if="store.error" class="pit-error">
                     <p>{{ store.error }}</p>
-                    <button @click="store.fetchTasks()">{{ __('tryAgain') }}</button>
+                    <button @click="store.fetchTasks()">{{ t('tryAgain') }}</button>
                 </div>
 
                 <!-- Task List -->
@@ -424,7 +418,7 @@
                             @click="store.setPage(store.pagination.page - 1)"
                             :disabled="store.pagination.page <= 1"
                         >
-                            {{ __('previous') }}
+                            {{ t('previous') }}
                         </button>
                         <span class="pit-pagination-info">
                             {{ formatPageInfo() }}
@@ -433,7 +427,7 @@
                             @click="store.setPage(store.pagination.page + 1)"
                             :disabled="store.pagination.page >= store.pagination.total_pages"
                         >
-                            {{ __('next') }}
+                            {{ t('next') }}
                         </button>
                     </div>
                 </div>
@@ -443,8 +437,8 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                         <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
                     </svg>
-                    <p v-if="store.hasFilters">{{ __('noTasksMatch') }}</p>
-                    <p v-else>{{ __('noTasksYet') }}</p>
+                    <p v-if="store.hasFilters">{{ t('noTasksMatch') }}</p>
+                    <p v-else>{{ t('noTasksYet') }}</p>
                 </div>
             </div>
         `,

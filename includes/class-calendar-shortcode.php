@@ -126,14 +126,14 @@ class PIT_Calendar_Shortcode {
 
     /**
      * Get FullCalendar URL (local or CDN)
-     * Tries local file first, then unpkg CDN as fallback
+     * Tries local file first, then jsdelivr CDN as fallback
      */
     private static function get_fullcalendar_url() {
         $local_file = PIT_PLUGIN_DIR . 'assets/js/vendor/fullcalendar.global.min.js';
         if (file_exists($local_file)) {
             return PIT_PLUGIN_URL . 'assets/js/vendor/fullcalendar.global.min.js';
         }
-        // Use unpkg as CDN (more reliable than jsdelivr in some environments)
-        return 'https://unpkg.com/fullcalendar@6.1.10/index.global.min.js';
+        // Use jsdelivr CDN - FullCalendar 6.x uses this bundle format
+        return 'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js';
     }
 }

@@ -34,13 +34,13 @@
               :class="{ active: localPreviewMode }"
               @click="localPreviewMode = true"
             >
-              Preview
+              👁️ Preview
             </button>
             <button
               :class="{ active: !localPreviewMode }"
               @click="localPreviewMode = false"
             >
-              Template
+              { } Template
             </button>
           </div>
 
@@ -50,11 +50,7 @@
             class="edit-btn"
             @click="startEditing"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg>
-            Edit Step
+            ✏️ Edit Step
           </button>
         </div>
 
@@ -103,29 +99,13 @@
             Cancel
           </button>
           <button class="action-btn ai-btn" @click="showAIPanel = true">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M12 16v-4"></path>
-              <path d="M12 8h.01"></path>
-            </svg>
-            Refine with AI
+            🤖 Refine with AI
           </button>
           <button class="action-btn save-btn" @click="openSaveModal('update')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-              <polyline points="17 21 17 13 7 13 7 21"></polyline>
-              <polyline points="7 3 7 8 15 8"></polyline>
-            </svg>
-            Save to Template
+            💾 Save to Template
           </button>
           <button class="action-btn new-btn" @click="openSaveModal('new')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="12" y1="18" x2="12" y2="12"></line>
-              <line x1="9" y1="15" x2="15" y2="15"></line>
-            </svg>
-            Save as New
+            📝 Save as New
           </button>
         </div>
 
@@ -267,21 +247,24 @@ function openSaveModal(type) {
   })
 }
 
-// Format delay for display
+// Format delay for display (matches JSX format like "+3 days")
 function formatDelay(delay) {
   if (!delay) return ''
 
   // Handle numeric days
   if (typeof delay === 'number') {
-    if (delay === 0) return 'Immediate'
-    if (delay === 1) return '1 day later'
-    return `${delay} days later`
+    if (delay === 0) return null
+    if (delay === 1) return '+1 day'
+    return `+${delay} days`
   }
 
-  // Handle string format (e.g., "3 days")
+  // Handle string format (e.g., "3 days" or "+3 days")
   if (typeof delay === 'string') {
-    if (delay === '0' || delay === 'immediate') return 'Immediate'
-    return delay
+    if (delay === '0' || delay === 'immediate') return null
+    // If already has + prefix, return as-is
+    if (delay.startsWith('+')) return delay
+    // Otherwise add + prefix
+    return `+${delay}`
   }
 
   return ''
@@ -348,8 +331,9 @@ function formatDelay(delay) {
 
 .step-delay {
   font-size: 12px;
-  color: var(--color-text-secondary, #6b7280);
+  color: #06b6d4;
   white-space: nowrap;
+  font-weight: 500;
 }
 
 .expand-icon {
