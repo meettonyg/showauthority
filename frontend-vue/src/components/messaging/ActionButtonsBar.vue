@@ -10,26 +10,18 @@
           :disabled="disabled || !isValid"
           title="Open in your default email client"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-            <polyline points="22,6 12,13 2,6"></polyline>
-          </svg>
+          <span class="btn-icon">📧</span>
           Open in Email
         </button>
 
         <button
           @click="handleCopyBody"
           class="btn btn-outline"
+          :class="{ 'btn-copied': copied }"
           :disabled="disabled || !body"
           title="Copy email body to clipboard"
         >
-          <svg v-if="!copied" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-          </svg>
-          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
+          <span class="btn-icon">{{ copied ? '✓' : '📋' }}</span>
           {{ copied ? 'Copied!' : 'Copy Body' }}
         </button>
 
@@ -39,11 +31,7 @@
           :disabled="disabled || !hasContent"
           title="Save as draft for later"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-            <polyline points="7 3 7 8 15 8"></polyline>
-          </svg>
+          <span class="btn-icon">💾</span>
           Save Draft
         </button>
       </div>
@@ -61,14 +49,12 @@
 
         <button
           @click="handleMarkAsSent"
-          class="btn btn-success"
+          class="btn btn-primary"
           :disabled="disabled || !isValid || loading"
           title="Mark this email as manually sent"
         >
           <span v-if="loading" class="btn-spinner"></span>
-          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
+          <span v-else class="btn-icon">✓</span>
           Mark as Sent
         </button>
       </div>
@@ -84,11 +70,7 @@
           :disabled="disabled"
           title="Save campaign setup as draft"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-            <polyline points="7 3 7 8 15 8"></polyline>
-          </svg>
+          <span class="btn-icon">💾</span>
           Save Draft
         </button>
       </div>
@@ -106,15 +88,14 @@
 
         <button
           @click="handleStartCampaign"
-          class="btn btn-success"
+          class="btn btn-primary"
           :disabled="disabled || !isCampaignValid || loading"
           title="Start the email campaign"
         >
           <span v-if="loading" class="btn-spinner"></span>
-          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-          </svg>
+          <span v-else class="btn-icon">▶</span>
           Start Campaign
+          <span v-if="customizedCount > 0" class="customized-badge">{{ customizedCount }} customized</span>
         </button>
       </div>
     </template>
@@ -204,6 +185,13 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  /**
+   * Number of customized campaign steps
+   */
+  customizedCount: {
+    type: Number,
+    default: 0
   }
 })
 
@@ -329,25 +317,30 @@ function handleStartCampaign() {
 }
 
 .btn-primary {
-  background: var(--color-primary, #6366f1);
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-dark, #4f46e5);
-}
-
-.btn-success {
   background: #0d9488;
   color: white;
 }
 
-.btn-success:hover:not(:disabled) {
+.btn-primary:hover:not(:disabled) {
   background: #0f766e;
 }
 
-.btn svg {
+.btn-icon {
   flex-shrink: 0;
+}
+
+.btn-copied {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.customized-badge {
+  margin-left: 6px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  font-size: 11px;
 }
 
 .btn-spinner {

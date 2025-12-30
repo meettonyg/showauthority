@@ -1445,6 +1445,22 @@
                 }
             });
 
+            // Watch for calendar element to become available and initialize
+            watch(calendarEl, (el) => {
+                if (el && !calendarInstance && !store.loading) {
+                    initCalendar();
+                }
+            });
+
+            // Also watch for loading to complete (in case ref is already set)
+            watch(loading, (isLoading) => {
+                if (!isLoading && calendarEl.value && !calendarInstance) {
+                    nextTick(() => {
+                        initCalendar();
+                    });
+                }
+            });
+
             // Lifecycle
             onMounted(() => {
                 if (typeof pitCalendarData !== 'undefined') {
@@ -1468,11 +1484,7 @@
                 store.fetchEvents(
                     start.toISOString().split('T')[0],
                     end.toISOString().split('T')[0]
-                ).then(() => {
-                    nextTick(() => {
-                        initCalendar();
-                    });
-                });
+                );
             });
 
             // Watch for events changes to update calendar

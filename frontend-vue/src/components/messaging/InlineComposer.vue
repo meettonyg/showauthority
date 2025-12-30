@@ -27,10 +27,7 @@
             @click="switchMode('single')"
             :disabled="loading"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-              <polyline points="22,6 12,13 2,6"></polyline>
-            </svg>
+            <span class="mode-icon">✉️</span>
             Single Email
           </button>
           <button
@@ -39,10 +36,7 @@
             @click="switchMode('campaign')"
             :disabled="loading"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-              <polyline points="22 4 12 14.01 9 11.01"></polyline>
-            </svg>
+            <span class="mode-icon">👥</span>
             Start Campaign
           </button>
         </div>
@@ -139,12 +133,7 @@
                 @click="showAIPanel = !showAIPanel"
                 :disabled="loading"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-                  <path d="M2 17l10 5 10-5"></path>
-                  <path d="M2 12l10 5 10-5"></path>
-                </svg>
-                Refine with AI
+                ✨ Refine with AI
               </button>
             </div>
 
@@ -742,6 +731,10 @@ defineExpose({
 .mode-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.mode-icon {
+  font-size: 14px;
 }
 
 /* Preview Toggle */
