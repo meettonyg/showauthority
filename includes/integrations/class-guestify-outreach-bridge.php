@@ -730,13 +730,16 @@ class PIT_Guestify_Outreach_Bridge {
             return [];
         }
 
-        // Get steps for each sequence
+        // Get steps for each sequence (including template content)
+        $templates_table = $wpdb->prefix . 'guestify_email_templates';
         foreach ($sequences as &$seq) {
             $seq['steps'] = $wpdb->get_results($wpdb->prepare(
-                "SELECT step_number, step_name, delay_value, delay_unit, template_id
-                 FROM {$steps_table}
-                 WHERE sequence_id = %d
-                 ORDER BY step_number ASC",
+                "SELECT s.step_number, s.step_name, s.delay_value, s.delay_unit, s.template_id,
+                        t.subject, t.body_html, t.template_name
+                 FROM {$steps_table} s
+                 LEFT JOIN {$templates_table} t ON s.template_id = t.id
+                 WHERE s.sequence_id = %d
+                 ORDER BY s.step_number ASC",
                 $seq['id']
             ), ARRAY_A);
 
@@ -779,11 +782,15 @@ class PIT_Guestify_Outreach_Bridge {
             return null;
         }
 
+        // Get steps with template content
+        $templates_table = $wpdb->prefix . 'guestify_email_templates';
         $sequence['steps'] = $wpdb->get_results($wpdb->prepare(
-            "SELECT step_number, step_name, delay_value, delay_unit, template_id
-             FROM {$steps_table}
-             WHERE sequence_id = %d
-             ORDER BY step_number ASC",
+            "SELECT s.step_number, s.step_name, s.delay_value, s.delay_unit, s.template_id,
+                    t.subject, t.body_html, t.template_name
+             FROM {$steps_table} s
+             LEFT JOIN {$templates_table} t ON s.template_id = t.id
+             WHERE s.sequence_id = %d
+             ORDER BY s.step_number ASC",
             $sequence_id
         ), ARRAY_A);
 
