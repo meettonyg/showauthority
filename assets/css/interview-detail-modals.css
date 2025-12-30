@@ -1256,6 +1256,13 @@ textarea.field-input {
     margin: 0;
 }
 
+.step-field-value.empty-content,
+.step-body-preview.empty-content {
+    color: var(--color-gray-400, #9ca3af);
+    font-style: italic;
+    font-weight: 400;
+}
+
 .step-body-preview {
     font-size: 12px;
     font-family: inherit;

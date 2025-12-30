@@ -2431,11 +2431,11 @@
 
                                                                             <div class="step-field">
                                                                                 <label>Subject:</label>
-                                                                                <p class="step-field-value">{{ stepPreviewMode ? resolveVariables(getStepContent(idx).subject) : getStepContent(idx).subject }}</p>
+                                                                                <p class="step-field-value" :class="{ 'empty-content': !getStepContent(idx).subject }">{{ (stepPreviewMode ? resolveVariables(getStepContent(idx).subject) : getStepContent(idx).subject) || '(no subject - template not configured)' }}</p>
                                                                             </div>
                                                                             <div class="step-field">
                                                                                 <label>Message:</label>
-                                                                                <pre class="step-body-preview" :class="{ 'preview-mode': stepPreviewMode }">{{ stepPreviewMode ? resolveVariables(getStepContent(idx).body) : getStepContent(idx).body }}</pre>
+                                                                                <pre class="step-body-preview" :class="{ 'preview-mode': stepPreviewMode, 'empty-content': !getStepContent(idx).body }">{{ (stepPreviewMode ? resolveVariables(getStepContent(idx).body) : getStepContent(idx).body) || '(no message - template not configured)' }}</pre>
                                                                             </div>
 
                                                                             <div class="step-preview-actions">
@@ -3921,11 +3921,14 @@
             const getStepContent = (idx) => {
                 if (stepEdits[idx]) return stepEdits[idx];
                 const step = selectedSequence.value?.steps?.[idx];
+                if (!step) {
+                    return { subject: '', body: '' };
+                }
                 // Try multiple possible field names for subject and body
-                return {
-                    subject: step?.subject || step?.email_subject || step?.template_subject || '',
-                    body: step?.body || step?.email_body || step?.body_html || step?.template_body || step?.content || '',
-                };
+                // Database returns: subject, body_html (from template LEFT JOIN)
+                const subject = step.subject || step.email_subject || step.template_subject || '';
+                const body = step.body_html || step.body || step.email_body || step.template_body || step.content || '';
+                return { subject, body };
             };
 
             const resolveVariables = (text) => {
