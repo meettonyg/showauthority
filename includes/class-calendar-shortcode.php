@@ -71,38 +71,15 @@ class PIT_Calendar_Shortcode {
      * Enqueue required scripts
      */
     private static function enqueue_scripts($view = 'full') {
-        // Vue 3
-        wp_enqueue_script(
-            'vue',
-            'https://unpkg.com/vue@3.3.4/dist/vue.global.prod.js',
-            [],
-            '3.3.4',
-            true
-        );
-
-        // Vue Demi (required for Pinia)
-        wp_enqueue_script(
-            'vue-demi',
-            'https://unpkg.com/vue-demi@0.14.6/lib/index.iife.js',
-            ['vue'],
-            '0.14.6',
-            true
-        );
-
-        // Pinia
-        wp_enqueue_script(
-            'pinia',
-            'https://unpkg.com/pinia@2.1.7/dist/pinia.iife.js',
-            ['vue', 'vue-demi'],
-            '2.1.7',
-            true
-        );
+        // Use centralized Vue/Pinia helper
+        PIT_Vue_Scripts::enqueue();
 
         // FullCalendar (only for full view)
         if ($view === 'full') {
+            $fullcalendar_url = self::get_fullcalendar_url();
             wp_enqueue_script(
                 'fullcalendar',
-                'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js',
+                $fullcalendar_url,
                 [],
                 '6.1.10',
                 true
@@ -113,10 +90,14 @@ class PIT_Calendar_Shortcode {
         $script_handle = $view === 'widget' ? 'pit-calendar-widget' : 'pit-calendar';
         $script_file = $view === 'widget' ? 'calendar-widget-vue.js' : 'calendar-vue.js';
 
+        $deps = $view === 'full'
+            ? array_merge(PIT_Vue_Scripts::get_dependencies(), ['fullcalendar'])
+            : PIT_Vue_Scripts::get_dependencies();
+
         wp_enqueue_script(
             $script_handle,
             PIT_PLUGIN_URL . 'assets/js/' . $script_file,
-            $view === 'full' ? ['vue', 'pinia', 'fullcalendar'] : ['vue', 'pinia'],
+            $deps,
             PIT_VERSION,
             true
         );
@@ -141,5 +122,18 @@ class PIT_Calendar_Shortcode {
         ];
 
         wp_localize_script($script_handle, 'pitCalendarData', $localize_data);
+    }
+
+    /**
+     * Get FullCalendar URL (local or CDN)
+     * Tries local file first, then unpkg CDN as fallback
+     */
+    private static function get_fullcalendar_url() {
+        $local_file = PIT_PLUGIN_DIR . 'assets/js/vendor/fullcalendar.global.min.js';
+        if (file_exists($local_file)) {
+            return PIT_PLUGIN_URL . 'assets/js/vendor/fullcalendar.global.min.js';
+        }
+        // Use unpkg as CDN (more reliable than jsdelivr in some environments)
+        return 'https://unpkg.com/fullcalendar@6.1.10/index.global.min.js';
     }
 }
