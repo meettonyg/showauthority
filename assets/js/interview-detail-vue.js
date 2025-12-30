@@ -2263,39 +2263,66 @@
                                                         </button>
                                                     </div>
 
-                                                    <!-- Template Selector -->
-                                                    <div class="form-group" v-if="emailTemplates.length > 0">
-                                                        <label class="form-label">Template (optional)</label>
-                                                        <select v-model="composeEmail.templateId" @change="applyTemplate" class="field-input">
-                                                            <option :value="null">-- No Template --</option>
-                                                            <option v-for="t in emailTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
-                                                        </select>
-                                                    </div>
-
-                                                    <div class="form-group">
-                                                        <label class="form-label">To <span class="required">*</span></label>
-                                                        <input type="email" v-model="composeEmail.toEmail" class="field-input" placeholder="recipient@example.com" />
-                                                    </div>
-
-                                                    <div class="form-group">
-                                                        <label class="form-label">Recipient Name</label>
-                                                        <input type="text" v-model="composeEmail.toName" class="field-input" placeholder="John Doe" />
-                                                    </div>
-
-                                                    <div class="form-group">
-                                                        <label class="form-label">Subject <span class="required">*</span></label>
-                                                        <input ref="subjectInputRef" type="text" v-model="composeEmail.subject" class="field-input" placeholder="Subject line..." @focus="handleFieldFocus('subject')" />
-                                                    </div>
-
-                                                    <div class="form-group">
-                                                        <div class="form-label-row">
-                                                            <label class="form-label">Message <span class="required">*</span></label>
-                                                            <button type="button" class="ai-toggle-btn" :class="{ active: showAIPanel }" @click="showAIPanel = !showAIPanel">
-                                                                ✨ Refine with AI
-                                                            </button>
+                                                    <!-- Preview/Template Toggle -->
+                                                    <div class="step-preview-header single-email-toggle">
+                                                        <div class="preview-toggle">
+                                                            <button :class="{ active: singlePreviewMode }" @click="singlePreviewMode = true">👁️ Preview</button>
+                                                            <button :class="{ active: !singlePreviewMode }" @click="singlePreviewMode = false">{ } Template</button>
                                                         </div>
-                                                        <textarea ref="bodyInputRef" v-model="composeEmail.body" class="field-input email-body-textarea" rows="10" placeholder="Write your message here..." @focus="handleFieldFocus('body')"></textarea>
+                                                        <span v-if="singlePreviewMode" class="variables-resolved">✓ All variables resolved</span>
                                                     </div>
+
+                                                    <!-- PREVIEW MODE -->
+                                                    <template v-if="singlePreviewMode">
+                                                        <div class="form-group">
+                                                            <label class="form-label">Subject:</label>
+                                                            <p class="step-field-value">{{ resolveVariables(composeEmail.subject) || '(no subject)' }}</p>
+                                                        </div>
+                                                        <div class="form-group">
+                                                            <label class="form-label">Message:</label>
+                                                            <pre class="step-body-preview preview-mode">{{ resolveVariables(composeEmail.body) || '(no message)' }}</pre>
+                                                        </div>
+                                                        <div class="preview-edit-link">
+                                                            <button class="btn btn-link" @click="singlePreviewMode = false">✏️ Edit message</button>
+                                                        </div>
+                                                    </template>
+
+                                                    <!-- TEMPLATE/EDIT MODE -->
+                                                    <template v-else>
+                                                        <!-- Template Selector -->
+                                                        <div class="form-group" v-if="emailTemplates.length > 0">
+                                                            <label class="form-label">Template (optional)</label>
+                                                            <select v-model="composeEmail.templateId" @change="applyTemplate" class="field-input">
+                                                                <option :value="null">-- No Template --</option>
+                                                                <option v-for="t in emailTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+                                                            </select>
+                                                        </div>
+
+                                                        <div class="form-group">
+                                                            <label class="form-label">To <span class="required">*</span></label>
+                                                            <input type="email" v-model="composeEmail.toEmail" class="field-input" placeholder="recipient@example.com" />
+                                                        </div>
+
+                                                        <div class="form-group">
+                                                            <label class="form-label">Recipient Name</label>
+                                                            <input type="text" v-model="composeEmail.toName" class="field-input" placeholder="John Doe" />
+                                                        </div>
+
+                                                        <div class="form-group">
+                                                            <label class="form-label">Subject <span class="required">*</span></label>
+                                                            <input ref="subjectInputRef" type="text" v-model="composeEmail.subject" class="field-input" placeholder="Subject line..." @focus="handleFieldFocus('subject')" />
+                                                        </div>
+
+                                                        <div class="form-group">
+                                                            <div class="form-label-row">
+                                                                <label class="form-label">Message <span class="required">*</span></label>
+                                                                <button type="button" class="ai-toggle-btn" :class="{ active: showAIPanel }" @click="showAIPanel = !showAIPanel">
+                                                                    ✨ Refine with AI
+                                                                </button>
+                                                            </div>
+                                                            <textarea ref="bodyInputRef" v-model="composeEmail.body" class="field-input email-body-textarea" rows="10" placeholder="Write your message here..." @focus="handleFieldFocus('body')"></textarea>
+                                                        </div>
+                                                    </template>
 
                                                     <!-- Action Buttons Bar -->
                                                     <div class="action-buttons-bar">
@@ -2958,6 +2985,7 @@
             const expandedCampaignStep = ref(null);
             const editingCampaignStep = ref(null);
             const stepPreviewMode = ref(true);
+            const singlePreviewMode = ref(false); // false = edit/template mode, true = preview mode
             const stepEdits = reactive({});
 
             // Action button states
@@ -4281,6 +4309,7 @@
                 expandedCampaignStep,
                 editingCampaignStep,
                 stepPreviewMode,
+                singlePreviewMode,
                 stepEdits,
                 copiedBody,
 
