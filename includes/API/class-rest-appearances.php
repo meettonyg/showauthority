@@ -749,7 +749,7 @@ class PIT_REST_Appearances {
         if ($full) {
             $data = array_merge($data, [
                 'description' => $row->description ?? '',
-                'host_name' => $row->host_name ?? '',
+                'host_name' => self::decode_unicode_escapes($row->host_name ?? ''),
                 'host_email' => $row->host_email ?? '',
                 'website' => $row->website ?? '',
                 'language' => $row->language ?? 'English',
@@ -783,5 +783,25 @@ class PIT_REST_Appearances {
         }
 
         return $data;
+    }
+
+    /**
+     * Decode Unicode escape sequences in a string
+     * Converts sequences like \u2013 to their actual characters
+     *
+     * @param string $str The string to decode
+     * @return string The decoded string
+     */
+    private static function decode_unicode_escapes($str) {
+        if (empty($str)) {
+            return $str;
+        }
+
+        // Decode \uXXXX sequences to actual Unicode characters
+        $decoded = preg_replace_callback('/\\\\u([0-9a-fA-F]{4})/', function($matches) {
+            return mb_convert_encoding(pack('H*', $matches[1]), 'UTF-8', 'UCS-2BE');
+        }, $str);
+
+        return $decoded !== null ? $decoded : $str;
     }
 }
