@@ -150,12 +150,18 @@ class Podcast_Influence_Tracker {
         // v5.4.0 AI REFINEMENT (Email AI Features)
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-ai.php';
 
+        // GLOBAL TASKS/NOTES API (v3.5)
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-global-tasks.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-global-notes.php';
+
         // MIGRATIONS
         require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
         require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-events-schema.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-tracker-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-detail-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-calendar-shortcode.php';
+        require_once PIT_PLUGIN_DIR . 'includes/class-tasks-shortcode.php';
+        require_once PIT_PLUGIN_DIR . 'includes/class-notes-shortcode.php';
 
         // GOOGLE CALENDAR SYNC (v3.3)
         require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-connections-schema.php';
@@ -226,6 +232,8 @@ class Podcast_Influence_Tracker {
         PIT_Interview_Tracker_Shortcode::init();
         PIT_Interview_Detail_Shortcode::init();
         PIT_Calendar_Shortcode::init();
+        PIT_Tasks_Shortcode::init();
+        PIT_Notes_Shortcode::init();
         PIT_Calendar_Sync_Job::init();
 
         add_action('pit_process_jobs', ['PIT_Job_Queue', 'process_next_job']);
