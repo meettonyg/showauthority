@@ -857,9 +857,14 @@
 
             const setView = (view) => {
                 currentView.value = view;
-                if (view === 'calendar' && calendarInstance) {
+                if (view === 'calendar') {
                     nextTick(() => {
-                        calendarInstance.updateSize();
+                        if (calendarInstance) {
+                            calendarInstance.updateSize();
+                        } else if (calendarEl.value && !store.loading) {
+                            // Initialize calendar if not yet created
+                            initCalendar();
+                        }
                     });
                 }
             };
@@ -1447,19 +1452,22 @@
 
             // Watch for calendar element to become available and initialize
             watch(calendarEl, (el) => {
-                if (el && !calendarInstance && !store.loading) {
+                if (el && !calendarInstance && !store.loading && currentView.value === 'calendar') {
                     initCalendar();
                 }
             });
 
             // Also watch for loading to complete (in case ref is already set)
+            // Use flush: 'post' to ensure DOM has been updated before checking ref
             watch(loading, (isLoading) => {
-                if (!isLoading && calendarEl.value && !calendarInstance) {
+                if (!isLoading && currentView.value === 'calendar' && !calendarInstance) {
                     nextTick(() => {
-                        initCalendar();
+                        if (calendarEl.value) {
+                            initCalendar();
+                        }
                     });
                 }
-            });
+            }, { flush: 'post' });
 
             // Lifecycle
             onMounted(() => {

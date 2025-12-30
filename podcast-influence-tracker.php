@@ -196,6 +196,7 @@ class Podcast_Influence_Tracker {
         // Create calendar-specific tables (v3.3+)
         PIT_Calendar_Events_Schema::create_table();
         PIT_Calendar_Connections_Schema::create_table();
+        update_option('pit_calendar_tables_created', '1');
 
         if (!wp_next_scheduled('pit_background_refresh')) {
             wp_schedule_event(time(), 'weekly', 'pit_background_refresh');
@@ -219,6 +220,8 @@ class Podcast_Influence_Tracker {
         wp_clear_scheduled_hook('pit_rate_limit_cleanup');
         wp_clear_scheduled_hook('pit_monthly_usage_reset');
         PIT_Calendar_Sync_Job::deactivate();
+        // Reset calendar tables flag so they're checked on reactivation
+        delete_option('pit_calendar_tables_created');
         flush_rewrite_rules();
     }
 
@@ -230,11 +233,15 @@ class Podcast_Influence_Tracker {
         }
 
         // Ensure calendar tables exist (v3.3+ - lazy creation if missing)
-        if (!PIT_Calendar_Connections_Schema::table_exists()) {
-            PIT_Calendar_Connections_Schema::create_table();
-        }
-        if (!PIT_Calendar_Events_Schema::table_exists()) {
-            PIT_Calendar_Events_Schema::create_table();
+        // Use option flag to avoid running table checks on every page load
+        if (get_option('pit_calendar_tables_created') !== '1') {
+            if (!PIT_Calendar_Connections_Schema::table_exists()) {
+                PIT_Calendar_Connections_Schema::create_table();
+            }
+            if (!PIT_Calendar_Events_Schema::table_exists()) {
+                PIT_Calendar_Events_Schema::create_table();
+            }
+            update_option('pit_calendar_tables_created', '1');
         }
 
         add_filter('cron_schedules', [$this, 'add_cron_schedules']);
