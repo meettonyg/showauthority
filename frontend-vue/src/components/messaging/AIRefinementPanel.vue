@@ -107,8 +107,11 @@
  * Provides AI-powered email refinement capabilities.
  * Includes quick actions, tone/length options, and custom instruction input.
  *
+ * Design based on message-tab-complete.jsx reference.
+ *
  * @package ShowAuthority
  * @since 5.4.0
+ * @updated 2025-12-30
  */
 
 import { ref, computed } from 'vue'
