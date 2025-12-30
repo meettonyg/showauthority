@@ -251,6 +251,12 @@
             const store = useNotesStore();
             const searchDebounce = ref(null);
 
+            // Translation helper - must be defined in setup to be available in template
+            const translate = (key) => {
+                const i18n = pitNotesData.i18n || {};
+                return i18n[key] || key;
+            };
+
             onMounted(() => {
                 store.fetchNoteTypes();
                 store.fetchNotes();
@@ -288,14 +294,14 @@
             };
 
             const formatPageInfo = () => {
-                return __('pageOf')
+                return translate('pageOf')
                     .replace('%1$d', store.pagination.page)
                     .replace('%2$d', store.pagination.total_pages);
             };
 
             return {
                 store,
-                __,
+                __: translate,
                 handleSearch,
                 getInterviewUrl,
                 getNoteTypeConfig,

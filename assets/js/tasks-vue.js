@@ -185,6 +185,12 @@
             const store = useTasksStore();
             const searchDebounce = ref(null);
 
+            // Translation helper - must be defined in setup to be available in template
+            const translate = (key) => {
+                const i18n = pitTasksData.i18n || {};
+                return i18n[key] || key;
+            };
+
             onMounted(() => {
                 store.fetchTasks();
                 store.fetchStats();
@@ -215,14 +221,14 @@
 
                 const diffDays = Math.floor((taskDate - today) / (1000 * 60 * 60 * 24));
 
-                if (diffDays === 0) return __('today');
-                if (diffDays === 1) return __('tomorrow');
-                if (diffDays === -1) return __('yesterday');
+                if (diffDays === 0) return translate('today');
+                if (diffDays === 1) return translate('tomorrow');
+                if (diffDays === -1) return translate('yesterday');
                 if (diffDays < -1) {
-                    return __('daysAgo').replace('%d', Math.abs(diffDays));
+                    return translate('daysAgo').replace('%d', Math.abs(diffDays));
                 }
                 if (diffDays < 7) {
-                    return __('inDays').replace('%d', diffDays);
+                    return translate('inDays').replace('%d', diffDays);
                 }
 
                 return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -246,23 +252,23 @@
 
             const getPriorityLabel = (priority) => {
                 const labels = {
-                    urgent: __('urgent'),
-                    high: __('high'),
-                    medium: __('medium'),
-                    low: __('low'),
+                    urgent: translate('urgent'),
+                    high: translate('high'),
+                    medium: translate('medium'),
+                    low: translate('low'),
                 };
                 return labels[priority] || priority;
             };
 
             const formatPageInfo = () => {
-                return __('pageOf')
+                return translate('pageOf')
                     .replace('%1$d', store.pagination.page)
                     .replace('%2$d', store.pagination.total_pages);
             };
 
             return {
                 store,
-                __,
+                __: translate,
                 handleSearch,
                 formatDate,
                 getDueClass,
