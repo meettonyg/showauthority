@@ -2339,9 +2339,12 @@
                                                         </div>
                                                         <div class="action-buttons-right">
                                                             <button class="btn btn-outline" @click="closeComposeModal">Cancel</button>
-                                                            <button class="btn btn-primary" @click="handleMarkAsSent" :disabled="sendingEmail || !isComposeValid">
+                                                            <button class="btn btn-outline" @click="handleMarkAsSent" :disabled="sendingEmail || !isComposeValid">
+                                                                ✓ Mark as Sent
+                                                            </button>
+                                                            <button class="btn btn-send" @click="handleSendEmail" :disabled="sendingEmail || !isComposeValid">
                                                                 <span v-if="sendingEmail">Sending...</span>
-                                                                <span v-else>✓ Mark as Sent</span>
+                                                                <span v-else>📤 Send Email</span>
                                                             </button>
                                                         </div>
                                                     </div>

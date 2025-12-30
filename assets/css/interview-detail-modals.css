@@ -996,9 +996,21 @@ textarea.field-input {
 }
 
 .btn-primary:disabled,
-.btn-outline:disabled {
+.btn-outline:disabled,
+.btn-send:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.btn-send {
+    background: var(--color-blue-500, #3b82f6);
+    border: 1px solid var(--color-blue-500, #3b82f6);
+    color: var(--color-background, #fff);
+}
+
+.btn-send:hover:not(:disabled) {
+    background: var(--color-blue-600, #2563eb);
+    border-color: var(--color-blue-600, #2563eb);
 }
 
 .btn-copied {
