@@ -3,14 +3,9 @@
     <div class="ai-panel-header">
       <div class="ai-header-left">
         <span class="ai-icon">✨</span>
-        <span class="ai-label">Refine with AI</span>
+        <h3 class="ai-label">Refine with AI</h3>
       </div>
-      <button class="close-btn" @click="$emit('close')" title="Close AI panel">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      </button>
+      <button class="close-btn" @click="$emit('close')" title="Close AI panel">✕</button>
     </div>
 
     <!-- Quick Actions -->
@@ -71,12 +66,9 @@
       :disabled="loading || (!customInstruction.trim() && !lastQuickAction) || !hasContent"
       @click="handleGenerate"
     >
-      <svg v-if="loading" class="spinner" width="16" height="16" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" opacity="0.3"></circle>
-        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"></path>
-      </svg>
+      <span v-if="loading" class="spinner">⏳</span>
       <span v-else>✨</span>
-      {{ loading ? 'Generating...' : 'Generate' }}
+      {{ loading ? 'Generating...' : 'Generate Email' }}
     </button>
 
     <!-- Error Display -->
@@ -256,11 +248,11 @@ function rejectSuggestion() {
 
 <style scoped>
 .ai-panel {
-  background: linear-gradient(135deg, #f5f3ff 0%, #eff6ff 100%);
-  border: 1px solid #c7d2fe;
+  background: linear-gradient(to right, #faf5ff, #eff6ff);
+  border: 1px solid #c4b5fd;
   border-radius: 8px;
   padding: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .ai-panel-header {
@@ -283,7 +275,8 @@ function rejectSuggestion() {
 .ai-label {
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text-primary, #1a1a1a);
+  color: var(--color-text-primary, #1f2937);
+  margin: 0;
 }
 
 .close-btn {
@@ -298,6 +291,7 @@ function rejectSuggestion() {
   color: var(--color-text-tertiary, #9ca3af);
   cursor: pointer;
   transition: background 0.2s, color 0.2s;
+  font-size: 16px;
 }
 
 .close-btn:hover {
@@ -429,27 +423,29 @@ function rejectSuggestion() {
   justify-content: center;
   gap: 8px;
   padding: 10px 16px;
-  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  background: #8b5cf6;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: white;
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  transition: background 0.15s ease;
 }
 
 .generate-btn:hover:not(:disabled) {
-  opacity: 0.9;
+  background: #7c3aed;
 }
 
 .generate-btn:disabled {
-  opacity: 0.5;
+  background: #d1d5db;
+  color: #6b7280;
   cursor: not-allowed;
 }
 
 .spinner {
   animation: spin 1s linear infinite;
+  display: inline-block;
 }
 
 @keyframes spin {

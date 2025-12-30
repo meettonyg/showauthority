@@ -7,10 +7,7 @@
 
     <!-- Search -->
     <div class="search-wrapper">
-      <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="11" cy="11" r="8"></circle>
-        <path d="m21 21-4.35-4.35"></path>
-      </svg>
+      <span class="search-icon">🔍</span>
       <input
         v-model="searchQuery"
         type="text"
@@ -266,7 +263,7 @@ async function handleCopy(value, tag) {
   left: 26px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--color-text-tertiary, #9ca3af);
+  font-size: 12px;
   pointer-events: none;
 }
 
@@ -419,7 +416,7 @@ async function handleCopy(value, tag) {
 .variable-tag {
   font-size: 11px;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  color: var(--color-primary, #6366f1);
+  color: #06b6d4;
 }
 
 .variable-value {

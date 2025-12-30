@@ -7,29 +7,17 @@
             <h3 class="modal-title">
               {{ isUpdate ? 'Update Template' : 'Save as New Template' }}
             </h3>
-            <button class="modal-close" @click="handleClose" :disabled="saving">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
+            <button class="modal-close" @click="handleClose" :disabled="saving">✕</button>
           </div>
 
           <div class="modal-body">
             <!-- Update Mode: Warning about affecting future campaigns -->
             <div v-if="isUpdate" class="warning-box">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                <line x1="12" y1="9" x2="12" y2="13"></line>
-                <line x1="12" y1="17" x2="12.01" y2="17"></line>
-              </svg>
-              <div class="warning-content">
-                <p class="warning-title">This will update the original template</p>
-                <p class="warning-text">
-                  Changes will affect all future campaigns using the
-                  <strong>"{{ templateName }}"</strong> template.
-                </p>
-              </div>
+              <span class="warning-icon">⚠️</span>
+              <p class="warning-text">
+                This will update the <strong>"{{ templateName }}"</strong>
+                template for all future campaigns using this sequence.
+              </p>
             </div>
 
             <!-- New Template Mode: Name and category input -->
@@ -313,34 +301,23 @@ function handleSave() {
 /* Warning Box */
 .warning-box {
   display: flex;
-  gap: 12px;
-  padding: 14px;
-  background: var(--color-warning-bg, #fffbeb);
-  border: 1px solid var(--color-warning-border, #fde68a);
+  gap: 8px;
+  padding: 12px;
+  background: #fefce8;
+  border: 1px solid #fde68a;
   border-radius: 8px;
   margin-bottom: 16px;
 }
 
-.warning-box svg {
+.warning-icon {
   flex-shrink: 0;
-  color: var(--color-warning, #d97706);
-}
-
-.warning-content {
-  flex: 1;
-}
-
-.warning-title {
-  margin: 0 0 4px 0;
   font-size: 14px;
-  font-weight: 600;
-  color: var(--color-warning-dark, #92400e);
 }
 
 .warning-text {
   margin: 0;
-  font-size: 13px;
-  color: var(--color-warning, #d97706);
+  font-size: 12px;
+  color: #854d0e;
   line-height: 1.5;
 }
 
