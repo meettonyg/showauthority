@@ -81,9 +81,10 @@
 /* Search */
 .pit-tasks-page .pit-search-wrapper {
     position: relative;
-    flex: 1 1 300px;
+    flex: 0 1 350px;
     min-width: 200px;
-    max-width: 400px;
+    max-width: 350px;
+    box-sizing: border-box;
 }
 .pit-tasks-page .pit-search-icon {
     position: absolute;
@@ -120,6 +121,7 @@
     appearance: none;
     cursor: pointer;
     min-width: 130px;
+    flex-shrink: 0;
 }
 .pit-tasks-page .pit-select:focus {
     outline: none;
