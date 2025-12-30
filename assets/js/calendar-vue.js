@@ -16,6 +16,18 @@
 (function () {
     'use strict';
 
+    // Defensive check for required dependencies
+    if (typeof Vue === 'undefined' || typeof Pinia === 'undefined') {
+        console.error('Calendar: Vue or Pinia not loaded');
+        return;
+    }
+
+    // Defensive check for required data
+    if (typeof pitCalendarData === 'undefined') {
+        console.error('Calendar: pitCalendarData is not defined. Script may have loaded before localization.');
+        return;
+    }
+
     const { createApp, ref, reactive, computed, onMounted, watch, nextTick } = Vue;
     const { createPinia, defineStore } = Pinia;
 
@@ -302,7 +314,17 @@
                 <div v-else>
                     <!-- FullCalendar View -->
                     <div v-show="currentView === 'calendar'" class="calendar-wrapper">
-                        <div ref="calendarEl" class="fullcalendar-container"></div>
+                        <div v-if="fullCalendarError" class="calendar-error">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="12"></line>
+                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                            <h3>Calendar Failed to Load</h3>
+                            <p>The calendar library could not be loaded. This may be due to network restrictions or an ad blocker.</p>
+                            <button @click="() => window.location.reload()" class="retry-btn">Reload Page</button>
+                        </div>
+                        <div v-else ref="calendarEl" class="fullcalendar-container"></div>
                     </div>
 
                     <!-- List View -->
@@ -703,6 +725,7 @@
         setup() {
             const store = useCalendarStore();
             const calendarEl = ref(null);
+            const fullCalendarError = ref(false);
             let calendarInstance = null;
 
             // View state
@@ -853,7 +876,15 @@
             };
 
             const initCalendar = () => {
-                if (!calendarEl.value || !window.FullCalendar) return;
+                if (!calendarEl.value) {
+                    console.error('Calendar: calendarEl ref not found');
+                    return;
+                }
+                if (!window.FullCalendar) {
+                    console.error('Calendar: FullCalendar library not loaded. Check if CDN is blocked.');
+                    fullCalendarError.value = true;
+                    return;
+                }
 
                 calendarInstance = new FullCalendar.Calendar(calendarEl.value, {
                     initialView: 'dayGridMonth',
@@ -1454,6 +1485,7 @@
             return {
                 // Refs
                 calendarEl,
+                fullCalendarError,
 
                 // State
                 currentView,
