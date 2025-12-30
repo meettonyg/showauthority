@@ -2183,16 +2183,329 @@
                                         </div>
                                     </div>
 
-                                    <!-- Compose Email Button -->
-                                    <div class="email-actions-header">
-                                        <h3 class="section-heading">Messages</h3>
+                                    <!-- Compose Email Header -->
+                                    <div class="email-actions-header" v-if="!showComposeModal">
+                                        <h3 class="section-heading">Messages & Campaigns</h3>
                                         <button class="button add-button" @click="openComposeModal">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
-                                                <line x1="12" y1="5" x2="12" y2="19"></line>
-                                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                            </svg>
+                                            <span style="margin-right: 6px;">+</span>
                                             Compose Email
                                         </button>
+                                    </div>
+
+                                    <!-- Inline Composer (when composing) -->
+                                    <div v-if="showComposeModal" class="inline-composer">
+                                        <div class="inline-composer-header">
+                                            <h3 class="inline-composer-title">{{ composeMode === 'campaign' ? 'Start Campaign' : 'Compose Email' }}</h3>
+                                            <button class="inline-composer-close" @click="closeComposeModal">✕</button>
+                                        </div>
+
+                                        <div class="inline-composer-layout">
+                                            <div class="inline-composer-main">
+                                                <!-- Mode Toggle -->
+                                                <div class="compose-mode-toggle" v-if="emailFeatures.campaigns && sequences.length > 0">
+                                                    <button class="mode-btn" :class="{ active: composeMode === 'single' }" @click="composeMode = 'single'; showAIPanel = false;">
+                                                        ✉️ Single Email
+                                                    </button>
+                                                    <button class="mode-btn" :class="{ active: composeMode === 'campaign' }" @click="composeMode = 'campaign'; showAIPanel = false;">
+                                                        👥 Start Campaign
+                                                    </button>
+                                                </div>
+
+                                                <!-- SINGLE EMAIL MODE -->
+                                                <template v-if="composeMode === 'single'">
+                                                    <!-- AI Refinement Panel -->
+                                                    <div v-if="showAIPanel" class="ai-refinement-panel">
+                                                        <div class="ai-panel-header">
+                                                            <div class="ai-header-left">
+                                                                <span>✨</span>
+                                                                <h4>Refine with AI</h4>
+                                                            </div>
+                                                            <button class="ai-panel-close" @click="showAIPanel = false">✕</button>
+                                                        </div>
+
+                                                        <div class="ai-quick-actions">
+                                                            <label class="ai-section-label">Quick actions:</label>
+                                                            <div class="ai-action-buttons">
+                                                                <button v-for="action in aiQuickActions" :key="action.id" class="ai-quick-btn" @click="handleAIQuickAction(action)" :disabled="aiGenerating">
+                                                                    <span>{{ action.icon }}</span> {{ action.label }}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="ai-custom-prompt">
+                                                            <label class="ai-section-label">Or describe what you want:</label>
+                                                            <textarea v-model="aiPrompt" class="ai-prompt-input" rows="2" placeholder="e.g., Write a warm intro that mentions their recent episode about marketing..."></textarea>
+                                                        </div>
+
+                                                        <div class="ai-options-row">
+                                                            <div class="ai-option">
+                                                                <label>Tone:</label>
+                                                                <select v-model="aiTone">
+                                                                    <option value="professional">Professional</option>
+                                                                    <option value="friendly">Friendly</option>
+                                                                    <option value="casual">Casual</option>
+                                                                    <option value="enthusiastic">Enthusiastic</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="ai-option">
+                                                                <label>Length:</label>
+                                                                <select v-model="aiLength">
+                                                                    <option value="short">Short</option>
+                                                                    <option value="medium">Medium</option>
+                                                                    <option value="long">Detailed</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+
+                                                        <button class="ai-generate-btn" @click="handleAIGenerate" :disabled="aiGenerating">
+                                                            <span v-if="aiGenerating">⏳ Generating...</span>
+                                                            <span v-else>✨ Generate Email</span>
+                                                        </button>
+                                                    </div>
+
+                                                    <!-- Template Selector -->
+                                                    <div class="form-group" v-if="emailTemplates.length > 0">
+                                                        <label class="form-label">Template (optional)</label>
+                                                        <select v-model="composeEmail.templateId" @change="applyTemplate" class="field-input">
+                                                            <option :value="null">-- No Template --</option>
+                                                            <option v-for="t in emailTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+                                                        </select>
+                                                    </div>
+
+                                                    <div class="form-group">
+                                                        <label class="form-label">To <span class="required">*</span></label>
+                                                        <input type="email" v-model="composeEmail.toEmail" class="field-input" placeholder="recipient@example.com" />
+                                                    </div>
+
+                                                    <div class="form-group">
+                                                        <label class="form-label">Recipient Name</label>
+                                                        <input type="text" v-model="composeEmail.toName" class="field-input" placeholder="John Doe" />
+                                                    </div>
+
+                                                    <div class="form-group">
+                                                        <label class="form-label">Subject <span class="required">*</span></label>
+                                                        <input ref="subjectInputRef" type="text" v-model="composeEmail.subject" class="field-input" placeholder="Subject line..." @focus="handleFieldFocus('subject')" />
+                                                    </div>
+
+                                                    <div class="form-group">
+                                                        <div class="form-label-row">
+                                                            <label class="form-label">Message <span class="required">*</span></label>
+                                                            <button type="button" class="ai-toggle-btn" :class="{ active: showAIPanel }" @click="showAIPanel = !showAIPanel">
+                                                                ✨ Refine with AI
+                                                            </button>
+                                                        </div>
+                                                        <textarea ref="bodyInputRef" v-model="composeEmail.body" class="field-input email-body-textarea" rows="10" placeholder="Write your message here..." @focus="handleFieldFocus('body')"></textarea>
+                                                    </div>
+
+                                                    <!-- Action Buttons Bar -->
+                                                    <div class="action-buttons-bar">
+                                                        <div class="action-buttons-left">
+                                                            <button class="btn btn-outline" @click="handleOpenInEmail" :disabled="!isComposeValid">
+                                                                📧 Open in Email
+                                                            </button>
+                                                            <button class="btn btn-outline" :class="{ 'btn-copied': copiedBody }" @click="handleCopyBody" :disabled="!composeEmail.body">
+                                                                {{ copiedBody ? '✓ Copied!' : '📋 Copy Body' }}
+                                                            </button>
+                                                            <button class="btn btn-outline" @click="handleSaveDraft" :disabled="!composeEmail.subject && !composeEmail.body">
+                                                                💾 Save Draft
+                                                            </button>
+                                                        </div>
+                                                        <div class="action-buttons-right">
+                                                            <button class="btn btn-outline" @click="closeComposeModal">Cancel</button>
+                                                            <button class="btn btn-primary" @click="handleMarkAsSent" :disabled="sendingEmail || !isComposeValid">
+                                                                <span v-if="sendingEmail">Sending...</span>
+                                                                <span v-else>✓ Mark as Sent</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </template>
+
+                                                <!-- CAMPAIGN MODE -->
+                                                <template v-else>
+                                                    <div class="form-group">
+                                                        <label class="form-label">Select Sequence <span class="required">*</span></label>
+                                                        <select v-model="composeEmail.sequenceId" class="field-input" @change="handleSequenceChange">
+                                                            <option :value="null">-- Choose a sequence --</option>
+                                                            <option v-for="seq in activeSequences" :key="seq.id" :value="seq.id">
+                                                                {{ seq.sequence_name }} ({{ seq.total_steps }} steps)
+                                                            </option>
+                                                        </select>
+                                                    </div>
+
+                                                    <!-- Campaign Steps Preview -->
+                                                    <div v-if="selectedSequence && selectedSequence.steps" class="campaign-steps-container">
+                                                        <div class="campaign-steps-header">
+                                                            <span class="campaign-steps-title">Campaign Steps</span>
+                                                            <span class="campaign-steps-hint">Click step to preview</span>
+                                                        </div>
+                                                        <div class="campaign-steps-list">
+                                                            <div v-for="(step, idx) in selectedSequence.steps" :key="step.id || idx" class="campaign-step">
+                                                                <button class="campaign-step-header" @click="toggleCampaignStep(idx)" :class="{ expanded: expandedCampaignStep === idx }">
+                                                                    <div class="step-badge" :class="{ active: expandedCampaignStep === idx }">{{ idx + 1 }}</div>
+                                                                    <div class="step-info">
+                                                                        <span class="step-name">{{ step.step_name || step.name || 'Step ' + (idx + 1) }}</span>
+                                                                        <span v-if="step.delay_value > 0 || step.delay" class="step-delay">+{{ step.delay_value || step.delay }} {{ step.delay_unit || 'days' }}</span>
+                                                                        <span v-if="stepEdits[idx]" class="step-customized">(customized)</span>
+                                                                    </div>
+                                                                    <span class="step-chevron" :class="{ rotated: expandedCampaignStep === idx }">▼</span>
+                                                                </button>
+
+                                                                <!-- Expanded Step Content -->
+                                                                <div v-if="expandedCampaignStep === idx" class="campaign-step-content">
+                                                                    <div class="step-content-inner">
+                                                                        <template v-if="editingCampaignStep === idx">
+                                                                            <!-- Edit Mode -->
+                                                                            <div v-if="showAIPanel" class="ai-refinement-panel compact">
+                                                                                <div class="ai-panel-header">
+                                                                                    <span>✨ Refine with AI</span>
+                                                                                    <button @click="showAIPanel = false">✕</button>
+                                                                                </div>
+                                                                                <div class="ai-action-buttons">
+                                                                                    <button v-for="action in aiQuickActions.slice(0,4)" :key="action.id" class="ai-quick-btn" @click="handleAIQuickAction(action)">
+                                                                                        {{ action.icon }} {{ action.label }}
+                                                                                    </button>
+                                                                                </div>
+                                                                                <textarea v-model="aiPrompt" placeholder="Or describe what you want..." rows="2" class="ai-prompt-input"></textarea>
+                                                                                <button class="ai-generate-btn compact" @click="handleAIGenerate" :disabled="aiGenerating">
+                                                                                    {{ aiGenerating ? '⏳ Generating...' : '✨ Generate' }}
+                                                                                </button>
+                                                                            </div>
+
+                                                                            <div class="step-edit-header">
+                                                                                <label>Subject:</label>
+                                                                                <button class="ai-toggle-btn small" @click="showAIPanel = !showAIPanel">✨ Refine with AI</button>
+                                                                            </div>
+                                                                            <input type="text" v-model="stepEdits[idx].subject" class="field-input" />
+
+                                                                            <label class="step-edit-label">Message:</label>
+                                                                            <textarea v-model="stepEdits[idx].body" rows="8" class="field-input step-body-textarea"></textarea>
+
+                                                                            <div class="step-edit-actions">
+                                                                                <button class="btn btn-outline small" @click="cancelEditingStep">Cancel</button>
+                                                                                <button class="btn btn-primary small" @click="saveStepEdit(idx)">✓ Save for this recipient only</button>
+                                                                                <button class="btn btn-outline small danger" @click="resetStepEdit(idx)">Reset</button>
+                                                                            </div>
+
+                                                                            <div class="step-template-actions">
+                                                                                <span>Save to template:</span>
+                                                                                <button class="btn btn-outline small" @click="openSaveTemplateModal('update', idx)">💾 Update "{{ step.step_name }}"</button>
+                                                                                <button class="btn btn-outline small" @click="openSaveTemplateModal('new', idx)">➕ Save as New Template</button>
+                                                                            </div>
+                                                                        </template>
+                                                                        <template v-else>
+                                                                            <!-- Preview Mode -->
+                                                                            <div class="step-preview-header">
+                                                                                <div class="preview-toggle">
+                                                                                    <button :class="{ active: stepPreviewMode }" @click="stepPreviewMode = true">👁️ Preview</button>
+                                                                                    <button :class="{ active: !stepPreviewMode }" @click="stepPreviewMode = false">{ } Template</button>
+                                                                                </div>
+                                                                                <span v-if="stepPreviewMode" class="variables-resolved">✓ All variables resolved</span>
+                                                                            </div>
+
+                                                                            <div class="step-field">
+                                                                                <label>Subject:</label>
+                                                                                <p class="step-field-value">{{ stepPreviewMode ? resolveVariables(getStepContent(idx).subject) : getStepContent(idx).subject }}</p>
+                                                                            </div>
+                                                                            <div class="step-field">
+                                                                                <label>Message:</label>
+                                                                                <pre class="step-body-preview" :class="{ 'preview-mode': stepPreviewMode }">{{ stepPreviewMode ? resolveVariables(getStepContent(idx).body) : getStepContent(idx).body }}</pre>
+                                                                            </div>
+
+                                                                            <div class="step-preview-actions">
+                                                                                <button class="btn btn-outline small" @click="startEditingStep(idx)">✏️ Customize for this recipient</button>
+                                                                                <span class="divider">|</span>
+                                                                                <button class="btn btn-link small">Edit template →</button>
+                                                                            </div>
+                                                                        </template>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="form-group">
+                                                        <label class="form-label">Recipient Email <span class="required">*</span></label>
+                                                        <input type="email" v-model="composeEmail.toEmail" class="field-input" placeholder="recipient@example.com" />
+                                                    </div>
+
+                                                    <div class="form-group">
+                                                        <label class="form-label">Recipient Name</label>
+                                                        <input type="text" v-model="composeEmail.toName" class="field-input" placeholder="John Doe" />
+                                                    </div>
+
+                                                    <!-- Campaign Action Buttons -->
+                                                    <div class="action-buttons-bar">
+                                                        <div class="action-buttons-left">
+                                                            <button class="btn btn-outline" @click="handleSaveDraft">
+                                                                💾 Save Draft
+                                                            </button>
+                                                        </div>
+                                                        <div class="action-buttons-right">
+                                                            <button class="btn btn-outline" @click="closeComposeModal">Cancel</button>
+                                                            <button class="btn btn-primary" @click="handleStartCampaign" :disabled="startingCampaign || !isCampaignValid">
+                                                                <span v-if="startingCampaign">Starting...</span>
+                                                                <span v-else>
+                                                                    ▶ Start Campaign
+                                                                    <span v-if="Object.keys(stepEdits).length > 0" class="customized-badge">{{ Object.keys(stepEdits).length }} customized</span>
+                                                                </span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+
+                                            <!-- Variable Sidebar -->
+                                            <div v-if="composeMode === 'single' || expandedCampaignStep !== null" class="variable-sidebar inline">
+                                                <div class="sidebar-header">
+                                                    <h3 class="sidebar-title">Personalization</h3>
+                                                    <p class="sidebar-subtitle">Click to insert variable tag</p>
+                                                </div>
+
+                                                <div v-if="composeMode === 'campaign' && editingCampaignStep === null && expandedCampaignStep !== null" class="sidebar-hint info">
+                                                    💡 Click "Customize" to edit and insert variables
+                                                </div>
+                                                <div v-if="composeMode === 'campaign' && editingCampaignStep !== null" class="sidebar-hint success">
+                                                    ✏️ Editing Step {{ editingCampaignStep + 1 }} — click to insert
+                                                </div>
+
+                                                <div class="search-wrapper">
+                                                    <span class="search-icon">🔍</span>
+                                                    <input v-model="variablesSearchQuery" type="text" class="search-input" placeholder="Search variables..." />
+                                                </div>
+
+                                                <div v-if="variablesLoading" class="sidebar-loading">
+                                                    <div class="loading-spinner"></div>
+                                                    <span>Loading variables...</span>
+                                                </div>
+
+                                                <div v-else-if="filteredVariableCategories.length > 0" class="variables-list">
+                                                    <div v-for="category in filteredVariableCategories" :key="category.name" class="variable-category">
+                                                        <button class="category-header" @click="toggleVariableCategory(category.name)">
+                                                            <span class="category-chevron" :class="{ expanded: expandedCategories.includes(category.name) }">▼</span>
+                                                            <span class="category-name">{{ category.name }}</span>
+                                                            <span class="category-count">{{ category.variables.length }}</span>
+                                                        </button>
+                                                        <div v-if="expandedCategories.includes(category.name)" class="category-variables">
+                                                            <div v-for="variable in category.variables" :key="variable.tag" class="variable-item" :class="{ 'is-used': isVariableUsed(variable.tag), 'disabled': composeMode === 'campaign' && editingCampaignStep === null }" @click="insertVariable(variable.tag)">
+                                                                <div class="variable-info">
+                                                                    <span class="variable-label">{{ variable.label }}</span>
+                                                                    <code class="variable-tag">{{ variable.tag }}</code>
+                                                                    <span v-if="variable.value" class="variable-value">{{ truncateVariableValue(variable.value) }}</span>
+                                                                    <span v-else class="variable-empty">(empty)</span>
+                                                                </div>
+                                                                <button v-if="variable.value" class="copy-btn" @click.stop="copyVariableValue(variable.value, variable.tag)" :title="'Copy: ' + variable.value">
+                                                                    {{ copiedVariableTag === variable.tag ? '✓' : '📋' }}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div v-else class="sidebar-empty">
+                                                    <p>No variables available</p>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <!-- Messages List -->
@@ -2802,6 +3115,36 @@
                 body: '',
                 sequenceId: null, // For campaign mode
             });
+
+            // AI Refinement Panel state
+            const showAIPanel = ref(false);
+            const aiPrompt = ref('');
+            const aiTone = ref('professional');
+            const aiLength = ref('medium');
+            const aiGenerating = ref(false);
+            const aiQuickActions = ref([
+                { id: 'shorter', label: 'Make it shorter', icon: '📏' },
+                { id: 'personal', label: 'Make it more personal', icon: '💬' },
+                { id: 'proof', label: 'Add social proof', icon: '⭐' },
+                { id: 'cta', label: 'Stronger CTA', icon: '🎯' },
+                { id: 'episode', label: 'Reference recent episode', icon: '🎙️' },
+                { id: 'urgency', label: 'Add urgency', icon: '⏰' },
+            ]);
+
+            // Campaign step editing state
+            const expandedCampaignStep = ref(null);
+            const editingCampaignStep = ref(null);
+            const stepPreviewMode = ref(true);
+            const stepEdits = reactive({});
+
+            // Action button states
+            const copiedBody = ref(false);
+
+            // Save Template Modal state
+            const showSaveTemplateModal = ref(false);
+            const saveTemplateType = ref('update'); // 'update' or 'new'
+            const saveTemplateStepIdx = ref(null);
+            const newTemplateName = ref('');
 
             // Variable sidebar state
             const variablesData = ref({});
@@ -3586,10 +3929,14 @@
                 if (!isCampaignValid.value) return;
 
                 try {
+                    // Include step customizations if any
+                    const customizations = Object.keys(stepEdits).length > 0 ? stepEdits : null;
+
                     const result = await store.startSequenceCampaign({
                         sequence_id: composeEmail.sequenceId,
                         recipient_email: composeEmail.toEmail,
                         recipient_name: composeEmail.toName || '',
+                        step_customizations: customizations,
                     });
 
                     if (result.success) {
@@ -3601,6 +3948,210 @@
                 } catch (err) {
                     console.error('Failed to start campaign:', err);
                     showErrorMessage('Failed to start campaign: ' + err.message);
+                }
+            };
+
+            // =================================================================
+            // AI REFINEMENT METHODS
+            // =================================================================
+
+            const handleAIQuickAction = async (action) => {
+                aiPrompt.value = action.label;
+                await handleAIGenerate();
+            };
+
+            const handleAIGenerate = async () => {
+                if (aiGenerating.value) return;
+                aiGenerating.value = true;
+
+                try {
+                    // Build context for AI
+                    const context = {
+                        action: aiPrompt.value,
+                        tone: aiTone.value,
+                        length: aiLength.value,
+                        current_subject: composeMode.value === 'single'
+                            ? composeEmail.subject
+                            : (editingCampaignStep.value !== null && stepEdits[editingCampaignStep.value]?.subject) || '',
+                        current_body: composeMode.value === 'single'
+                            ? composeEmail.body
+                            : (editingCampaignStep.value !== null && stepEdits[editingCampaignStep.value]?.body) || '',
+                        podcast_info: {
+                            name: store.interview?.podcast_name || '',
+                            host: store.interview?.host_name || '',
+                        },
+                    };
+
+                    // Call AI endpoint if available
+                    const response = await store.api('ai/refine-email', {
+                        method: 'POST',
+                        body: JSON.stringify(context),
+                    });
+
+                    if (response?.data?.subject || response?.data?.body) {
+                        if (composeMode.value === 'single') {
+                            if (response.data.subject) composeEmail.subject = response.data.subject;
+                            if (response.data.body) composeEmail.body = response.data.body;
+                        } else if (editingCampaignStep.value !== null) {
+                            if (response.data.subject) stepEdits[editingCampaignStep.value].subject = response.data.subject;
+                            if (response.data.body) stepEdits[editingCampaignStep.value].body = response.data.body;
+                        }
+                        showSuccessMessage('Email refined with AI!');
+                    }
+                } catch (err) {
+                    console.error('AI generation failed:', err);
+                    showErrorMessage('AI generation failed. Please try again.');
+                } finally {
+                    aiGenerating.value = false;
+                    showAIPanel.value = false;
+                    aiPrompt.value = '';
+                }
+            };
+
+            // =================================================================
+            // CAMPAIGN STEP METHODS
+            // =================================================================
+
+            const toggleCampaignStep = (idx) => {
+                if (expandedCampaignStep.value === idx) {
+                    expandedCampaignStep.value = null;
+                    editingCampaignStep.value = null;
+                    showAIPanel.value = false;
+                } else {
+                    expandedCampaignStep.value = idx;
+                }
+            };
+
+            const handleSequenceChange = () => {
+                // Reset step states when sequence changes
+                expandedCampaignStep.value = null;
+                editingCampaignStep.value = null;
+                Object.keys(stepEdits).forEach(key => delete stepEdits[key]);
+                showAIPanel.value = false;
+            };
+
+            const startEditingStep = (idx) => {
+                const step = selectedSequence.value?.steps?.[idx];
+                if (!step) return;
+
+                editingCampaignStep.value = idx;
+                stepPreviewMode.value = false;
+
+                // Initialize edit state if not already
+                if (!stepEdits[idx]) {
+                    stepEdits[idx] = {
+                        subject: step.subject || step.email_subject || '',
+                        body: step.body || step.email_body || '',
+                    };
+                }
+            };
+
+            const cancelEditingStep = () => {
+                editingCampaignStep.value = null;
+                stepPreviewMode.value = true;
+                showAIPanel.value = false;
+            };
+
+            const saveStepEdit = (idx) => {
+                // Step edit is already stored in stepEdits reactive object
+                editingCampaignStep.value = null;
+                stepPreviewMode.value = true;
+                showAIPanel.value = false;
+                showSuccessMessage('Step customized for this recipient');
+            };
+
+            const resetStepEdit = (idx) => {
+                delete stepEdits[idx];
+                editingCampaignStep.value = null;
+                stepPreviewMode.value = true;
+                showAIPanel.value = false;
+            };
+
+            const getStepContent = (idx) => {
+                if (stepEdits[idx]) return stepEdits[idx];
+                const step = selectedSequence.value?.steps?.[idx];
+                return {
+                    subject: step?.subject || step?.email_subject || '',
+                    body: step?.body || step?.email_body || '',
+                };
+            };
+
+            const resolveVariables = (text) => {
+                if (!text) return '';
+                let resolved = text;
+
+                // Build resolved values from variablesData
+                if (variablesData.value?.categories) {
+                    variablesData.value.categories.forEach(cat => {
+                        cat.variables.forEach(v => {
+                            if (v.value) {
+                                const regex = new RegExp(v.tag.replace(/[{}]/g, '\\$&'), 'g');
+                                resolved = resolved.replace(regex, v.value);
+                            }
+                        });
+                    });
+                }
+                return resolved;
+            };
+
+            const openSaveTemplateModal = (type, idx) => {
+                saveTemplateType.value = type;
+                saveTemplateStepIdx.value = idx;
+                newTemplateName.value = '';
+                showSaveTemplateModal.value = true;
+            };
+
+            // =================================================================
+            // ACTION BUTTON METHODS
+            // =================================================================
+
+            const handleOpenInEmail = () => {
+                const resolvedSubject = encodeURIComponent(resolveVariables(composeEmail.subject));
+                const resolvedBody = encodeURIComponent(resolveVariables(composeEmail.body));
+                const mailtoLink = `mailto:${composeEmail.toEmail}?subject=${resolvedSubject}&body=${resolvedBody}`;
+                window.open(mailtoLink, '_blank');
+            };
+
+            const handleCopyBody = async () => {
+                try {
+                    const resolvedBody = resolveVariables(composeEmail.body);
+                    await navigator.clipboard.writeText(resolvedBody);
+                    copiedBody.value = true;
+                    setTimeout(() => { copiedBody.value = false; }, 2000);
+                } catch (err) {
+                    console.error('Failed to copy:', err);
+                    showErrorMessage('Failed to copy to clipboard');
+                }
+            };
+
+            const handleSaveDraft = () => {
+                // TODO: Implement draft saving
+                showSuccessMessage('Draft saved!');
+            };
+
+            const handleMarkAsSent = async () => {
+                if (!isComposeValid.value) return;
+
+                try {
+                    // Record the email as sent (manual tracking)
+                    const result = await store.recordSentEmail({
+                        to_email: composeEmail.toEmail,
+                        to_name: composeEmail.toName,
+                        subject: composeEmail.subject,
+                        body: composeEmail.body,
+                        template_id: composeEmail.templateId,
+                        sent_manually: true,
+                    });
+
+                    if (result.success) {
+                        showSuccessMessage('Email marked as sent and added to message history.');
+                        closeComposeModal();
+                    } else {
+                        showErrorMessage(result.message || 'Failed to record email');
+                    }
+                } catch (err) {
+                    console.error('Failed to mark as sent:', err);
+                    showErrorMessage('Failed to record email: ' + err.message);
                 }
             };
 
@@ -3894,6 +4445,27 @@
                 isComposeValid,
                 isCampaignValid,
 
+                // AI Refinement state
+                showAIPanel,
+                aiPrompt,
+                aiTone,
+                aiLength,
+                aiGenerating,
+                aiQuickActions,
+
+                // Campaign step state
+                expandedCampaignStep,
+                editingCampaignStep,
+                stepPreviewMode,
+                stepEdits,
+                copiedBody,
+
+                // Save Template Modal state
+                showSaveTemplateModal,
+                saveTemplateType,
+                saveTemplateStepIdx,
+                newTemplateName,
+
                 // Variable sidebar state
                 variablesData,
                 variablesLoading,
@@ -3918,6 +4490,27 @@
                 applyTemplate,
                 handleSendEmail,
                 handleStartCampaign,
+
+                // AI Refinement methods
+                handleAIQuickAction,
+                handleAIGenerate,
+
+                // Campaign step methods
+                toggleCampaignStep,
+                handleSequenceChange,
+                startEditingStep,
+                cancelEditingStep,
+                saveStepEdit,
+                resetStepEdit,
+                getStepContent,
+                resolveVariables,
+                openSaveTemplateModal,
+
+                // Action button methods
+                handleOpenInEmail,
+                handleCopyBody,
+                handleSaveDraft,
+                handleMarkAsSent,
 
                 // Tags state (v3.4.0)
                 tags: computed(() => store.tags),
