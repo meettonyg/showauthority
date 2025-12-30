@@ -10,8 +10,11 @@
 (function() {
     'use strict';
 
-    const { createApp, ref, computed, onMounted, watch } = Vue;
+    const { createApp, ref, computed, onMounted } = Vue;
     const { createPinia, defineStore } = Pinia;
+
+    // Translations helper
+    const __ = (key) => pitTasksData.i18n[key] || key;
 
     // =====================================================
     // API CLIENT
@@ -50,22 +53,6 @@
         }),
 
         getters: {
-            filteredTasks: (state) => {
-                // Client-side search filter for instant feedback
-                let result = [...state.tasks];
-
-                if (state.filters.search) {
-                    const search = state.filters.search.toLowerCase();
-                    result = result.filter(t =>
-                        (t.title || '').toLowerCase().includes(search) ||
-                        (t.description || '').toLowerCase().includes(search) ||
-                        (t.podcast_name || '').toLowerCase().includes(search)
-                    );
-                }
-
-                return result;
-            },
-
             hasFilters: (state) => {
                 return state.filters.status ||
                        state.filters.priority ||
@@ -107,7 +94,7 @@
                     this.pagination.total_pages = result.meta?.total_pages || 0;
                 } catch (err) {
                     console.error('Failed to fetch tasks:', err);
-                    this.error = 'Failed to load tasks. Please try again.';
+                    this.error = __('failedToLoad');
                 } finally {
                     this.loading = false;
                 }
@@ -145,6 +132,12 @@
 
             setFilter(key, value) {
                 this.filters[key] = value;
+                this.pagination.page = 1;
+                this.fetchTasks();
+            },
+
+            setOverdueFilter() {
+                this.filters.is_overdue = !this.filters.is_overdue;
                 this.pagination.page = 1;
                 this.fetchTasks();
             },
@@ -215,13 +208,17 @@
 
                 const diffDays = Math.floor((taskDate - today) / (1000 * 60 * 60 * 24));
 
-                if (diffDays === 0) return 'Today';
-                if (diffDays === 1) return 'Tomorrow';
-                if (diffDays === -1) return 'Yesterday';
-                if (diffDays < -1) return `${Math.abs(diffDays)} days ago`;
-                if (diffDays < 7) return `In ${diffDays} days`;
+                if (diffDays === 0) return __('today');
+                if (diffDays === 1) return __('tomorrow');
+                if (diffDays === -1) return __('yesterday');
+                if (diffDays < -1) {
+                    return __('daysAgo').replace('%d', Math.abs(diffDays));
+                }
+                if (diffDays < 7) {
+                    return __('inDays').replace('%d', diffDays);
+                }
 
-                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
             };
 
             const getDueClass = (task) => {
@@ -240,12 +237,31 @@
                 return `${pitTasksData.interviewDetailUrl}?id=${appearanceId}`;
             };
 
+            const getPriorityLabel = (priority) => {
+                const labels = {
+                    urgent: __('urgent'),
+                    high: __('high'),
+                    medium: __('medium'),
+                    low: __('low'),
+                };
+                return labels[priority] || priority;
+            };
+
+            const formatPageInfo = () => {
+                return __('pageOf')
+                    .replace('%1$d', store.pagination.page)
+                    .replace('%2$d', store.pagination.total_pages);
+            };
+
             return {
                 store,
+                __,
                 handleSearch,
                 formatDate,
                 getDueClass,
                 getInterviewUrl,
+                getPriorityLabel,
+                formatPageInfo,
             };
         },
 
@@ -253,30 +269,30 @@
             <div class="pit-tasks-dashboard">
                 <!-- Header -->
                 <div class="pit-tasks-header">
-                    <h1>Tasks</h1>
+                    <h1>{{ __('tasks') }}</h1>
                 </div>
 
                 <!-- Stats Cards -->
                 <div class="pit-tasks-stats" v-if="store.stats">
                     <div class="pit-stat-card" @click="store.setFilter('status', '')">
                         <div class="pit-stat-value">{{ store.stats.total || 0 }}</div>
-                        <div class="pit-stat-label">Total Tasks</div>
+                        <div class="pit-stat-label">{{ __('totalTasks') }}</div>
                     </div>
                     <div class="pit-stat-card" @click="store.setFilter('status', 'pending')">
                         <div class="pit-stat-value">{{ store.stats.by_status?.pending || 0 }}</div>
-                        <div class="pit-stat-label">Pending</div>
+                        <div class="pit-stat-label">{{ __('pending') }}</div>
                     </div>
                     <div class="pit-stat-card" @click="store.setFilter('status', 'in_progress')">
                         <div class="pit-stat-value">{{ store.stats.by_status?.in_progress || 0 }}</div>
-                        <div class="pit-stat-label">In Progress</div>
+                        <div class="pit-stat-label">{{ __('inProgress') }}</div>
                     </div>
-                    <div class="pit-stat-card overdue" @click="store.filters.is_overdue = true; store.fetchTasks()">
+                    <div class="pit-stat-card overdue" @click="store.setOverdueFilter()">
                         <div class="pit-stat-value">{{ store.stats.overdue || 0 }}</div>
-                        <div class="pit-stat-label">Overdue</div>
+                        <div class="pit-stat-label">{{ __('overdue') }}</div>
                     </div>
                     <div class="pit-stat-card" @click="store.setFilter('status', 'completed')">
                         <div class="pit-stat-value">{{ store.stats.by_status?.completed || 0 }}</div>
-                        <div class="pit-stat-label">Completed</div>
+                        <div class="pit-stat-label">{{ __('completed') }}</div>
                     </div>
                 </div>
 
@@ -291,7 +307,7 @@
                         <input
                             type="text"
                             class="pit-search-input"
-                            placeholder="Search tasks..."
+                            :placeholder="__('searchTasks')"
                             :value="store.filters.search"
                             @input="handleSearch"
                         />
@@ -299,51 +315,51 @@
 
                     <!-- Status Filter -->
                     <select class="pit-select" v-model="store.filters.status" @change="store.setFilter('status', $event.target.value)">
-                        <option value="">All Statuses</option>
-                        <option value="pending">Pending</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                        <option value="cancelled">Cancelled</option>
+                        <option value="">{{ __('allStatuses') }}</option>
+                        <option value="pending">{{ __('pending') }}</option>
+                        <option value="in_progress">{{ __('inProgress') }}</option>
+                        <option value="completed">{{ __('completed') }}</option>
+                        <option value="cancelled">{{ __('cancelled') }}</option>
                     </select>
 
                     <!-- Priority Filter -->
                     <select class="pit-select" v-model="store.filters.priority" @change="store.setFilter('priority', $event.target.value)">
-                        <option value="">All Priorities</option>
-                        <option value="urgent">Urgent</option>
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
+                        <option value="">{{ __('allPriorities') }}</option>
+                        <option value="urgent">{{ __('urgent') }}</option>
+                        <option value="high">{{ __('high') }}</option>
+                        <option value="medium">{{ __('medium') }}</option>
+                        <option value="low">{{ __('low') }}</option>
                     </select>
 
                     <!-- Sort -->
                     <select class="pit-select" @change="store.setSort($event.target.value)">
-                        <option value="created_at">Newest First</option>
-                        <option value="due_date">Due Date</option>
-                        <option value="priority">Priority</option>
+                        <option value="created_at">{{ __('newestFirst') }}</option>
+                        <option value="due_date">{{ __('dueDate') }}</option>
+                        <option value="priority">{{ __('priority') }}</option>
                     </select>
 
                     <!-- Clear Filters -->
                     <button v-if="store.hasFilters" class="pit-btn-link" @click="store.clearFilters()">
-                        Clear Filters
+                        {{ __('clearFilters') }}
                     </button>
                 </div>
 
                 <!-- Loading -->
                 <div v-if="store.loading" class="pit-loading">
                     <div class="pit-loading-spinner"></div>
-                    <p>Loading tasks...</p>
+                    <p>{{ __('loadingTasks') }}</p>
                 </div>
 
                 <!-- Error -->
                 <div v-else-if="store.error" class="pit-error">
                     <p>{{ store.error }}</p>
-                    <button @click="store.fetchTasks()">Try Again</button>
+                    <button @click="store.fetchTasks()">{{ __('tryAgain') }}</button>
                 </div>
 
                 <!-- Task List -->
-                <div v-else-if="store.filteredTasks.length > 0" class="pit-tasks-list">
+                <div v-else-if="store.tasks.length > 0" class="pit-tasks-list">
                     <div
-                        v-for="task in store.filteredTasks"
+                        v-for="task in store.tasks"
                         :key="task.id"
                         class="pit-task-item"
                         :class="{
@@ -374,7 +390,7 @@
 
                                 <!-- Priority -->
                                 <span class="pit-priority-badge" :class="task.priority">
-                                    {{ task.priority }}
+                                    {{ getPriorityLabel(task.priority) }}
                                 </span>
 
                                 <!-- Due Date -->
@@ -395,16 +411,16 @@
                             @click="store.setPage(store.pagination.page - 1)"
                             :disabled="store.pagination.page <= 1"
                         >
-                            Previous
+                            {{ __('previous') }}
                         </button>
                         <span class="pit-pagination-info">
-                            Page {{ store.pagination.page }} of {{ store.pagination.total_pages }}
+                            {{ formatPageInfo() }}
                         </span>
                         <button
                             @click="store.setPage(store.pagination.page + 1)"
                             :disabled="store.pagination.page >= store.pagination.total_pages"
                         >
-                            Next
+                            {{ __('next') }}
                         </button>
                     </div>
                 </div>
@@ -414,8 +430,8 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                         <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
                     </svg>
-                    <p v-if="store.hasFilters">No tasks match your filters.</p>
-                    <p v-else>No tasks yet. Tasks will appear here when you add them to your appearances.</p>
+                    <p v-if="store.hasFilters">{{ __('noTasksMatch') }}</p>
+                    <p v-else>{{ __('noTasksYet') }}</p>
                 </div>
             </div>
         `,

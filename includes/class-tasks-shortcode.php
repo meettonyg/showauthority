@@ -30,7 +30,7 @@ class PIT_Tasks_Shortcode {
      */
     public static function render($atts) {
         if (!is_user_logged_in()) {
-            return '<div class="pit-error"><p>Please log in to access tasks.</p></div>';
+            return '<div class="pit-error"><p>' . esc_html__('Please log in to access tasks.', 'podcast-influence-tracker') . '</p></div>';
         }
 
         $atts = shortcode_atts([
@@ -39,8 +39,8 @@ class PIT_Tasks_Shortcode {
             'limit'  => 50,        // Max items for widget view
         ], $atts);
 
-        // Enqueue scripts
-        self::enqueue_scripts($atts);
+        // Enqueue scripts and styles
+        self::enqueue_assets($atts);
 
         ob_start();
         ?>
@@ -51,19 +51,18 @@ class PIT_Tasks_Shortcode {
              data-limit="<?php echo esc_attr($atts['limit']); ?>">
             <div class="pit-loading">
                 <div class="pit-loading-spinner"></div>
-                <p>Loading tasks...</p>
+                <p><?php esc_html_e('Loading tasks...', 'podcast-influence-tracker'); ?></p>
             </div>
         </div>
         <?php
-        self::render_styles();
 
         return ob_get_clean();
     }
 
     /**
-     * Enqueue required scripts
+     * Enqueue required scripts and styles
      */
-    private static function enqueue_scripts($atts) {
+    private static function enqueue_assets($atts) {
         // Vue 3
         wp_enqueue_script(
             'vue',
@@ -109,7 +108,15 @@ class PIT_Tasks_Shortcode {
             true
         );
 
-        // Localize script data
+        // Tasks CSS
+        wp_enqueue_style(
+            'pit-tasks',
+            PIT_PLUGIN_URL . 'assets/css/tasks.css',
+            [],
+            PIT_VERSION
+        );
+
+        // Localize script data with translations
         wp_localize_script('pit-tasks', 'pitTasksData', [
             'restUrl'            => rest_url('guestify/v1/'),
             'nonce'              => wp_create_nonce('wp_rest'),
@@ -119,350 +126,59 @@ class PIT_Tasks_Shortcode {
             'defaultView'        => $atts['view'],
             'defaultStatus'      => $atts['status'],
             'defaultLimit'       => (int) $atts['limit'],
+            'i18n'               => self::get_translations(),
         ]);
     }
 
     /**
-     * Render inline styles
+     * Get translations for JavaScript
      */
-    private static function render_styles() {
-        ?>
-        <style>
-            /* Tasks Dashboard Container */
-            .pit-tasks-page {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                max-width: 1400px;
-                margin: 0 auto;
-                padding: 20px;
-            }
+    private static function get_translations() {
+        return [
+            // Header
+            'tasks'              => __('Tasks', 'podcast-influence-tracker'),
 
-            /* Header */
-            .pit-tasks-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 24px;
-            }
-            .pit-tasks-header h1 {
-                margin: 0;
-                font-size: 24px;
-                font-weight: 600;
-                color: #1f2937;
-            }
+            // Stats
+            'totalTasks'         => __('Total Tasks', 'podcast-influence-tracker'),
+            'pending'            => __('Pending', 'podcast-influence-tracker'),
+            'inProgress'         => __('In Progress', 'podcast-influence-tracker'),
+            'overdue'            => __('Overdue', 'podcast-influence-tracker'),
+            'completed'          => __('Completed', 'podcast-influence-tracker'),
+            'cancelled'          => __('Cancelled', 'podcast-influence-tracker'),
 
-            /* Stats Cards */
-            .pit-tasks-stats {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-                gap: 16px;
-                margin-bottom: 24px;
-            }
-            .pit-stat-card {
-                background: white;
-                border-radius: 12px;
-                padding: 16px;
-                border: 1px solid #e2e8f0;
-                text-align: center;
-            }
-            .pit-stat-card.overdue {
-                border-color: #fecaca;
-                background: #fef2f2;
-            }
-            .pit-stat-value {
-                font-size: 28px;
-                font-weight: 700;
-                color: #1f2937;
-            }
-            .pit-stat-card.overdue .pit-stat-value {
-                color: #dc2626;
-            }
-            .pit-stat-label {
-                font-size: 13px;
-                color: #6b7280;
-                margin-top: 4px;
-            }
+            // Filters
+            'searchTasks'        => __('Search tasks...', 'podcast-influence-tracker'),
+            'allStatuses'        => __('All Statuses', 'podcast-influence-tracker'),
+            'allPriorities'      => __('All Priorities', 'podcast-influence-tracker'),
+            'newestFirst'        => __('Newest First', 'podcast-influence-tracker'),
+            'dueDate'            => __('Due Date', 'podcast-influence-tracker'),
+            'priority'           => __('Priority', 'podcast-influence-tracker'),
+            'clearFilters'       => __('Clear Filters', 'podcast-influence-tracker'),
 
-            /* Toolbar */
-            .pit-tasks-toolbar {
-                background: white;
-                border-radius: 12px;
-                padding: 16px;
-                display: flex;
-                flex-wrap: wrap;
-                align-items: center;
-                gap: 12px;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-                margin-bottom: 16px;
-                border: 1px solid #e2e8f0;
-            }
+            // Priorities
+            'urgent'             => __('Urgent', 'podcast-influence-tracker'),
+            'high'               => __('High', 'podcast-influence-tracker'),
+            'medium'             => __('Medium', 'podcast-influence-tracker'),
+            'low'                => __('Low', 'podcast-influence-tracker'),
 
-            /* Search */
-            .pit-search-wrapper {
-                position: relative;
-                flex: 1;
-                min-width: 200px;
-            }
-            .pit-search-icon {
-                position: absolute;
-                left: 12px;
-                top: 50%;
-                transform: translateY(-50%);
-                color: #94a3b8;
-                width: 18px;
-                height: 18px;
-            }
-            .pit-search-input {
-                width: 100%;
-                height: 40px;
-                padding: 0 12px 0 40px !important;
-                border: 1px solid #e2e8f0;
-                border-radius: 8px;
-                font-size: 14px;
-                background: #f8fafc;
-            }
-            .pit-search-input:focus {
-                outline: none;
-                border-color: #0ea5e9;
-                background: white;
-            }
+            // Dates
+            'today'              => __('Today', 'podcast-influence-tracker'),
+            'tomorrow'           => __('Tomorrow', 'podcast-influence-tracker'),
+            'yesterday'          => __('Yesterday', 'podcast-influence-tracker'),
+            'daysAgo'            => __('%d days ago', 'podcast-influence-tracker'),
+            'inDays'             => __('In %d days', 'podcast-influence-tracker'),
 
-            /* Select Dropdowns */
-            .pit-select {
-                height: 40px;
-                padding: 0 32px 0 12px;
-                border: 1px solid #e2e8f0;
-                border-radius: 8px;
-                font-size: 14px;
-                background: #f8fafc url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 10px center;
-                appearance: none;
-                cursor: pointer;
-                min-width: 130px;
-            }
-            .pit-select:focus {
-                outline: none;
-                border-color: #0ea5e9;
-                background-color: white;
-            }
+            // States
+            'loadingTasks'       => __('Loading tasks...', 'podcast-influence-tracker'),
+            'noTasksMatch'       => __('No tasks match your filters.', 'podcast-influence-tracker'),
+            'noTasksYet'         => __('No tasks yet. Tasks will appear here when you add them to your appearances.', 'podcast-influence-tracker'),
+            'failedToLoad'       => __('Failed to load tasks. Please try again.', 'podcast-influence-tracker'),
+            'tryAgain'           => __('Try Again', 'podcast-influence-tracker'),
 
-            /* Task List */
-            .pit-tasks-list {
-                background: white;
-                border-radius: 12px;
-                border: 1px solid #e2e8f0;
-                overflow: hidden;
-            }
-
-            /* Task Item */
-            .pit-task-item {
-                display: flex;
-                align-items: flex-start;
-                gap: 12px;
-                padding: 16px;
-                border-bottom: 1px solid #f1f5f9;
-                transition: background 0.15s;
-            }
-            .pit-task-item:last-child {
-                border-bottom: none;
-            }
-            .pit-task-item:hover {
-                background: #f8fafc;
-            }
-            .pit-task-item.completed {
-                opacity: 0.6;
-            }
-            .pit-task-item.overdue {
-                border-left: 3px solid #ef4444;
-            }
-
-            /* Checkbox */
-            .pit-task-checkbox {
-                width: 20px;
-                height: 20px;
-                border: 2px solid #d1d5db;
-                border-radius: 50%;
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                flex-shrink: 0;
-                margin-top: 2px;
-                transition: all 0.15s;
-            }
-            .pit-task-checkbox:hover {
-                border-color: #0ea5e9;
-            }
-            .pit-task-checkbox.checked {
-                background: #10b981;
-                border-color: #10b981;
-            }
-            .pit-task-checkbox.checked svg {
-                color: white;
-            }
-
-            /* Task Content */
-            .pit-task-content {
-                flex: 1;
-                min-width: 0;
-            }
-            .pit-task-title {
-                font-size: 15px;
-                font-weight: 500;
-                color: #1f2937;
-                margin-bottom: 4px;
-            }
-            .completed .pit-task-title {
-                text-decoration: line-through;
-                color: #9ca3af;
-            }
-            .pit-task-meta {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 12px;
-                font-size: 13px;
-                color: #6b7280;
-            }
-            .pit-task-podcast {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-            }
-            .pit-task-podcast img {
-                width: 20px;
-                height: 20px;
-                border-radius: 4px;
-            }
-            .pit-task-podcast a {
-                color: #0ea5e9;
-                text-decoration: none;
-            }
-            .pit-task-podcast a:hover {
-                text-decoration: underline;
-            }
-
-            /* Priority Badge */
-            .pit-priority-badge {
-                display: inline-flex;
-                align-items: center;
-                padding: 2px 8px;
-                border-radius: 12px;
-                font-size: 11px;
-                font-weight: 600;
-                text-transform: uppercase;
-            }
-            .pit-priority-badge.urgent {
-                background: #fef2f2;
-                color: #dc2626;
-            }
-            .pit-priority-badge.high {
-                background: #fff7ed;
-                color: #ea580c;
-            }
-            .pit-priority-badge.medium {
-                background: #fefce8;
-                color: #ca8a04;
-            }
-            .pit-priority-badge.low {
-                background: #f0fdf4;
-                color: #16a34a;
-            }
-
-            /* Due Date */
-            .pit-task-due {
-                display: flex;
-                align-items: center;
-                gap: 4px;
-            }
-            .pit-task-due.overdue {
-                color: #dc2626;
-                font-weight: 500;
-            }
-            .pit-task-due.today {
-                color: #ea580c;
-                font-weight: 500;
-            }
-
-            /* Empty State */
-            .pit-empty-state {
-                text-align: center;
-                padding: 60px 20px;
-                color: #6b7280;
-            }
-            .pit-empty-state svg {
-                width: 48px;
-                height: 48px;
-                margin-bottom: 16px;
-                opacity: 0.5;
-            }
-
-            /* Loading */
-            .pit-loading {
-                text-align: center;
-                padding: 60px 20px;
-            }
-            .pit-loading-spinner {
-                width: 32px;
-                height: 32px;
-                border: 3px solid #e2e8f0;
-                border-top-color: #0ea5e9;
-                border-radius: 50%;
-                animation: spin 0.8s linear infinite;
-                margin: 0 auto 16px;
-            }
-            @keyframes spin {
-                to { transform: rotate(360deg); }
-            }
-
-            /* Pagination */
-            .pit-pagination {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                gap: 8px;
-                padding: 16px;
-                border-top: 1px solid #f1f5f9;
-            }
-            .pit-pagination button {
-                padding: 8px 16px;
-                border: 1px solid #e2e8f0;
-                border-radius: 6px;
-                background: white;
-                font-size: 14px;
-                cursor: pointer;
-                transition: all 0.15s;
-            }
-            .pit-pagination button:hover:not(:disabled) {
-                border-color: #0ea5e9;
-                color: #0ea5e9;
-            }
-            .pit-pagination button:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-            .pit-pagination-info {
-                font-size: 14px;
-                color: #6b7280;
-            }
-
-            /* Responsive */
-            @media (max-width: 768px) {
-                .pit-tasks-page {
-                    padding: 12px;
-                }
-                .pit-tasks-toolbar {
-                    flex-direction: column;
-                    align-items: stretch;
-                }
-                .pit-search-wrapper {
-                    min-width: 100%;
-                }
-                .pit-select {
-                    width: 100%;
-                }
-                .pit-tasks-stats {
-                    grid-template-columns: repeat(2, 1fr);
-                }
-            }
-        </style>
-        <?php
+            // Pagination
+            'previous'           => __('Previous', 'podcast-influence-tracker'),
+            'next'               => __('Next', 'podcast-influence-tracker'),
+            'pageOf'             => __('Page %1$d of %2$d', 'podcast-influence-tracker'),
+        ];
     }
 }
