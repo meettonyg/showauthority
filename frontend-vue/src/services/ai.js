@@ -21,6 +21,8 @@ export default {
    * @param {string} payload.subject - Current email subject
    * @param {string} payload.body - Current email body
    * @param {string} payload.instruction - Refinement instruction
+   * @param {string} [payload.tone] - Desired tone (professional, friendly, casual, enthusiastic)
+   * @param {string} [payload.length] - Desired length (short, medium, long)
    * @param {number} [payload.appearance_id] - Appearance ID for context/tracking
    * @returns {Promise<{success: boolean, data?: {subject: string, body: string}, message?: string}>}
    */
@@ -29,6 +31,8 @@ export default {
       subject: payload.subject,
       body: payload.body,
       instruction: payload.instruction,
+      tone: payload.tone || 'professional',
+      length: payload.length || 'medium',
       appearance_id: payload.appearance_id
     })
     return response.data

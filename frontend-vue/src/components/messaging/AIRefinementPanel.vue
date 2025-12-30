@@ -1,49 +1,83 @@
 <template>
   <div class="ai-panel">
     <div class="ai-panel-header">
-      <div class="ai-icon">
-        <Icon name="layers" :size="16" />
+      <div class="ai-header-left">
+        <span class="ai-icon">✨</span>
+        <span class="ai-label">Refine with AI</span>
       </div>
-      <span class="ai-label">AI Assistant</span>
+      <button class="close-btn" @click="$emit('close')" title="Close AI panel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
     </div>
 
     <!-- Quick Actions -->
-    <div class="quick-actions">
-      <button
-        v-for="action in quickActions"
-        :key="action.id"
-        class="quick-action-btn"
-        :disabled="loading || !hasContent"
-        @click="handleQuickAction(action)"
-      >
-        <Icon :name="action.icon" :size="14" />
-        {{ action.label }}
-      </button>
+    <div class="quick-actions-section">
+      <label class="section-label">Quick actions:</label>
+      <div class="quick-actions">
+        <button
+          v-for="action in quickActions"
+          :key="action.id"
+          class="quick-action-btn"
+          :disabled="loading || !hasContent"
+          @click="handleQuickAction(action)"
+        >
+          <span class="action-icon">{{ action.icon }}</span>
+          {{ action.label }}
+        </button>
+      </div>
     </div>
 
     <!-- Custom Instruction Input -->
-    <div class="custom-instruction">
+    <div class="custom-instruction-section">
+      <label class="section-label">Or describe what you want:</label>
       <textarea
         v-model="customInstruction"
         class="instruction-input"
-        placeholder="Give custom instructions... (e.g., 'Add urgency', 'Include a P.S.')"
+        placeholder="e.g., Write a warm intro that mentions their recent episode about marketing..."
         :disabled="loading"
+        rows="2"
         @keydown.enter.meta="handleCustomInstruction"
         @keydown.enter.ctrl="handleCustomInstruction"
       ></textarea>
-      <button
-        class="apply-btn"
-        :disabled="loading || !customInstruction.trim() || !hasContent"
-        @click="handleCustomInstruction"
-      >
-        <svg v-if="loading" class="spinner" width="14" height="14" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" opacity="0.3"></circle>
-          <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"></path>
-        </svg>
-        <Icon v-else name="send" :size="14" />
-        Apply
-      </button>
     </div>
+
+    <!-- Tone & Length Options -->
+    <div class="options-row">
+      <div class="option-group">
+        <label class="option-label">Tone:</label>
+        <select v-model="selectedTone" class="option-select" :disabled="loading">
+          <option value="professional">Professional</option>
+          <option value="friendly">Friendly</option>
+          <option value="casual">Casual</option>
+          <option value="enthusiastic">Enthusiastic</option>
+        </select>
+      </div>
+      <div class="option-group">
+        <label class="option-label">Length:</label>
+        <select v-model="selectedLength" class="option-select" :disabled="loading">
+          <option value="short">Short</option>
+          <option value="medium">Medium</option>
+          <option value="long">Detailed</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Generate Button -->
+    <button
+      class="generate-btn"
+      :disabled="loading || (!customInstruction.trim() && !lastQuickAction) || !hasContent"
+      @click="handleGenerate"
+    >
+      <svg v-if="loading" class="spinner" width="16" height="16" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" opacity="0.3"></circle>
+        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"></path>
+      </svg>
+      <span v-else>✨</span>
+      {{ loading ? 'Generating...' : 'Generate' }}
+    </button>
 
     <!-- Error Display -->
     <div v-if="error" class="error-message">
@@ -71,14 +105,13 @@
  * AIRefinementPanel Component
  *
  * Provides AI-powered email refinement capabilities.
- * Includes quick actions and custom instruction input.
+ * Includes quick actions, tone/length options, and custom instruction input.
  *
  * @package ShowAuthority
  * @since 5.4.0
  */
 
 import { ref, computed } from 'vue'
-import Icon from '../common/Icon.vue'
 import aiService from '../../services/ai'
 
 const props = defineProps({
@@ -107,16 +140,18 @@ const props = defineProps({
 
 const emit = defineEmits([
   'refine', // Emitted when content should be replaced with AI result
-  'loading' // Emitted when loading state changes
+  'loading', // Emitted when loading state changes
+  'close' // Emitted when close button is clicked
 ])
 
-// Quick action definitions - icon names match Icon component
+// Quick action definitions with emoji icons
 const quickActions = [
-  { id: 'polish', label: 'Polish', icon: 'wand', instruction: 'Polish and improve the email while maintaining the core message. Fix grammar, improve flow, and make it more engaging.' },
-  { id: 'shorten', label: 'Shorten', icon: 'compress', instruction: 'Make the email more concise by removing unnecessary words and phrases. Keep the key points but reduce length by about 30%.' },
-  { id: 'expand', label: 'Expand', icon: 'expand', instruction: 'Expand the email with more detail and context. Add persuasive elements and make the message more compelling.' },
-  { id: 'formal', label: 'Formal', icon: 'formal', instruction: 'Rewrite the email in a more formal, professional tone suitable for business communication.' },
-  { id: 'casual', label: 'Casual', icon: 'casual', instruction: 'Rewrite the email in a more casual, friendly tone while keeping it professional.' }
+  { id: 'shorten', label: 'Make it shorter', icon: '📏', instruction: 'Make the email more concise by removing unnecessary words and phrases. Keep the key points but reduce length by about 30%.' },
+  { id: 'personal', label: 'More personal', icon: '💬', instruction: 'Make this email more personal and conversational. Add warmth and connection while keeping it professional.' },
+  { id: 'social-proof', label: 'Add social proof', icon: '⭐', instruction: 'Add social proof and credibility markers. Include references to achievements, testimonials, or notable results.' },
+  { id: 'cta', label: 'Stronger CTA', icon: '🎯', instruction: 'Strengthen the call to action. Make it clearer, more compelling, and create a sense of why they should respond.' },
+  { id: 'episode', label: 'Reference episode', icon: '🎙️', instruction: 'Add a specific reference to their recent episode. Show that you have listened to their podcast and appreciate their content.' },
+  { id: 'urgency', label: 'Add urgency', icon: '⏰', instruction: 'Add appropriate urgency without being pushy. Create a reason for them to respond sooner rather than later.' }
 ]
 
 // State
@@ -124,6 +159,9 @@ const loading = ref(false)
 const error = ref(null)
 const customInstruction = ref('')
 const suggestion = ref(null)
+const selectedTone = ref('professional')
+const selectedLength = ref('medium')
+const lastQuickAction = ref(null)
 
 // Check if there's content to refine
 const hasContent = computed(() => {
@@ -131,19 +169,30 @@ const hasContent = computed(() => {
 })
 
 /**
- * Handle quick action button click
+ * Handle quick action button click - sets the instruction and triggers generate
  */
 async function handleQuickAction(action) {
-  await refineContent(action.instruction)
+  lastQuickAction.value = action
+  customInstruction.value = action.instruction
+  await handleGenerate()
 }
 
 /**
- * Handle custom instruction submission
+ * Handle custom instruction submission (Enter key)
  */
 async function handleCustomInstruction() {
   if (!customInstruction.value.trim()) return
-  await refineContent(customInstruction.value)
-  customInstruction.value = ''
+  lastQuickAction.value = null
+  await handleGenerate()
+}
+
+/**
+ * Handle generate button click
+ */
+async function handleGenerate() {
+  const instruction = customInstruction.value.trim() || lastQuickAction.value?.instruction
+  if (!instruction) return
+  await refineContent(instruction)
 }
 
 /**
@@ -161,6 +210,8 @@ async function refineContent(instruction) {
       subject: props.subject,
       body: props.body,
       instruction: instruction,
+      tone: selectedTone.value,
+      length: selectedLength.value,
       appearance_id: props.appearanceId
     })
 
@@ -205,41 +256,73 @@ function rejectSuggestion() {
 
 <style scoped>
 .ai-panel {
-  background: linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 100%);
-  border: 1px solid var(--color-border, #d1d9e6);
+  background: linear-gradient(135deg, #f5f3ff 0%, #eff6ff 100%);
+  border: 1px solid #c7d2fe;
   border-radius: 8px;
-  padding: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
 }
 
 .ai-panel-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
   margin-bottom: 12px;
 }
 
-.ai-icon {
-  width: 24px;
-  height: 24px;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  border-radius: 6px;
+.ai-header-left {
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: white;
+  gap: 8px;
+}
+
+.ai-icon {
+  font-size: 18px;
 }
 
 .ai-label {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--color-text-primary, #1a1a1a);
+}
+
+.close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--color-text-tertiary, #9ca3af);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.close-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--color-text-primary, #1a1a1a);
+}
+
+/* Section Labels */
+.section-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #6b7280);
+  margin-bottom: 8px;
+}
+
+/* Quick Actions */
+.quick-actions-section {
+  margin-bottom: 12px;
 }
 
 .quick-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 12px;
 }
 
 .quick-action-btn {
@@ -248,8 +331,8 @@ function rejectSuggestion() {
   gap: 4px;
   padding: 6px 10px;
   background: white;
-  border: 1px solid var(--color-border, #d1d9e6);
-  border-radius: 6px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
   color: var(--color-text-primary, #374151);
@@ -258,9 +341,9 @@ function rejectSuggestion() {
 }
 
 .quick-action-btn:hover:not(:disabled) {
-  background: var(--color-surface, #f8f9fa);
-  border-color: #6366f1;
-  color: #6366f1;
+  background: #f5f3ff;
+  border-color: #a78bfa;
+  color: #7c3aed;
 }
 
 .quick-action-btn:disabled {
@@ -268,17 +351,19 @@ function rejectSuggestion() {
   cursor: not-allowed;
 }
 
-.custom-instruction {
-  display: flex;
-  gap: 8px;
+.action-icon {
+  font-size: 12px;
+}
+
+/* Custom Instruction */
+.custom-instruction-section {
+  margin-bottom: 12px;
 }
 
 .instruction-input {
-  flex: 1;
-  min-height: 36px;
-  max-height: 80px;
-  padding: 8px 12px;
-  border: 1px solid var(--color-border, #d1d9e6);
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border, #e5e7eb);
   border-radius: 6px;
   font-size: 13px;
   font-family: inherit;
@@ -288,8 +373,8 @@ function rejectSuggestion() {
 
 .instruction-input:focus {
   outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 }
 
 .instruction-input:disabled {
@@ -297,26 +382,68 @@ function rejectSuggestion() {
   cursor: not-allowed;
 }
 
-.apply-btn {
+/* Options Row */
+.options-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.option-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.option-select {
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 4px;
+  background: white;
+  color: var(--color-text-primary, #1a1a1a);
+  cursor: pointer;
+}
+
+.option-select:focus {
+  outline: none;
+  border-color: #8b5cf6;
+}
+
+.option-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Generate Button */
+.generate-btn {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 14px;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
   border: none;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: white;
   cursor: pointer;
   transition: opacity 0.15s ease;
 }
 
-.apply-btn:hover:not(:disabled) {
+.generate-btn:hover:not(:disabled) {
   opacity: 0.9;
 }
 
-.apply-btn:disabled {
+.generate-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -330,12 +457,13 @@ function rejectSuggestion() {
   to { transform: rotate(360deg); }
 }
 
+/* Error Message */
 .error-message {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 8px;
-  padding: 8px 12px;
+  margin-top: 12px;
+  padding: 10px 12px;
   background: #fef2f2;
   border: 1px solid #fecaca;
   border-radius: 6px;
@@ -352,6 +480,7 @@ function rejectSuggestion() {
   padding: 0 4px;
 }
 
+/* Suggestion Preview */
 .suggestion-preview {
   margin-top: 12px;
   background: white;
@@ -364,7 +493,7 @@ function rejectSuggestion() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 10px 12px;
   background: #f0fdf4;
   border-bottom: 1px solid #86efac;
   font-size: 12px;
@@ -379,9 +508,9 @@ function rejectSuggestion() {
 
 .accept-btn,
 .reject-btn {
-  padding: 4px 12px;
+  padding: 5px 14px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.15s ease;

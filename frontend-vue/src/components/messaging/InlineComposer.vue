@@ -128,9 +128,37 @@
 
           <!-- Body -->
           <div class="form-group">
-            <label class="form-label">
-              Message <span class="required">*</span>
-            </label>
+            <div class="form-label-row">
+              <label class="form-label">
+                Message <span class="required">*</span>
+              </label>
+              <button
+                type="button"
+                class="ai-toggle-btn"
+                :class="{ active: showAIPanel }"
+                @click="showAIPanel = !showAIPanel"
+                :disabled="loading"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                  <path d="M2 17l10 5 10-5"></path>
+                  <path d="M2 12l10 5 10-5"></path>
+                </svg>
+                Refine with AI
+              </button>
+            </div>
+
+            <!-- AI Refinement Panel -->
+            <AIRefinementPanel
+              v-if="showAIPanel"
+              :subject="form.subject"
+              :body="form.body"
+              :appearance-id="appearanceId"
+              @refine="handleAIRefine"
+              @loading="aiLoading = $event"
+              @close="showAIPanel = false"
+            />
+
             <textarea
               v-if="!previewMode"
               ref="bodyInputRef"
@@ -138,7 +166,7 @@
               class="form-input form-textarea"
               rows="8"
               placeholder="Write your message here..."
-              :disabled="loading"
+              :disabled="loading || aiLoading"
               required
               @focus="handleInputFocus('body')"
             ></textarea>
@@ -226,13 +254,14 @@
           :subject="form.subject"
           :body="form.body"
           :sequence-id="form.sequenceId"
-          :disabled="loading"
+          :disabled="loading || aiLoading"
           :loading="loading"
           @open-in-email="handleOpenInEmail"
           @copy-body="handleCopyBody"
           @save-draft="handleSaveDraft"
           @mark-as-sent="handleMarkAsSent"
           @start-campaign="handleStartCampaign"
+          @cancel="handleCancel"
         />
       </div>
 
@@ -273,6 +302,7 @@ import SequenceSelector from './SequenceSelector.vue'
 import VariableSidebar from './VariableSidebar.vue'
 import ActionButtonsBar from './ActionButtonsBar.vue'
 import CampaignStepsList from './CampaignStepsList.vue'
+import AIRefinementPanel from './AIRefinementPanel.vue'
 import outreachService from '../../services/outreach'
 import { resolveVariables } from '../../utils/variableResolver'
 
@@ -369,6 +399,10 @@ const variablesLoading = ref(false)
 const subjectInputRef = ref(null)
 const bodyInputRef = ref(null)
 const lastFocusedInput = ref(null)
+
+// AI Panel state
+const showAIPanel = ref(false)
+const aiLoading = ref(false)
 
 // Check if sequences are available
 const hasSequences = computed(() => {
@@ -587,6 +621,17 @@ async function handleStartCampaign() {
   }
 }
 
+// Handle AI refinement result
+function handleAIRefine(refinedContent) {
+  if (refinedContent.subject) {
+    form.subject = refinedContent.subject
+  }
+  if (refinedContent.body) {
+    form.body = refinedContent.body
+  }
+  showAIPanel.value = false
+}
+
 // Expose methods for parent components
 defineExpose({
   resetForm,
@@ -755,6 +800,50 @@ defineExpose({
 
 .required {
   color: var(--color-error, #ef4444);
+}
+
+/* Form Label Row */
+.form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.form-label-row .form-label {
+  margin-bottom: 0;
+}
+
+/* AI Toggle Button */
+.ai-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #22d3ee;
+  border-radius: 6px;
+  background: white;
+  color: #0891b2;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ai-toggle-btn:hover:not(:disabled) {
+  background: #ecfeff;
+  border-color: #06b6d4;
+}
+
+.ai-toggle-btn.active {
+  background: linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%);
+  border-color: #a78bfa;
+  color: #7c3aed;
+}
+
+.ai-toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .form-input {
