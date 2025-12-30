@@ -63,47 +63,14 @@ class PIT_Tasks_Shortcode {
      * Enqueue required scripts and styles
      */
     private static function enqueue_assets($atts) {
-        // Vue 3
-        wp_enqueue_script(
-            'vue',
-            'https://unpkg.com/vue@3.3.4/dist/vue.global.prod.js',
-            [],
-            '3.3.4',
-            true
-        );
-
-        // Vue Demi (required for Pinia)
-        wp_enqueue_script(
-            'vue-demi',
-            'https://unpkg.com/vue-demi@0.14.6/lib/index.iife.js',
-            ['vue'],
-            '0.14.6',
-            true
-        );
-
-        // Pinia
-        wp_enqueue_script(
-            'pinia',
-            'https://unpkg.com/pinia@2.1.7/dist/pinia.iife.js',
-            ['vue', 'vue-demi'],
-            '2.1.7',
-            true
-        );
-
-        // Shared API utility
-        wp_enqueue_script(
-            'guestify-api',
-            PIT_PLUGIN_URL . 'assets/js/shared/api.js',
-            [],
-            PIT_VERSION,
-            true
-        );
+        // Enqueue Vue, Pinia, and shared API (uses local vendor files if available)
+        PIT_Vue_Scripts::enqueue();
 
         // Tasks App
         wp_enqueue_script(
             'pit-tasks',
             PIT_PLUGIN_URL . 'assets/js/tasks-vue.js',
-            ['vue', 'pinia', 'guestify-api'],
+            PIT_Vue_Scripts::get_dependencies(),
             PIT_VERSION,
             true
         );

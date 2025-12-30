@@ -154,6 +154,9 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-global-tasks.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-global-notes.php';
 
+        // VUE SCRIPTS HELPER (v3.5)
+        require_once PIT_PLUGIN_DIR . 'includes/class-vue-scripts.php';
+
         // MIGRATIONS
         require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
         require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-events-schema.php';
