@@ -13,8 +13,15 @@
     const { createApp, ref, computed, onMounted } = Vue;
     const { createPinia, defineStore } = Pinia;
 
+    // Defensive check for required data
+    if (typeof pitNotesData === 'undefined') {
+        console.error('Notes: pitNotesData is not defined. Script may have loaded before localization.');
+        return;
+    }
+
     // Translations helper
-    const __ = (key) => pitNotesData.i18n[key] || key;
+    const i18n = pitNotesData.i18n || {};
+    const __ = (key) => i18n[key] || key;
 
     // =====================================================
     // API CLIENT

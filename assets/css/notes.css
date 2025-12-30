@@ -88,8 +88,9 @@
 /* Search */
 .pit-notes-page .pit-search-wrapper {
     position: relative;
-    flex: 1;
+    flex: 1 1 300px;
     min-width: 200px;
+    max-width: 400px;
 }
 .pit-notes-page .pit-search-icon {
     position: absolute;
