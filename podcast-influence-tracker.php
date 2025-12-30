@@ -166,9 +166,10 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/class-tasks-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-notes-shortcode.php';
 
-        // GOOGLE CALENDAR SYNC (v3.3)
+        // CALENDAR SYNC (v3.3 Google, v4.3 Outlook)
         require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-connections-schema.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-google-calendar.php';
+        require_once PIT_PLUGIN_DIR . 'includes/integrations/class-outlook-calendar.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-calendar-sync-service.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-calendar-sync.php';
         require_once PIT_PLUGIN_DIR . 'includes/Jobs/class-calendar-sync-job.php';
@@ -191,6 +192,10 @@ class Podcast_Influence_Tracker {
 
     public function activate() {
         Database_Schema::create_tables();
+
+        // Create calendar-specific tables (v3.3+)
+        PIT_Calendar_Events_Schema::create_table();
+        PIT_Calendar_Connections_Schema::create_table();
 
         if (!wp_next_scheduled('pit_background_refresh')) {
             wp_schedule_event(time(), 'weekly', 'pit_background_refresh');
@@ -222,6 +227,14 @@ class Podcast_Influence_Tracker {
 
         if (Database_Schema::needs_migration()) {
             Database_Schema::migrate();
+        }
+
+        // Ensure calendar tables exist (v3.3+ - lazy creation if missing)
+        if (!PIT_Calendar_Connections_Schema::table_exists()) {
+            PIT_Calendar_Connections_Schema::create_table();
+        }
+        if (!PIT_Calendar_Events_Schema::table_exists()) {
+            PIT_Calendar_Events_Schema::create_table();
         }
 
         add_filter('cron_schedules', [$this, 'add_cron_schedules']);
