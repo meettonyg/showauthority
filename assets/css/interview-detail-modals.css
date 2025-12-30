@@ -726,7 +726,7 @@ textarea.field-input {
     border: none;
     background: transparent;
     border-radius: 6px;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
     color: #6b7280;
     cursor: pointer;
@@ -746,7 +746,7 @@ textarea.field-input {
 /* AI Refinement Panel */
 .ai-refinement-panel {
     background: linear-gradient(to right, #faf5ff, #eff6ff);
-    border: 1px solid #c4b5fd;
+    border: 1px solid #e9d5ff;
     border-radius: 8px;
     padding: 16px;
     margin-bottom: 16px;
@@ -771,9 +771,9 @@ textarea.field-input {
 }
 
 .ai-header-left h4 {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
-    color: #1f2937;
+    color: #111827;
     margin: 0;
 }
 
@@ -872,11 +872,11 @@ textarea.field-input {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 10px 16px;
-    background: #8b5cf6;
+    padding: 8px 16px;
+    background: #a855f7;
     border: none;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
     color: #fff;
     cursor: pointer;
@@ -884,7 +884,7 @@ textarea.field-input {
 }
 
 .ai-generate-btn:hover:not(:disabled) {
-    background: #7c3aed;
+    background: #9333ea;
 }
 
 .ai-generate-btn:disabled {
@@ -956,11 +956,11 @@ textarea.field-input {
 .btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    font-size: 13px;
+    gap: 4px;
+    padding: 6px 12px;
+    font-size: 12px;
     font-weight: 500;
-    border-radius: 6px;
+    border-radius: 4px;
     cursor: pointer;
     transition: all 0.2s;
 }
@@ -1049,14 +1049,14 @@ textarea.field-input {
 }
 
 .campaign-steps-title {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
     color: #374151;
 }
 
 .campaign-steps-hint {
     font-size: 12px;
-    color: #9ca3af;
+    color: #6b7280;
 }
 
 .campaign-steps-list {
@@ -1121,9 +1121,9 @@ textarea.field-input {
 }
 
 .step-name {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
-    color: #1f2937;
+    color: #111827;
 }
 
 .step-delay {
@@ -1216,9 +1216,9 @@ textarea.field-input {
 }
 
 .step-field-value {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
-    color: #1f2937;
+    color: #111827;
     margin: 0;
 }
 
