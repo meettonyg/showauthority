@@ -496,11 +496,7 @@ textarea.field-input {
 
 .variable-sidebar .category-count {
     font-size: 11px;
-    font-weight: 500;
-    color: #94a3b8;
-    background: #fff;
-    padding: 2px 6px;
-    border-radius: 10px;
+    color: #9ca3af;
 }
 
 /* Category Variables */
@@ -509,19 +505,24 @@ textarea.field-input {
 }
 
 .variable-sidebar .variable-item {
-    display: flex;
-    align-items: stretch;
-    margin: 4px 8px;
+    position: relative;
+    display: block;
+    margin: 6px 8px;
+    padding: 8px 10px;
     background: #fff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #e5e7eb;
     border-radius: 8px;
-    transition: border-color 0.2s, box-shadow 0.2s;
-    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.2s, background-color 0.2s;
 }
 
 .variable-sidebar .variable-item:hover {
-    border-color: #0ea5e9;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    border-color: #93c5fd;
+    background-color: #eff6ff;
+}
+
+.variable-sidebar .variable-item:hover .copy-btn {
+    opacity: 1;
 }
 
 .variable-sidebar .variable-item.is-used {
@@ -531,78 +532,69 @@ textarea.field-input {
 
 .variable-sidebar .variable-main,
 .variable-sidebar .variable-info {
-    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
-    padding: 8px 10px;
+    gap: 2px;
     background: none;
     border: none;
     text-align: left;
     cursor: pointer;
     min-width: 0;
-    overflow: hidden;
 }
 
 .variable-sidebar .variable-label {
     font-size: 12px;
     font-weight: 500;
-    color: #1e293b;
-    line-height: 1.3;
-    max-width: 100%;
-    word-wrap: break-word;
+    color: #374151;
+    line-height: 1.4;
 }
 
 .variable-sidebar .variable-tag {
     font-size: 11px;
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-    color: #0ea5e9;
-    background: #f0f9ff;
-    padding: 2px 6px;
-    border-radius: 4px;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    color: #06b6d4;
 }
 
 .variable-sidebar .variable-value {
     font-size: 11px;
-    color: #64748b;
+    color: #9ca3af;
+    margin-top: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
-    background: #f8fafc;
-    padding: 2px 6px;
-    border-radius: 4px;
-    border: 1px solid #e2e8f0;
 }
 
 .variable-sidebar .variable-empty {
     font-size: 11px;
     font-style: italic;
-    color: #94a3b8;
+    color: #9ca3af;
+    margin-top: 2px;
 }
 
 .variable-sidebar .copy-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
+    width: 24px;
+    height: 24px;
     padding: 0;
-    background: none;
-    border: none;
-    border-left: 1px solid #e2e8f0;
-    color: #94a3b8;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    color: #9ca3af;
     cursor: pointer;
-    transition: color 0.2s, background 0.2s;
+    opacity: 0;
+    transition: opacity 0.2s, color 0.2s, border-color 0.2s;
 }
 
 .variable-sidebar .copy-btn:hover {
-    color: #0ea5e9;
-    background: #f8fafc;
+    color: #06b6d4;
+    border-color: #06b6d4;
 }
 
 /* Empty State */
@@ -1308,42 +1300,61 @@ textarea.field-input {
 
 /* Variable Sidebar - Inline Version */
 .variable-sidebar.inline {
-    width: 300px;
+    width: 260px;
     flex-shrink: 0;
     border-left: 1px solid #e5e7eb;
     padding: 0;
     max-height: 600px;
     overflow-y: auto;
-    background: #f8fafc;
-}
-
-.variable-sidebar.inline .sidebar-header {
-    padding: 16px;
-    border-bottom: 1px solid #e2e8f0;
     background: #fff;
 }
 
+.variable-sidebar.inline .sidebar-header {
+    padding: 12px 16px;
+    border-bottom: none;
+}
+
 .variable-sidebar.inline .sidebar-title {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
-    color: #1e293b;
-    margin: 0 0 4px;
+    color: #111827;
+    margin: 0 0 2px;
 }
 
 .variable-sidebar.inline .sidebar-subtitle {
-    font-size: 12px;
-    color: #64748b;
+    font-size: 11px;
+    color: #6b7280;
     margin: 0;
 }
 
 .variable-sidebar.inline .search-wrapper {
-    padding: 12px 16px;
-    border-bottom: 1px solid #e2e8f0;
+    position: relative;
+    padding: 0 16px 12px;
+}
+
+.variable-sidebar.inline .search-input {
+    width: 100%;
+    padding: 6px 10px 6px 28px;
+    font-size: 11px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
     background: #fff;
 }
 
+.variable-sidebar.inline .search-icon {
+    position: absolute;
+    left: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    color: #9ca3af;
+    pointer-events: none;
+}
+
 .variable-sidebar.inline .variables-list {
-    padding: 8px 0;
+    padding: 0 8px 8px;
+    max-height: 400px;
+    overflow-y: auto;
 }
 
 .sidebar-hint {
