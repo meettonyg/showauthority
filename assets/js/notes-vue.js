@@ -301,7 +301,7 @@
 
             return {
                 store,
-                __: translate,
+                t: translate,
                 handleSearch,
                 getInterviewUrl,
                 getNoteTypeConfig,
@@ -314,7 +314,7 @@
             <div class="pit-notes-dashboard">
                 <!-- Header -->
                 <div class="pit-notes-header">
-                    <h1>{{ __('notes') }}</h1>
+                    <h1>{{ t('notes') }}</h1>
                 </div>
 
                 <!-- Stats by Type -->
@@ -325,7 +325,7 @@
                         @click="store.clearFilters()"
                     >
                         <div class="pit-note-stat-value">{{ store.stats.total || 0 }}</div>
-                        <div class="pit-note-stat-label">{{ __('allNotes') }}</div>
+                        <div class="pit-note-stat-label">{{ t('allNotes') }}</div>
                     </div>
                     <div
                         class="pit-note-stat"
@@ -333,7 +333,7 @@
                         @click="store.togglePinnedFilter()"
                     >
                         <div class="pit-note-stat-value">{{ store.stats.pinned || 0 }}</div>
-                        <div class="pit-note-stat-label">{{ __('pinned') }}</div>
+                        <div class="pit-note-stat-label">{{ t('pinned') }}</div>
                     </div>
                     <div
                         v-for="noteType in store.noteTypesList"
@@ -368,7 +368,7 @@
                         <input
                             type="text"
                             class="pit-search-input"
-                            :placeholder="__('searchNotes')"
+                            :placeholder="t('searchNotes')"
                             :value="store.filters.search"
                             @input="handleSearch"
                         />
@@ -376,7 +376,7 @@
 
                     <!-- Note Type Filter -->
                     <select class="pit-select" v-model="store.filters.note_type" @change="store.setFilter('note_type', $event.target.value)">
-                        <option value="">{{ __('allTypes') }}</option>
+                        <option value="">{{ t('allTypes') }}</option>
                         <option v-for="noteType in store.noteTypesList" :key="noteType.key" :value="noteType.key">
                             {{ noteType.label }}
                         </option>
@@ -384,9 +384,9 @@
 
                     <!-- Sort -->
                     <select class="pit-select" @change="store.setSort($event.target.value)">
-                        <option value="created_at">{{ __('newestFirst') }}</option>
-                        <option value="note_date">{{ __('noteDate') }}</option>
-                        <option value="title">{{ __('title') }}</option>
+                        <option value="created_at">{{ t('newestFirst') }}</option>
+                        <option value="note_date">{{ t('noteDate') }}</option>
+                        <option value="title">{{ t('title') }}</option>
                     </select>
 
                     <!-- View Toggle -->
@@ -394,7 +394,7 @@
                         <button
                             :class="{ active: store.currentView === 'list' }"
                             @click="store.setView('list')"
-                            :title="__('listView')"
+                            :title="t('listView')"
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="8" y1="6" x2="21" y2="6"/>
@@ -408,7 +408,7 @@
                         <button
                             :class="{ active: store.currentView === 'grid' }"
                             @click="store.setView('grid')"
-                            :title="__('gridView')"
+                            :title="t('gridView')"
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <rect x="3" y="3" width="7" height="7"/>
@@ -421,20 +421,20 @@
 
                     <!-- Clear Filters -->
                     <button v-if="store.hasFilters" class="pit-btn-link" @click="store.clearFilters()">
-                        {{ __('clearFilters') }}
+                        {{ t('clearFilters') }}
                     </button>
                 </div>
 
                 <!-- Loading -->
                 <div v-if="store.loading" class="pit-loading">
                     <div class="pit-loading-spinner"></div>
-                    <p>{{ __('loadingNotes') }}</p>
+                    <p>{{ t('loadingNotes') }}</p>
                 </div>
 
                 <!-- Error -->
                 <div v-else-if="store.error" class="pit-error">
                     <p>{{ store.error }}</p>
-                    <button @click="store.fetchNotes()">{{ __('tryAgain') }}</button>
+                    <button @click="store.fetchNotes()">{{ t('tryAgain') }}</button>
                 </div>
 
                 <!-- List View -->
@@ -460,7 +460,7 @@
                         <div class="pit-note-content">
                             <div class="pit-note-header">
                                 <div class="pit-note-title">
-                                    {{ note.title || __('untitledNote') }}
+                                    {{ note.title || t('untitledNote') }}
                                 </div>
                                 <svg v-if="note.is_pinned" class="pit-note-pin" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M12 2L9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2z"/>
@@ -491,7 +491,7 @@
                             @click="store.setPage(store.pagination.page - 1)"
                             :disabled="store.pagination.page <= 1"
                         >
-                            {{ __('previous') }}
+                            {{ t('previous') }}
                         </button>
                         <span class="pit-pagination-info">
                             {{ formatPageInfo() }}
@@ -500,7 +500,7 @@
                             @click="store.setPage(store.pagination.page + 1)"
                             :disabled="store.pagination.page >= store.pagination.total_pages"
                         >
-                            {{ __('next') }}
+                            {{ t('next') }}
                         </button>
                     </div>
                 </div>
@@ -524,7 +524,7 @@
                                 />
                             </div>
                             <div style="flex: 1">
-                                <div class="pit-note-title">{{ note.title || __('untitledNote') }}</div>
+                                <div class="pit-note-title">{{ note.title || t('untitledNote') }}</div>
                                 <span class="pit-note-type-badge" :class="'badge-' + note.note_type">
                                     {{ getNoteTypeLabel(note.note_type) }}
                                 </span>
@@ -550,8 +550,8 @@
                         <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
                         <polyline points="14 2 14 8 20 8"/>
                     </svg>
-                    <p v-if="store.hasFilters">{{ __('noNotesMatch') }}</p>
-                    <p v-else>{{ __('noNotesYet') }}</p>
+                    <p v-if="store.hasFilters">{{ t('noNotesMatch') }}</p>
+                    <p v-else>{{ t('noNotesYet') }}</p>
                 </div>
             </div>
         `,
