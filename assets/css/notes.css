@@ -110,6 +110,7 @@
     border-radius: 8px;
     font-size: 14px;
     background: #f8fafc;
+    box-sizing: border-box;
 }
 .pit-notes-page .pit-search-input:focus {
     outline: none;
