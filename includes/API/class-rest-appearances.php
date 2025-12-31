@@ -749,7 +749,7 @@ class PIT_REST_Appearances {
         if ($full) {
             $data = array_merge($data, [
                 'description' => $row->description ?? '',
-                'host_name' => $row->host_name ?? '',
+                'host_name' => self::extract_host_name($row->host_name ?? ''),
                 'host_email' => $row->host_email ?? '',
                 'website' => $row->website ?? '',
                 'language' => $row->language ?? 'English',
@@ -783,5 +783,77 @@ class PIT_REST_Appearances {
         }
 
         return $data;
+    }
+
+    /**
+     * Decode Unicode escape sequences in a string
+     * Converts sequences like \u2013 to their actual characters
+     *
+     * @param string $str The string to decode
+     * @return string The decoded string
+     */
+    private static function decode_unicode_escapes($str) {
+        if (empty($str)) {
+            return $str;
+        }
+
+        // Decode \uXXXX sequences to actual Unicode characters
+        $decoded = preg_replace_callback('/\\\\u([0-9a-fA-F]{4})/', function($matches) {
+            return mb_convert_encoding(pack('H*', $matches[1]), 'UTF-8', 'UCS-2BE');
+        }, $str);
+
+        return $decoded !== null ? $decoded : $str;
+    }
+
+    /**
+     * Extract host name from author string
+     * RSS author fields often contain podcast branding like "Podcast Name with Host Name"
+     * This tries to extract just the person's name
+     *
+     * @param string $author The author string from RSS feed
+     * @return string The extracted host name
+     */
+    private static function extract_host_name($author) {
+        if (empty($author)) {
+            return '';
+        }
+
+        // First decode any unicode escapes
+        $author = self::decode_unicode_escapes($author);
+
+        // Common patterns to extract host name:
+        // "Podcast Name with Host Name" → "Host Name"
+        // "Podcast Name — Host Name" → "Host Name"
+        // "Podcast Name - Host Name" → "Host Name"
+        // "Podcast Name | Host Name" → "Host Name"
+        // "Podcast Name by Host Name" → "Host Name"
+
+        // Pattern: "... with Name"
+        if (preg_match('/\bwith\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*$/i', $author, $matches)) {
+            return trim($matches[1]);
+        }
+
+        // Pattern: "... by Name"
+        if (preg_match('/\bby\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*$/i', $author, $matches)) {
+            return trim($matches[1]);
+        }
+
+        // Pattern: "Podcast ... — Name" or "Podcast ... - Name" (name after dash at end)
+        if (preg_match('/[—–\-\|]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*$/', $author, $matches)) {
+            return trim($matches[1]);
+        }
+
+        // Pattern: If it starts with "Podcast" and has a name pattern, try to extract
+        if (preg_match('/^Podcast\b.*?([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*$/', $author, $matches)) {
+            return trim($matches[1]);
+        }
+
+        // If it looks like just a name (2-4 capitalized words), return as-is
+        if (preg_match('/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/', trim($author))) {
+            return trim($author);
+        }
+
+        // Fallback: return original (decoded)
+        return trim($author);
     }
 }
