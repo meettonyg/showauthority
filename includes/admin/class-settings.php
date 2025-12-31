@@ -36,6 +36,10 @@ class PIT_Settings {
         // Google Calendar Integration
         'google_client_id' => '',
         'google_client_secret' => '',
+
+        // Microsoft Outlook Calendar Integration
+        'outlook_client_id' => '',
+        'outlook_client_secret' => '',
     ];
 
     /**
@@ -254,6 +258,20 @@ class PIT_Settings {
                 'type' => 'password',
                 'label' => 'Google Client Secret',
                 'description' => 'OAuth 2.0 Client Secret from Google Cloud Console',
+                'required' => false,
+                'section' => 'calendar',
+            ],
+            'outlook_client_id' => [
+                'type' => 'string',
+                'label' => 'Microsoft Outlook Client ID',
+                'description' => 'OAuth 2.0 Client ID from Azure Portal (for Calendar sync)',
+                'required' => false,
+                'section' => 'calendar',
+            ],
+            'outlook_client_secret' => [
+                'type' => 'password',
+                'label' => 'Microsoft Outlook Client Secret',
+                'description' => 'OAuth 2.0 Client Secret from Azure Portal',
                 'required' => false,
                 'section' => 'calendar',
             ],
