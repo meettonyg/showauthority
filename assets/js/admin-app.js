@@ -987,14 +987,14 @@ const Settings = {
 
                 <div class="settings-section">
                     <h3>Calendar Integration</h3>
-                    <p class="description" style="margin-bottom:15px">
+                    <p class="description">
                         Configure OAuth credentials to enable calendar sync for your users.
                         Each user will connect their own calendar after you set up the app credentials.
                     </p>
 
-                    <h4 style="margin-top:20px;margin-bottom:10px;color:#1e3a5f">Google Calendar</h4>
-                    <p class="description" style="margin-bottom:10px">
-                        <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> →
+                    <h4 class="google-heading">Google Calendar</h4>
+                    <p class="description">
+                        <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> →
                         Create project → Enable Calendar API → Create OAuth 2.0 credentials
                     </p>
 
@@ -1012,15 +1012,15 @@ const Settings = {
                         <span class="description">OAuth 2.0 Client Secret (keep this private)</span>
                     </div>
 
-                    <div class="setting-row" style="background:#f0f6fc;padding:10px;border-radius:4px;margin-top:10px">
+                    <div class="settings-info-box">
                         <strong>Redirect URI:</strong>
-                        <code style="background:#fff;padding:2px 6px;border-radius:3px;margin-left:5px">{{ siteUrl }}/wp-json/pit/v1/calendar-sync/google/callback</code>
-                        <br><span class="description" style="margin-top:5px;display:block">Add this URI to your Google OAuth consent screen's authorized redirect URIs</span>
+                        <code>{{ siteUrl }}/wp-json/pit/v1/calendar-sync/google/callback</code>
+                        <span class="description">Add this URI to your Google OAuth consent screen's authorized redirect URIs</span>
                     </div>
 
-                    <h4 style="margin-top:25px;margin-bottom:10px;color:#0078d4">Microsoft Outlook</h4>
-                    <p class="description" style="margin-bottom:10px">
-                        <a href="https://portal.azure.com/" target="_blank">Azure Portal</a> →
+                    <h4 class="outlook-heading">Microsoft Outlook</h4>
+                    <p class="description">
+                        <a href="https://portal.azure.com/" target="_blank" rel="noopener noreferrer">Azure Portal</a> →
                         Azure Active Directory → App registrations → New registration
                     </p>
 
@@ -1038,15 +1038,15 @@ const Settings = {
                         <span class="description">Client secret value (not the secret ID)</span>
                     </div>
 
-                    <div class="setting-row" style="background:#f0f6fc;padding:10px;border-radius:4px;margin-top:10px">
+                    <div class="settings-info-box">
                         <strong>Redirect URI:</strong>
-                        <code style="background:#fff;padding:2px 6px;border-radius:3px;margin-left:5px">{{ siteUrl }}/wp-json/pit/v1/calendar-sync/outlook/callback</code>
-                        <br><span class="description" style="margin-top:5px;display:block">Add this as a Web redirect URI in your Azure app registration</span>
+                        <code>{{ siteUrl }}/wp-json/pit/v1/calendar-sync/outlook/callback</code>
+                        <span class="description">Add this as a Web redirect URI in your Azure app registration</span>
                     </div>
 
-                    <div class="setting-row" style="background:#fff8e5;padding:10px;border-radius:4px;margin-top:15px;border:1px solid #f0c36d">
+                    <div class="settings-warning-box">
                         <strong>Required API Permissions (Microsoft Graph):</strong>
-                        <ul style="margin:5px 0 0 20px;padding:0">
+                        <ul>
                             <li><code>Calendars.ReadWrite</code> - Read and write calendar events</li>
                             <li><code>User.Read</code> - Read user profile</li>
                         </ul>
