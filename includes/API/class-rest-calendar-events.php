@@ -324,6 +324,15 @@ class PIT_REST_Calendar_Events {
         $table = PIT_Calendar_Events_Schema::get_table_name();
         $user_id = get_current_user_id();
 
+        // Check if user has sync_enabled explicitly set, otherwise auto-enable if they have a connected calendar
+        $sync_enabled = $request->get_param('sync_enabled');
+        if ($sync_enabled === null) {
+            // Auto-enable sync if user has an active Google or Outlook calendar connection
+            $sync_enabled = self::user_has_active_calendar_connection($user_id) ? 1 : 0;
+        } else {
+            $sync_enabled = $sync_enabled ? 1 : 0;
+        }
+
         $data = [
             'user_id'        => $user_id,
             'appearance_id'  => $request->get_param('appearance_id') ?: null,
@@ -336,7 +345,8 @@ class PIT_REST_Calendar_Events {
             'end_datetime'   => $request->get_param('end_datetime') ?: null,
             'is_all_day'     => $request->get_param('is_all_day') ? 1 : 0,
             'timezone'       => $request->get_param('timezone') ?: 'America/Chicago',
-            'sync_enabled'   => $request->get_param('sync_enabled') ? 1 : 0,
+            'sync_enabled'   => $sync_enabled,
+            'sync_status'    => $sync_enabled ? 'local_only' : null,
             'reminders'      => $request->get_param('reminders'),
             'created_at'     => current_time('mysql'),
             'updated_at'     => current_time('mysql'),
@@ -560,6 +570,35 @@ class PIT_REST_Calendar_Events {
         $event['event_type_label'] = $event_types[$event['event_type']] ?? $event['event_type'];
 
         return $event;
+    }
+
+    /**
+     * Check if user has an active calendar connection (Google or Outlook)
+     *
+     * @param int $user_id
+     * @return bool
+     */
+    private static function user_has_active_calendar_connection($user_id) {
+        global $wpdb;
+
+        $connections_table = $wpdb->prefix . 'pit_calendar_connections';
+
+        // Check if table exists
+        if ($wpdb->get_var("SHOW TABLES LIKE '$connections_table'") !== $connections_table) {
+            return false;
+        }
+
+        // Check for any active connection with sync enabled and a calendar selected
+        $has_connection = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $connections_table
+             WHERE user_id = %d
+               AND sync_enabled = 1
+               AND calendar_id IS NOT NULL
+               AND calendar_id != ''",
+            $user_id
+        ));
+
+        return (int) $has_connection > 0;
     }
 }
 
