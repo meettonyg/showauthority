@@ -906,86 +906,6 @@ const Settings = {
                 </div>
 
                 <div class="settings-section">
-                    <h3>Formidable Forms Integration</h3>
-
-                    <div class="setting-row">
-                        <label for="tracker_form_id">Interview Tracker Form ID</label>
-                        <input type="number" id="tracker_form_id" v-model="settings.tracker_form_id"
-                            min="0" class="small-text">
-                        <span class="description">The Formidable form ID for the Interview Tracker</span>
-                    </div>
-
-                    <div class="setting-row">
-                        <label for="rss_field_id">RSS Feed Field ID</label>
-                        <input type="number" id="rss_field_id" v-model="settings.rss_field_id"
-                            min="0" class="small-text">
-                        <span class="description">Field ID that contains the RSS feed URL</span>
-                    </div>
-
-                    <div class="setting-row" style="margin-top:20px;padding-top:20px;border-top:1px solid #ddd">
-                        <h4 style="margin-top:0">Sync Interview Tracker Entries</h4>
-                        <p class="description" style="margin-bottom:10px">
-                            Sync existing Interview Tracker entries with the podcast database. 
-                            This will create podcast records for any entries not yet linked.
-                        </p>
-                        <div style="display:flex;align-items:center;gap:15px;flex-wrap:wrap">
-                            <button type="button" @click="syncFormidableEntries" class="button" :disabled="syncing">
-                                {{ syncing ? 'Syncing...' : 'Sync Now' }}
-                            </button>
-                            <button type="button" @click="retryFailedEntries" class="button" :disabled="retrying || !syncStats?.failed_entries">
-                                {{ retrying ? 'Retrying...' : 'Retry Failed (' + (syncStats?.failed_entries || 0) + ')' }}
-                            </button>
-                            <button type="button" @click="toggleFailedEntries" class="button" 
-                                v-if="syncStats?.failed_entries > 0">
-                                {{ showFailedEntries ? 'Hide Failed' : 'View Failed Entries' }}
-                            </button>
-                            <span v-if="syncStatus" :class="syncStatus.success ? 'success-message' : 'error-message'">
-                                {{ syncStatus.message }}
-                            </span>
-                        </div>
-                        <div v-if="syncStats" style="margin-top:15px;padding:10px;background:#f5f5f5;border-radius:4px">
-                            <strong>Sync Status:</strong>
-                            <ul style="margin:5px 0 0 20px;padding:0">
-                                <li>Total linked entries: {{ syncStats.total_entries }}</li>
-                                <li>Unique podcasts: {{ syncStats.unique_podcasts }}</li>
-                                <li>Failed entries: <span :style="syncStats.failed_entries > 0 ? 'color:#dc3232;font-weight:bold' : ''">{{ syncStats.failed_entries }}</span></li>
-                                <li v-if="syncStats.last_sync">Last sync: {{ formatDate(syncStats.last_sync) }}</li>
-                            </ul>
-                        </div>
-
-                        <!-- Failed Entries Table -->
-                        <div v-if="showFailedEntries && failedEntries.length > 0" style="margin-top:15px">
-                            <h4 style="margin-bottom:10px;color:#dc3232">Failed Entries ({{ failedEntries.length }})</h4>
-                            <table class="wp-list-table widefat fixed striped" style="margin-top:10px">
-                                <thead>
-                                    <tr>
-                                        <th style="width:80px">Entry ID</th>
-                                        <th>Podcast Name</th>
-                                        <th>RSS URL</th>
-                                        <th>Error</th>
-                                        <th style="width:80px">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="entry in failedEntries" :key="entry.id">
-                                        <td><strong>#{{ entry.formidable_entry_id }}</strong></td>
-                                        <td>{{ entry.podcast_name || '(Unknown)' }}</td>
-                                        <td style="word-break:break-all;font-size:12px">{{ entry.rss_url || '(No RSS)' }}</td>
-                                        <td style="color:#dc3232;font-size:12px">{{ entry.sync_error || 'Unknown error' }}</td>
-                                        <td>
-                                            <a :href="entry.edit_url" target="_blank" class="button button-small">Edit</a>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div v-else-if="showFailedEntries && loadingFailed" style="margin-top:15px;padding:20px;text-align:center">
-                            Loading failed entries...
-                        </div>
-                    </div>
-                </div>
-
-                <div class="settings-section">
                     <h3>Calendar Integration</h3>
                     <p class="description">
                         Configure OAuth credentials to enable calendar sync for your users.
@@ -1074,8 +994,6 @@ const Settings = {
                 cache_duration: 7,
                 auto_refresh: true,
                 default_platforms: ['youtube', 'twitter', 'instagram'],
-                tracker_form_id: '',
-                rss_field_id: '',
                 // Calendar Integration
                 google_client_id: '',
                 google_client_secret: '',
@@ -1086,14 +1004,6 @@ const Settings = {
             saving: false,
             saved: false,
             error: null,
-            syncing: false,
-            syncStatus: null,
-            syncStats: null,
-            // Failed entries handling
-            showFailedEntries: false,
-            failedEntries: [],
-            loadingFailed: false,
-            retrying: false,
         };
     },
     computed: {
@@ -1160,120 +1070,6 @@ const Settings = {
                 this.saving = false;
             }
         },
-        async syncFormidableEntries() {
-            this.syncing = true;
-            this.syncStatus = null;
-
-            try {
-                const response = await fetch(`${pitData.apiUrl}/formidable/sync`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-WP-Nonce': pitData.nonce,
-                    },
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.message || 'Sync failed');
-                }
-
-                this.syncStatus = {
-                    success: true,
-                    message: `Synced ${data.synced || 0} entries, created ${data.podcasts_created || 0} podcasts`,
-                };
-
-                // Refresh stats after sync
-                await this.fetchSyncStats();
-                
-                // Refresh failed entries if showing
-                if (this.showFailedEntries) {
-                    await this.fetchFailedEntries();
-                }
-            } catch (error) {
-                this.syncStatus = {
-                    success: false,
-                    message: error.message,
-                };
-            } finally {
-                this.syncing = false;
-            }
-        },
-        async fetchSyncStats() {
-            try {
-                const response = await fetch(`${pitData.apiUrl}/formidable/status`, {
-                    headers: { 'X-WP-Nonce': pitData.nonce },
-                });
-
-                if (response.ok) {
-                    this.syncStats = await response.json();
-                }
-            } catch (error) {
-                console.error('Failed to fetch sync stats:', error);
-            }
-        },
-        async toggleFailedEntries() {
-            this.showFailedEntries = !this.showFailedEntries;
-            if (this.showFailedEntries && this.failedEntries.length === 0) {
-                await this.fetchFailedEntries();
-            }
-        },
-        async fetchFailedEntries() {
-            this.loadingFailed = true;
-            try {
-                const response = await fetch(`${pitData.apiUrl}/formidable/failed`, {
-                    headers: { 'X-WP-Nonce': pitData.nonce },
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    this.failedEntries = data.failed_entries || [];
-                }
-            } catch (error) {
-                console.error('Failed to fetch failed entries:', error);
-            } finally {
-                this.loadingFailed = false;
-            }
-        },
-        async retryFailedEntries() {
-            this.retrying = true;
-            this.syncStatus = null;
-
-            try {
-                const response = await fetch(`${pitData.apiUrl}/formidable/retry`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-WP-Nonce': pitData.nonce,
-                    },
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.message || 'Retry failed');
-                }
-
-                this.syncStatus = {
-                    success: true,
-                    message: `Retried ${data.retried || 0} entries`,
-                };
-
-                // Refresh stats and failed entries
-                await this.fetchSyncStats();
-                if (this.showFailedEntries) {
-                    await this.fetchFailedEntries();
-                }
-            } catch (error) {
-                this.syncStatus = {
-                    success: false,
-                    message: error.message,
-                };
-            } finally {
-                this.retrying = false;
-            }
-        },
     },
     mounted() {
         // Load initial settings from pitData if available
@@ -1281,7 +1077,6 @@ const Settings = {
             this.settings = { ...this.settings, ...pitData.settings };
         }
         this.fetchSettings();
-        this.fetchSyncStats();
     },
 };
 
