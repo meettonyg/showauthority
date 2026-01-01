@@ -17,9 +17,9 @@ class PIT_Vue_Scripts {
 
     /**
      * Whether to use local vendor files instead of CDN
-     * Set to true when vendor files are bundled locally
+     * Set to false to use CDN (more reliable if vendor files not bundled)
      */
-    const USE_LOCAL_VENDOR = true;
+    const USE_LOCAL_VENDOR = false;
 
     /**
      * Script versions
