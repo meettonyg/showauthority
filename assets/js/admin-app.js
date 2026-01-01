@@ -985,6 +985,74 @@ const Settings = {
                     </div>
                 </div>
 
+                <div class="settings-section">
+                    <h3>Calendar Integration</h3>
+                    <p class="description" style="margin-bottom:15px">
+                        Configure OAuth credentials to enable calendar sync for your users.
+                        Each user will connect their own calendar after you set up the app credentials.
+                    </p>
+
+                    <h4 style="margin-top:20px;margin-bottom:10px;color:#1e3a5f">Google Calendar</h4>
+                    <p class="description" style="margin-bottom:10px">
+                        <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a> →
+                        Create project → Enable Calendar API → Create OAuth 2.0 credentials
+                    </p>
+
+                    <div class="setting-row">
+                        <label for="google_client_id">Google Client ID</label>
+                        <input type="text" id="google_client_id" v-model="settings.google_client_id"
+                            placeholder="xxxx.apps.googleusercontent.com" class="regular-text">
+                        <span class="description">OAuth 2.0 Client ID from Google Cloud Console</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="google_client_secret">Google Client Secret</label>
+                        <input type="password" id="google_client_secret" v-model="settings.google_client_secret"
+                            placeholder="GOCSPX-..." class="regular-text">
+                        <span class="description">OAuth 2.0 Client Secret (keep this private)</span>
+                    </div>
+
+                    <div class="setting-row" style="background:#f0f6fc;padding:10px;border-radius:4px;margin-top:10px">
+                        <strong>Redirect URI:</strong>
+                        <code style="background:#fff;padding:2px 6px;border-radius:3px;margin-left:5px">{{ siteUrl }}/wp-json/pit/v1/calendar-sync/google/callback</code>
+                        <br><span class="description" style="margin-top:5px;display:block">Add this URI to your Google OAuth consent screen's authorized redirect URIs</span>
+                    </div>
+
+                    <h4 style="margin-top:25px;margin-bottom:10px;color:#0078d4">Microsoft Outlook</h4>
+                    <p class="description" style="margin-bottom:10px">
+                        <a href="https://portal.azure.com/" target="_blank">Azure Portal</a> →
+                        Azure Active Directory → App registrations → New registration
+                    </p>
+
+                    <div class="setting-row">
+                        <label for="outlook_client_id">Outlook Client ID</label>
+                        <input type="text" id="outlook_client_id" v-model="settings.outlook_client_id"
+                            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" class="regular-text">
+                        <span class="description">Application (client) ID from Azure Portal</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="outlook_client_secret">Outlook Client Secret</label>
+                        <input type="password" id="outlook_client_secret" v-model="settings.outlook_client_secret"
+                            placeholder="Client secret value" class="regular-text">
+                        <span class="description">Client secret value (not the secret ID)</span>
+                    </div>
+
+                    <div class="setting-row" style="background:#f0f6fc;padding:10px;border-radius:4px;margin-top:10px">
+                        <strong>Redirect URI:</strong>
+                        <code style="background:#fff;padding:2px 6px;border-radius:3px;margin-left:5px">{{ siteUrl }}/wp-json/pit/v1/calendar-sync/outlook/callback</code>
+                        <br><span class="description" style="margin-top:5px;display:block">Add this as a Web redirect URI in your Azure app registration</span>
+                    </div>
+
+                    <div class="setting-row" style="background:#fff8e5;padding:10px;border-radius:4px;margin-top:15px;border:1px solid #f0c36d">
+                        <strong>Required API Permissions (Microsoft Graph):</strong>
+                        <ul style="margin:5px 0 0 20px;padding:0">
+                            <li><code>Calendars.ReadWrite</code> - Read and write calendar events</li>
+                            <li><code>User.Read</code> - Read user profile</li>
+                        </ul>
+                    </div>
+                </div>
+
                 <p class="submit">
                     <button type="submit" class="button button-primary" :disabled="saving">
                         {{ saving ? 'Saving...' : 'Save Settings' }}
@@ -1008,6 +1076,11 @@ const Settings = {
                 default_platforms: ['youtube', 'twitter', 'instagram'],
                 tracker_form_id: '',
                 rss_field_id: '',
+                // Calendar Integration
+                google_client_id: '',
+                google_client_secret: '',
+                outlook_client_id: '',
+                outlook_client_secret: '',
             },
             availablePlatforms: ['youtube', 'twitter', 'instagram', 'facebook', 'linkedin', 'tiktok', 'spotify', 'apple_podcasts'],
             saving: false,
@@ -1022,6 +1095,11 @@ const Settings = {
             loadingFailed: false,
             retrying: false,
         };
+    },
+    computed: {
+        siteUrl() {
+            return pitData.siteUrl || window.location.origin;
+        },
     },
     methods: {
         formatDate(dateStr) {

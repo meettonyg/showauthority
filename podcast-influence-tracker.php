@@ -317,6 +317,7 @@ class Podcast_Influence_Tracker {
             'ajaxNonce' => wp_create_nonce('pit_ajax_nonce'),
             'settings' => PIT_Settings::get_all(),
             'version' => PIT_VERSION,
+            'siteUrl' => home_url(),
         ]);
     }
 
