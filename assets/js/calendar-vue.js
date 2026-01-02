@@ -974,8 +974,10 @@
                         successCallback(fcEvents);
                     },
                     eventClick: (info) => {
-                        const event = info.event.extendedProps;
-                        event.id = parseInt(info.event.id);
+                        const event = {
+                            ...info.event.extendedProps,
+                            id: parseInt(info.event.id),
+                        };
                         store.setSelectedEvent(event);
                         showDetailModal.value = true;
                     },
