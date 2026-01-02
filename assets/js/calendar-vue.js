@@ -684,12 +684,12 @@
                                         provider="google"
                                         :count="googleImportedCount"
                                         :deleting="deletingImported"
-                                        @delete="confirmDeleteImported"
+                                        @delete="(p) => confirmDeleteImported(p)"
                                     />
                                 </div>
                             </div>
 
-                            <!-- Outlook Section -->
+                            <!-- Outlook Section - Commented out for future phase
                             <div class="sync-provider" :class="{ connected: syncStatus.outlook?.connected }">
                                 <div class="sync-provider-header">
                                     <div class="sync-provider-icon outlook">
@@ -714,7 +714,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Outlook Calendar Selection -->
                                 <div v-if="syncStatus.outlook?.connected" class="sync-provider-body">
                                     <div v-if="!syncStatus.outlook.calendar_id" class="calendar-selection">
                                         <label>Select calendar to sync:</label>
@@ -756,7 +755,6 @@
                                             </span>
                                         </div>
 
-                                        <!-- Delete Imported Events -->
                                         <imported-events-section
                                             provider="outlook"
                                             :count="outlookImportedCount"
@@ -766,6 +764,7 @@
                                     </div>
                                 </div>
                             </div>
+                            End Outlook Section -->
                         </div>
                     </div>
                 </div>

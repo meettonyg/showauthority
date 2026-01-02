@@ -434,6 +434,11 @@
     visibility: visible;
 }
 
+/* Confirmation modal should appear above other modals */
+.calendar-modal.confirm-modal {
+    z-index: 10001;
+}
+
 .calendar-modal-content {
     background: var(--cal-bg);
     border-radius: var(--cal-radius-lg);
