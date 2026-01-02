@@ -73,6 +73,9 @@ class PIT_Appearance_Calendar_Sync {
 
     /**
      * Sync a specific date field to calendar
+     *
+     * Note: If an event already exists (created via interview detail modal),
+     * we only update the date portion to preserve user's time settings.
      */
     private static function sync_date_field($appearance, $date_field, $user_id) {
         global $wpdb;
@@ -103,24 +106,38 @@ class PIT_Appearance_Calendar_Sync {
         $podcast_name = $appearance->podcast_name ?: 'Interview';
         $title = "{$event_label}: {$podcast_name}";
 
-        // Event data
-        $event_data = [
-            'title' => $title,
-            'start_datetime' => $date_value . ' 09:00:00',
-            'end_datetime' => $date_value . ' 10:00:00',
-            'is_all_day' => 1,
-            'event_type' => $event_type,
-            'appearance_id' => $appearance->id,
-            'podcast_id' => $appearance->podcast_id,
-            'user_id' => $user_id,
-            'timezone' => wp_timezone_string(),
-        ];
-
         if ($existing_event) {
-            // Update existing event
+            // Event already exists - check if date changed
+            $existing_date = substr($existing_event->start_datetime, 0, 10);
+            if ($existing_date === $date_value) {
+                // Same date, don't overwrite user's time settings
+                return;
+            }
+
+            // Date changed - update only date portion, preserve times
+            $existing_start_time = substr($existing_event->start_datetime, 11);
+            $existing_end_time = substr($existing_event->end_datetime, 11);
+
+            $event_data = [
+                'title' => $title,
+                'start_datetime' => $date_value . ' ' . $existing_start_time,
+                'end_datetime' => $date_value . ' ' . $existing_end_time,
+                'is_all_day' => $existing_event->is_all_day,
+            ];
             self::update_calendar_event($existing_event->id, $event_data, $user_id);
         } else {
-            // Create new event
+            // No event exists - create new with default times
+            $event_data = [
+                'title' => $title,
+                'start_datetime' => $date_value . ' 09:00:00',
+                'end_datetime' => $date_value . ' 10:00:00',
+                'is_all_day' => 0,
+                'event_type' => $event_type,
+                'appearance_id' => $appearance->id,
+                'podcast_id' => $appearance->podcast_id,
+                'user_id' => $user_id,
+                'timezone' => wp_timezone_string(),
+            ];
             self::create_calendar_event($event_data, $user_id);
         }
     }
