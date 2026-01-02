@@ -1049,21 +1049,28 @@
                     },
                     // Custom event rendering with icons
                     eventContent: (arg) => {
-                        const event = arg.event.extendedProps;
-                        const isImported = event.isImported;
-                        const icon = getEventIcon(event.event_type, isImported);
-                        const timeText = arg.timeText || '';
+                        try {
+                            const extendedProps = arg.event.extendedProps || {};
+                            const isImported = extendedProps.isImported === true;
+                            const eventType = extendedProps.event_type || 'other';
+                            const icon = getEventIcon(eventType, isImported);
+                            const timeText = arg.timeText || '';
 
-                        // Build custom HTML with icon
-                        const html = `
-                            <div class="fc-event-custom ${isImported ? 'imported' : 'interview'}">
+                            // Create DOM element for more reliable rendering
+                            const wrapper = document.createElement('div');
+                            wrapper.className = `fc-event-custom ${isImported ? 'imported' : 'interview'}`;
+                            wrapper.innerHTML = `
                                 <span class="fc-event-icon">${icon}</span>
                                 <span class="fc-event-time">${timeText}</span>
                                 <span class="fc-event-title">${arg.event.title}</span>
-                            </div>
-                        `;
+                            `;
 
-                        return { html };
+                            return { domNodes: [wrapper] };
+                        } catch (err) {
+                            console.error('eventContent error:', err);
+                            // Fallback to simple text
+                            return arg.event.title;
+                        }
                     },
                     eventClick: (info) => {
                         const event = {

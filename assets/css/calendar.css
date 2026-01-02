@@ -251,7 +251,7 @@
    Imported events: Muted gray with cloud icon, dashed border
    ========================================================================== */
 
-/* Custom event container */
+/* Custom event content container */
 .fc-event-custom {
     display: flex;
     align-items: center;
@@ -259,6 +259,7 @@
     padding: 1px 2px;
     overflow: hidden;
     white-space: nowrap;
+    width: 100%;
 }
 
 .fc-event-custom .fc-event-icon {
@@ -266,10 +267,13 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    line-height: 1;
 }
 
 .fc-event-custom .fc-event-icon svg {
     display: block;
+    width: 14px;
+    height: 14px;
 }
 
 .fc-event-custom .fc-event-time {
@@ -285,21 +289,24 @@
     min-width: 0;
 }
 
-/* Interview events - vibrant, prominent */
-.fc-event-interview {
-    border-width: 2px;
-    border-style: solid;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+/* Interview events - vibrant, prominent (outer wrapper styling) */
+.fc .fc-event.fc-event-interview,
+.fc-event.fc-event-interview {
+    border-width: 2px !important;
+    border-style: solid !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
 }
 
-.fc-event-interview:hover {
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+.fc .fc-event.fc-event-interview:hover,
+.fc-event.fc-event-interview:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
     transform: translateY(-1px);
     transition: all 0.15s ease;
 }
 
-/* Imported events - muted, subtle */
-.fc-event-imported {
+/* Imported events - muted, subtle (outer wrapper styling) */
+.fc .fc-event.fc-event-imported,
+.fc-event.fc-event-imported {
     border-style: dashed !important;
     border-width: 1px !important;
     opacity: 0.85;
@@ -307,10 +314,12 @@
     border-color: #64748b !important;
 }
 
-.fc-event-imported:hover {
+.fc .fc-event.fc-event-imported:hover,
+.fc-event.fc-event-imported:hover {
     opacity: 1;
 }
 
+/* Imported event icon subdued */
 .fc-event-custom.imported .fc-event-icon {
     opacity: 0.7;
 }
@@ -331,6 +340,11 @@
 
 .fc-timegrid-event .fc-event-custom .fc-event-time {
     font-size: 10px;
+}
+
+/* Ensure FullCalendar doesn't hide our custom content */
+.fc .fc-event .fc-event-main {
+    overflow: visible;
 }
 
 /* ==========================================================================
