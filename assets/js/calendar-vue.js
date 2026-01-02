@@ -299,19 +299,19 @@
                 </div>
 
                 <!-- Loading State -->
-                <div v-if="loading && events.length === 0" class="calendar-loading">
+                <div v-show="loading && events.length === 0" class="calendar-loading">
                     <div class="pit-loading-spinner"></div>
                     <p>Loading events...</p>
                 </div>
 
                 <!-- Error State -->
-                <div v-else-if="error" class="calendar-error">
+                <div v-show="error && !loading" class="calendar-error">
                     <p>{{ error }}</p>
                     <button @click="refreshEvents" class="retry-btn">Try Again</button>
                 </div>
 
                 <!-- Calendar View -->
-                <div v-else>
+                <div v-show="!loading || events.length > 0">
                     <!-- FullCalendar View -->
                     <div v-show="currentView === 'calendar'" class="calendar-wrapper">
                         <div v-if="fullCalendarError" class="calendar-error">
@@ -911,41 +911,20 @@
                 store.fetchEvents();
             };
 
-            // Track initialization attempts
-            let initAttempts = 0;
-            const maxInitAttempts = 10;
-
             const initCalendar = () => {
-                initAttempts++;
-                console.log('Calendar: initCalendar attempt', initAttempts);
+                if (calendarInstance) return; // Already initialized
 
-                // Try to get the element - first from ref, then fallback to DOM query
-                let targetEl = calendarEl.value;
-                if (!targetEl) {
-                    targetEl = document.querySelector('.fullcalendar-container');
-                    console.log('Calendar: Using DOM query fallback, found:', !!targetEl);
-                }
-
-                if (!targetEl) {
+                if (!calendarEl.value) {
                     console.error('Calendar: calendarEl ref not found');
-                    // Retry if we haven't exceeded max attempts
-                    if (initAttempts < maxInitAttempts) {
-                        setTimeout(() => {
-                            if (!calendarInstance && currentView.value === 'calendar') {
-                                initCalendar();
-                            }
-                        }, 200);
-                    }
                     return;
                 }
                 if (!window.FullCalendar) {
-                    console.error('Calendar: FullCalendar library not loaded. Check if CDN is blocked.');
+                    console.error('Calendar: FullCalendar library not loaded');
                     fullCalendarError.value = true;
                     return;
                 }
 
-                console.log('Calendar: Creating FullCalendar instance');
-                calendarInstance = new FullCalendar.Calendar(targetEl, {
+                calendarInstance = new FullCalendar.Calendar(calendarEl.value, {
                     initialView: 'dayGridMonth',
                     headerToolbar: {
                         left: 'prev,next today',
@@ -1611,25 +1590,10 @@
 
             // Watch for calendar element to become available and initialize
             watch(calendarEl, (el) => {
-                if (el && !calendarInstance && !store.loading && currentView.value === 'calendar') {
+                if (el && currentView.value === 'calendar') {
                     initCalendar();
                 }
             }, { immediate: true });
-
-            // Also watch for loading to complete (in case ref is already set)
-            // Use flush: 'post' to ensure DOM has been updated before checking ref
-            watch(loading, (isLoading) => {
-                if (!isLoading && currentView.value === 'calendar' && !calendarInstance) {
-                    // Use setTimeout to ensure DOM has fully updated
-                    setTimeout(() => {
-                        nextTick(() => {
-                            if (calendarEl.value && !calendarInstance) {
-                                initCalendar();
-                            }
-                        });
-                    }, 50);
-                }
-            }, { flush: 'post' });
 
             // Lifecycle
             onMounted(() => {
@@ -1654,23 +1618,7 @@
                 store.fetchEvents(
                     start.toISOString().split('T')[0],
                     end.toISOString().split('T')[0]
-                ).then(() => {
-                    // Ensure calendar is initialized after events are loaded
-                    // This is a fallback in case the watchers don't trigger properly
-                    nextTick(() => {
-                        if (calendarEl.value && !calendarInstance && currentView.value === 'calendar') {
-                            initCalendar();
-                        }
-                    });
-                });
-
-                // Final fallback: try to initialize after a delay regardless of state
-                setTimeout(() => {
-                    if (!calendarInstance && currentView.value === 'calendar') {
-                        console.log('Calendar: Delayed fallback initialization');
-                        initCalendar();
-                    }
-                }, 500);
+                );
             });
 
             // Watch for events changes to update calendar
