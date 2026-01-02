@@ -2885,11 +2885,22 @@
                                 </div>
                             </div>
 
-                            <div class="custom-modal-actions">
-                                <button type="button" class="cancel-button" @click="closeDateModal">Cancel</button>
-                                <button type="button" class="confirm-button" style="background-color: #0ea5e9;" @click="saveDateModal" :disabled="!dateModalValue || dateModalSaving">
-                                    {{ dateModalSaving ? 'Saving...' : (dateModalEventId ? 'Update Event' : 'Create Event') }}
-                                </button>
+                            <div class="custom-modal-actions" style="display: flex; justify-content: space-between;">
+                                <div>
+                                    <button v-if="dateModalEventId" type="button" class="cancel-button" style="background-color: #fee2e2; color: #dc2626; border-color: #fecaca;" @click="deleteDateEvent" :disabled="dateModalSaving">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        </svg>
+                                        Delete
+                                    </button>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button type="button" class="cancel-button" @click="closeDateModal">Cancel</button>
+                                    <button type="button" class="confirm-button" style="background-color: #0ea5e9;" @click="saveDateModal" :disabled="!dateModalValue || dateModalSaving">
+                                        {{ dateModalSaving ? 'Saving...' : (dateModalEventId ? 'Update Event' : 'Create Event') }}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -3621,6 +3632,54 @@
                 } catch (err) {
                     console.error('Failed to save event:', err);
                     showErrorMessage(err.message || 'Failed to save event');
+                } finally {
+                    dateModalSaving.value = false;
+                }
+            };
+
+            const deleteDateEvent = async () => {
+                if (!dateModalEventId.value) {
+                    return;
+                }
+
+                if (!confirm('Are you sure you want to delete this event? This will also clear the date from the interview.')) {
+                    return;
+                }
+
+                dateModalSaving.value = true;
+
+                try {
+                    // Delete the calendar event
+                    const response = await fetch(
+                        `${store.config.calendarRestUrl}calendar-events/${dateModalEventId.value}`,
+                        {
+                            method: 'DELETE',
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (!response.ok) {
+                        throw new Error('Failed to delete calendar event');
+                    }
+
+                    // Clear the interview date field
+                    const fieldMap = {
+                        'record': 'record_date',
+                        'air': 'air_date',
+                        'promotion': 'promotion_date'
+                    };
+                    const field = fieldMap[dateModalType.value];
+                    if (field) {
+                        await store.updateInterview(field, null);
+                    }
+
+                    showSuccessMessage('Event deleted successfully');
+                    closeDateModal();
+                } catch (err) {
+                    console.error('Failed to delete event:', err);
+                    showErrorMessage(err.message || 'Failed to delete event');
                 } finally {
                     dateModalSaving.value = false;
                 }
@@ -4404,6 +4463,7 @@
                 openDateModal,
                 closeDateModal,
                 saveDateModal,
+                deleteDateEvent,
                 openCollabModal,
                 closeCollabModal,
                 saveCollabModal,
