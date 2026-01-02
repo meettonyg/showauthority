@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('PIT_VERSION', '4.1.1');
+define('PIT_VERSION', '4.1.9');
 define('PIT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('PIT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('PIT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -171,6 +171,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-google-calendar.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-outlook-calendar.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-calendar-sync-service.php';
+        require_once PIT_PLUGIN_DIR . 'includes/integrations/class-appearance-calendar-sync.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-calendar-sync.php';
         require_once PIT_PLUGIN_DIR . 'includes/Jobs/class-calendar-sync-job.php';
     }

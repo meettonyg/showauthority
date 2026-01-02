@@ -106,6 +106,7 @@
             // Config from WordPress
             config: {
                 restUrl: '',
+                calendarRestUrl: '',
                 nonce: '',
                 interviewId: 0,
                 userId: 0,
@@ -1588,14 +1589,15 @@
                                         <div class="sidebar-content">
                                             <div class="date-wrapper" @click="openDateModal('record')" style="cursor: pointer; padding: 8px 0;">
                                                 <div class="date-content" style="padding: 0;">
-                                                    <svg class="date-icon" style="color: #64748b;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                                                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                                                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                                                    <!-- Microphone icon for Recording -->
+                                                    <svg class="date-icon" :style="{ color: interview?.record_date ? '#3b82f6' : '#64748b' }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                                        <line x1="12" y1="19" x2="12" y2="23"></line>
+                                                        <line x1="8" y1="23" x2="16" y2="23"></line>
                                                     </svg>
                                                     <div class="date-info" style="margin-right: 8px;">
-                                                        <div class="date-label" :style="{ color: interview?.record_date ? '#0ea5e9' : '#64748b' }">Record Date</div>
+                                                        <div class="date-label" :style="{ color: interview?.record_date ? '#3b82f6' : '#64748b' }">Record Date</div>
                                                         <div class="date-value" :style="{ color: interview?.record_date ? '#334155' : '#94a3b8', fontStyle: interview?.record_date ? 'normal' : 'italic' }">
                                                             {{ interview?.record_date ? formatDate(interview.record_date) : 'Not set' }}
                                                         </div>
@@ -1608,18 +1610,16 @@
                                                     </svg>
                                                 </div>
                                             </div>
-                                            
+
                                             <div class="date-wrapper" @click="openDateModal('air')" style="cursor: pointer; padding: 8px 0;">
                                                 <div class="date-content" style="padding: 0;">
-                                                    <svg class="date-icon" style="color: #64748b;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                                                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                                                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                                                        <polyline points="20 7 12 15 8 11"></polyline>
+                                                    <!-- TV icon for Air Date -->
+                                                    <svg class="date-icon" :style="{ color: interview?.air_date ? '#10b981' : '#64748b' }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+                                                        <polyline points="17 2 12 7 7 2"></polyline>
                                                     </svg>
                                                     <div class="date-info" style="margin-right: 8px;">
-                                                        <div class="date-label" :style="{ color: interview?.air_date ? '#0ea5e9' : '#64748b' }">Air Date</div>
+                                                        <div class="date-label" :style="{ color: interview?.air_date ? '#10b981' : '#64748b' }">Air Date</div>
                                                         <div class="date-value" :style="{ color: interview?.air_date ? '#334155' : '#94a3b8', fontStyle: interview?.air_date ? 'normal' : 'italic' }">
                                                             {{ interview?.air_date ? formatDate(interview.air_date) : 'Not set' }}
                                                         </div>
@@ -1632,20 +1632,17 @@
                                                     </svg>
                                                 </div>
                                             </div>
-                                            
+
                                             <div class="date-wrapper" @click="openDateModal('promotion')" style="cursor: pointer; padding: 8px 0;">
                                                 <div class="date-content" style="padding: 0;">
-                                                    <svg class="date-icon" style="color: #64748b;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                                                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                                                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                                                        <path d="M8 14h.01"></path>
-                                                        <path d="M12 14h.01"></path>
-                                                        <path d="M16 14h.01"></path>
+                                                    <!-- Volume/Megaphone icon for Promotion -->
+                                                    <svg class="date-icon" :style="{ color: interview?.promotion_date ? '#ec4899' : '#64748b' }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                                                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                                                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
                                                     </svg>
                                                     <div class="date-info" style="margin-right: 8px;">
-                                                        <div class="date-label" :style="{ color: interview?.promotion_date ? '#0ea5e9' : '#64748b' }">Promotion Date(s)</div>
+                                                        <div class="date-label" :style="{ color: interview?.promotion_date ? '#ec4899' : '#64748b' }">Promotion Date(s)</div>
                                                         <div class="date-value" :style="{ color: interview?.promotion_date ? '#334155' : '#94a3b8', fontStyle: interview?.promotion_date ? 'normal' : 'italic' }">
                                                             {{ interview?.promotion_date ? formatDate(interview.promotion_date) : 'Not set' }}
                                                         </div>
@@ -2844,32 +2841,66 @@
                     </div>
                 </div>
 
-                <!-- Date Modal -->
+                <!-- Date/Event Modal -->
                 <div id="dateModal" class="custom-modal" :class="{ active: showDateModal }">
-                    <div class="custom-modal-content">
+                    <div class="custom-modal-content" style="max-width: 480px;">
                         <div class="custom-modal-header">
                             <h2 id="modal-title">
-                                {{ dateModalType === 'record' ? 'Set Record Date' : 
-                                   dateModalType === 'air' ? 'Set Air Date' : 
-                                   'Set Promotion Date(s)' }}
+                                {{ dateModalType === 'record' ? 'Schedule Recording' :
+                                   dateModalType === 'air' ? 'Set Air Date' :
+                                   'Schedule Promotion' }}
                             </h2>
                             <span class="custom-modal-close" @click="closeDateModal">&times;</span>
                         </div>
                         <div class="custom-modal-body">
-                            <p style="margin-bottom: 12px;">
-                                {{ dateModalType === 'record' ? 'When will this interview be recorded?' : 
+                            <p style="margin-bottom: 16px; color: #64748b;">
+                                {{ dateModalType === 'record' ? 'When will this interview be recorded?' :
                                    dateModalType === 'air' ? 'When will this episode air?' :
-                                   'When will this episode be promoted?' }}
+                                   'When will promotion activities begin?' }}
                             </p>
+
+                            <!-- Date Field -->
                             <div style="margin-bottom: 16px;">
                                 <label style="display: block; margin-bottom: 6px; font-weight: 500;">Date</label>
                                 <input v-model="dateModalValue" type="date" class="field-input">
                             </div>
-                            <div class="custom-modal-actions">
-                                <button type="button" class="cancel-button" @click="closeDateModal">Cancel</button>
-                                <button type="button" class="confirm-button" style="background-color: #0ea5e9;" @click="saveDateModal" :disabled="!dateModalValue">
-                                    {{ dateModalValue && (dateModalType === 'record' ? interview?.record_date : dateModalType === 'air' ? interview?.air_date : interview?.promotion_date) ? 'Update Date' : 'Set Date' }}
-                                </button>
+
+                            <!-- All Day Toggle -->
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" v-model="dateModalAllDay" style="width: 16px; height: 16px;">
+                                    <span style="font-weight: 500;">All day event</span>
+                                </label>
+                            </div>
+
+                            <!-- Time Fields (hidden when all-day) -->
+                            <div v-if="!dateModalAllDay" style="display: flex; gap: 16px; margin-bottom: 16px;">
+                                <div style="flex: 1;">
+                                    <label style="display: block; margin-bottom: 6px; font-weight: 500;">Start Time</label>
+                                    <input v-model="dateModalStartTime" type="time" class="field-input">
+                                </div>
+                                <div style="flex: 1;">
+                                    <label style="display: block; margin-bottom: 6px; font-weight: 500;">End Time</label>
+                                    <input v-model="dateModalEndTime" type="time" class="field-input">
+                                </div>
+                            </div>
+
+                            <div class="custom-modal-actions" style="display: flex; justify-content: space-between;">
+                                <div>
+                                    <button v-if="dateModalEventId" type="button" class="cancel-button" style="background-color: #fee2e2; color: #dc2626; border-color: #fecaca;" @click="deleteDateEvent" :disabled="dateModalSaving">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        </svg>
+                                        Delete
+                                    </button>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button type="button" class="cancel-button" @click="closeDateModal">Cancel</button>
+                                    <button type="button" class="confirm-button" style="background-color: #0ea5e9;" @click="saveDateModal" :disabled="!dateModalValue || dateModalSaving">
+                                        {{ dateModalSaving ? 'Saving...' : (dateModalEventId ? 'Update Event' : 'Create Event') }}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2949,8 +2980,13 @@
             const showDeleteModal = ref(false);
             const showProfileModal = ref(false);
             const showDateModal = ref(false);
-            const dateModalType = ref(''); // 'record' or 'air'
+            const dateModalType = ref(''); // 'record', 'air', or 'promotion'
             const dateModalValue = ref('');
+            const dateModalStartTime = ref('09:00');
+            const dateModalEndTime = ref('10:00');
+            const dateModalAllDay = ref(false);
+            const dateModalEventId = ref(null); // Existing calendar event ID if editing
+            const dateModalSaving = ref(false);
 
             // Collaboration modal state
             const showCollabModal = ref(false);
@@ -3409,17 +3445,29 @@
                 }
             };
             
-            const openDateModal = (type) => {
-                // Set up simple date modal (not event modal)
+            const openDateModal = async (type) => {
+                // Set up event modal
                 dateModalType.value = type; // 'record', 'air', or 'promotion'
-                
+                dateModalEventId.value = null;
+                dateModalStartTime.value = '09:00';
+                dateModalEndTime.value = '10:00';
+                dateModalAllDay.value = false;
+
+                // Map type to event_type for calendar API
+                const eventTypeMap = {
+                    'record': 'recording',
+                    'air': 'air_date',
+                    'promotion': 'promotion'
+                };
+                const eventType = eventTypeMap[type];
+
                 // Pre-populate with existing date if available
                 const fieldMap = {
                     'record': store.interview?.record_date,
                     'air': store.interview?.air_date,
                     'promotion': store.interview?.promotion_date
                 };
-                
+
                 // Format date for input (YYYY-MM-DD)
                 const existingDate = fieldMap[type];
                 if (existingDate) {
@@ -3432,7 +3480,46 @@
                 } else {
                     dateModalValue.value = '';
                 }
-                
+
+                // Try to fetch existing calendar event for this appearance/type
+                if (store.config.calendarRestUrl && store.config.interviewId) {
+                    try {
+                        const response = await fetch(
+                            `${store.config.calendarRestUrl}calendar-events/by-appearance/${store.config.interviewId}`,
+                            {
+                                headers: {
+                                    'X-WP-Nonce': store.config.nonce,
+                                },
+                            }
+                        );
+                        if (response.ok) {
+                            const data = await response.json();
+                            const events = data.data || [];
+                            // Find event matching this type
+                            const existingEvent = events.find(e => e.event_type === eventType);
+                            if (existingEvent) {
+                                dateModalEventId.value = existingEvent.id;
+                                dateModalAllDay.value = !!existingEvent.is_all_day;
+                                // Parse times from datetime
+                                if (existingEvent.start_datetime && !existingEvent.is_all_day) {
+                                    const startParts = existingEvent.start_datetime.split(' ');
+                                    if (startParts[1]) {
+                                        dateModalStartTime.value = startParts[1].substring(0, 5);
+                                    }
+                                }
+                                if (existingEvent.end_datetime && !existingEvent.is_all_day) {
+                                    const endParts = existingEvent.end_datetime.split(' ');
+                                    if (endParts[1]) {
+                                        dateModalEndTime.value = endParts[1].substring(0, 5);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Failed to fetch existing calendar event:', err);
+                    }
+                }
+
                 showDateModal.value = true;
             };
 
@@ -3440,6 +3527,11 @@
                 showDateModal.value = false;
                 dateModalValue.value = '';
                 dateModalType.value = '';
+                dateModalStartTime.value = '09:00';
+                dateModalEndTime.value = '10:00';
+                dateModalAllDay.value = false;
+                dateModalEventId.value = null;
+                dateModalSaving.value = false;
             };
 
             const saveDateModal = async () => {
@@ -3448,27 +3540,148 @@
                     return;
                 }
 
+                dateModalSaving.value = true;
+
                 try {
-                    // Determine which field to update based on modal type
+                    // Map modal type to API fields
                     const fieldMap = {
                         'record': 'record_date',
                         'air': 'air_date',
                         'promotion': 'promotion_date'
                     };
+                    const eventTypeMap = {
+                        'record': 'recording',
+                        'air': 'air_date',
+                        'promotion': 'promotion'
+                    };
+                    const eventLabelMap = {
+                        'record': 'Recording',
+                        'air': 'Air Date',
+                        'promotion': 'Promotion'
+                    };
 
                     const field = fieldMap[dateModalType.value];
+                    const eventType = eventTypeMap[dateModalType.value];
+                    const eventLabel = eventLabelMap[dateModalType.value];
+
                     if (!field) {
                         throw new Error('Invalid date type');
                     }
 
-                    // Update the interview field directly
+                    // Build datetime strings
+                    const startTime = dateModalAllDay.value ? '00:00:00' : (dateModalStartTime.value + ':00');
+                    const endTime = dateModalAllDay.value ? '23:59:59' : (dateModalEndTime.value + ':00');
+                    const startDatetime = dateModalValue.value + ' ' + startTime;
+                    const endDatetime = dateModalValue.value + ' ' + endTime;
+
+                    // Build event title
+                    const podcastName = store.interview?.podcast_name || 'Interview';
+                    const eventTitle = `${eventLabel}: ${podcastName}`;
+
+                    // Create or update calendar event
+                    const eventData = {
+                        title: eventTitle,
+                        event_type: eventType,
+                        start_datetime: startDatetime,
+                        end_datetime: endDatetime,
+                        is_all_day: dateModalAllDay.value ? 1 : 0,
+                        appearance_id: store.config.interviewId,
+                        podcast_id: store.interview?.podcast_id || null,
+                        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    };
+
+                    if (dateModalEventId.value) {
+                        // Update existing event
+                        const response = await fetch(
+                            `${store.config.calendarRestUrl}calendar-events/${dateModalEventId.value}`,
+                            {
+                                method: 'PATCH',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-WP-Nonce': store.config.nonce,
+                                },
+                                body: JSON.stringify(eventData),
+                            }
+                        );
+                        if (!response.ok) {
+                            throw new Error('Failed to update calendar event');
+                        }
+                    } else {
+                        // Create new event
+                        const response = await fetch(
+                            `${store.config.calendarRestUrl}calendar-events`,
+                            {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-WP-Nonce': store.config.nonce,
+                                },
+                                body: JSON.stringify(eventData),
+                            }
+                        );
+                        if (!response.ok) {
+                            throw new Error('Failed to create calendar event');
+                        }
+                    }
+
+                    // Also update the interview date field
                     await store.updateInterview(field, dateModalValue.value);
 
-                    showSuccessMessage(`${dateModalType.value === 'record' ? 'Record' : dateModalType.value === 'air' ? 'Air' : 'Promotion'} date updated successfully`);
+                    showSuccessMessage(`${eventLabel} event ${dateModalEventId.value ? 'updated' : 'created'} successfully`);
                     closeDateModal();
                 } catch (err) {
-                    console.error('Failed to save date:', err);
-                    showErrorMessage(err.message || 'Failed to save date');
+                    console.error('Failed to save event:', err);
+                    showErrorMessage(err.message || 'Failed to save event');
+                } finally {
+                    dateModalSaving.value = false;
+                }
+            };
+
+            const deleteDateEvent = async () => {
+                if (!dateModalEventId.value) {
+                    return;
+                }
+
+                if (!confirm('Are you sure you want to delete this event? This will also clear the date from the interview.')) {
+                    return;
+                }
+
+                dateModalSaving.value = true;
+
+                try {
+                    // Delete the calendar event
+                    const response = await fetch(
+                        `${store.config.calendarRestUrl}calendar-events/${dateModalEventId.value}`,
+                        {
+                            method: 'DELETE',
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (!response.ok) {
+                        throw new Error('Failed to delete calendar event');
+                    }
+
+                    // Clear the interview date field (send empty string to clear)
+                    const fieldMap = {
+                        'record': 'record_date',
+                        'air': 'air_date',
+                        'promotion': 'promotion_date'
+                    };
+                    const field = fieldMap[dateModalType.value];
+                    if (field) {
+                        await store.updateInterview(field, '');
+                    }
+
+                    showSuccessMessage('Event deleted successfully');
+                    closeDateModal();
+                } catch (err) {
+                    console.error('Failed to delete event:', err);
+                    showErrorMessage(err.message || 'Failed to delete event');
+                } finally {
+                    dateModalSaving.value = false;
                 }
             };
 
@@ -4204,6 +4417,11 @@
                 showDateModal,
                 dateModalType,
                 dateModalValue,
+                dateModalStartTime,
+                dateModalEndTime,
+                dateModalAllDay,
+                dateModalEventId,
+                dateModalSaving,
                 showCollabModal,
                 collabModalType,
                 collabModalValue,
@@ -4245,6 +4463,7 @@
                 openDateModal,
                 closeDateModal,
                 saveDateModal,
+                deleteDateEvent,
                 openCollabModal,
                 closeCollabModal,
                 saveCollabModal,

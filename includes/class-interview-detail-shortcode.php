@@ -160,6 +160,7 @@ class PIT_Interview_Detail_Shortcode {
         // Localize script data
         wp_localize_script('pit-interview-detail', 'guestifyDetailData', [
             'restUrl' => rest_url('guestify/v1/'),
+            'calendarRestUrl' => rest_url('pit/v1/'),
             'nonce' => wp_create_nonce('wp_rest'),
             'userId' => get_current_user_id(),
             'interviewId' => $interview_id,

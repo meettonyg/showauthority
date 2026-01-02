@@ -232,12 +232,83 @@
         deadline: { bg: '#ef4444', border: '#dc2626', text: '#ffffff' },
         podrec: { bg: '#06b6d4', border: '#0891b2', text: '#ffffff' },
         other: { bg: '#6b7280', border: '#4b5563', text: '#ffffff' },
+        imported: { bg: '#94a3b8', border: '#64748b', text: '#ffffff' },
+    };
+
+    // ==========================================================================
+    // EVENT TYPE ICONS (Feather-style stroke SVGs for consistency)
+    // Interview-related events get distinct icons; imported events get a subtle indicator
+    // ==========================================================================
+    const eventTypeIcons = {
+        // Microphone for recording sessions
+        recording: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>',
+        // TV/Monitor for air date
+        air_date: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>',
+        // Phone for prep calls
+        prep_call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>',
+        // Mail for follow up
+        follow_up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>',
+        // Megaphone/Volume for promotion
+        promotion: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>',
+        // Clock for deadlines
+        deadline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>',
+        // Headphones for podcast recording
+        podrec: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg>',
+        // Calendar for other/generic
+        other: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>',
+        // Cloud for imported events (synced from external calendar)
+        imported: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" opacity="0.7"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>',
+    };
+
+    /**
+     * Get icon HTML for an event type
+     * Returns empty string for imported events (they get styled differently via CSS)
+     */
+    const getEventIcon = (eventType, isImported) => {
+        if (isImported) {
+            return eventTypeIcons.imported || '';
+        }
+        return eventTypeIcons[eventType] || eventTypeIcons.other;
+    };
+
+    // ==========================================================================
+    // IMPORTED EVENTS SECTION COMPONENT
+    // ==========================================================================
+    const ImportedEventsSection = {
+        props: {
+            provider: { type: String, required: true },
+            count: { type: Number, required: true },
+            deleting: { type: Boolean, default: false },
+        },
+        emits: ['delete'],
+        template: `
+            <div class="imported-events-section">
+                <div class="imported-events-info">
+                    <span class="imported-count">{{ count }} imported event{{ count !== 1 ? 's' : '' }}</span>
+                    <p class="imported-desc">Events pulled from {{ providerName }} Calendar (not interview-linked)</p>
+                </div>
+                <button
+                    class="btn-delete-imported"
+                    @click="$emit('delete', provider)"
+                    :disabled="deleting || count === 0">
+                    {{ deleting ? 'Deleting...' : 'Delete Imported Events' }}
+                </button>
+            </div>
+        `,
+        computed: {
+            providerName() {
+                return this.provider === 'google' ? 'Google' : 'Outlook';
+            }
+        }
     };
 
     // ==========================================================================
     // MAIN APP COMPONENT
     // ==========================================================================
     const CalendarApp = {
+        components: {
+            ImportedEventsSection,
+        },
         template: `
             <div class="pit-calendar-container">
                 <!-- Header -->
@@ -299,19 +370,19 @@
                 </div>
 
                 <!-- Loading State -->
-                <div v-if="loading && events.length === 0" class="calendar-loading">
+                <div v-show="loading && events.length === 0" class="calendar-loading">
                     <div class="pit-loading-spinner"></div>
                     <p>Loading events...</p>
                 </div>
 
                 <!-- Error State -->
-                <div v-else-if="error" class="calendar-error">
+                <div v-show="error && !loading" class="calendar-error">
                     <p>{{ error }}</p>
                     <button @click="refreshEvents" class="retry-btn">Try Again</button>
                 </div>
 
                 <!-- Calendar View -->
-                <div v-else>
+                <div v-show="!loading || events.length > 0">
                     <!-- FullCalendar View -->
                     <div v-show="currentView === 'calendar'" class="calendar-wrapper">
                         <div v-if="fullCalendarError" class="calendar-error">
@@ -351,20 +422,34 @@
                                         v-for="event in group.events"
                                         :key="event.id"
                                         class="event-list-item"
-                                        :style="{ borderLeftColor: getEventColor(event.event_type).bg }"
+                                        :class="{ 'imported': isImportedEvent(event) }"
+                                        :style="{ borderLeftColor: isImportedEvent(event) ? '#94a3b8' : getEventColor(event.event_type).bg }"
                                         @click="viewEvent(event)">
                                         <div class="event-time">
                                             <span v-if="event.is_all_day">All Day</span>
                                             <span v-else>{{ formatTime(event.start_datetime) }}</span>
                                         </div>
                                         <div class="event-details">
-                                            <div class="event-title">{{ event.title }}</div>
+                                            <div class="event-title">
+                                                <span class="event-icon" v-html="getEventIconHtml(event)"></span>
+                                                {{ event.title }}
+                                            </div>
                                             <div class="event-meta">
-                                                <span class="event-type-badge" :style="{ backgroundColor: getEventColor(event.event_type).bg }">
-                                                    {{ event.event_type_label }}
+                                                <span class="event-type-badge" :style="{ backgroundColor: isImportedEvent(event) ? '#94a3b8' : getEventColor(event.event_type).bg }">
+                                                    {{ isImportedEvent(event) ? 'Imported' : event.event_type_label }}
                                                 </span>
-                                                <span v-if="event.appearance_id" class="event-link">
+                                                <span v-if="event.appearance_id" class="event-link interview-link">
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                                                    </svg>
                                                     Linked to interview
+                                                </span>
+                                                <span v-else-if="isImportedEvent(event)" class="event-link imported-link">
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                                        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+                                                    </svg>
+                                                    Synced from calendar
                                                 </span>
                                             </div>
                                         </div>
@@ -644,10 +729,18 @@
                                             Last synced: {{ formatLastSync(syncStatus.google.last_sync_at) }}
                                         </span>
                                     </div>
+
+                                    <!-- Delete Imported Events -->
+                                    <imported-events-section
+                                        provider="google"
+                                        :count="googleImportedCount"
+                                        :deleting="deletingImported"
+                                        @delete="(p) => confirmDeleteImported(p)"
+                                    />
                                 </div>
                             </div>
 
-                            <!-- Outlook Section -->
+                            <!-- Outlook Section - Commented out for future phase
                             <div class="sync-provider" :class="{ connected: syncStatus.outlook?.connected }">
                                 <div class="sync-provider-header">
                                     <div class="sync-provider-icon outlook">
@@ -672,7 +765,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Outlook Calendar Selection -->
                                 <div v-if="syncStatus.outlook?.connected" class="sync-provider-body">
                                     <div v-if="!syncStatus.outlook.calendar_id" class="calendar-selection">
                                         <label>Select calendar to sync:</label>
@@ -713,10 +805,61 @@
                                                 Last synced: {{ formatLastSync(syncStatus.outlook.last_sync_at) }}
                                             </span>
                                         </div>
+
+                                        <imported-events-section
+                                            provider="outlook"
+                                            :count="outlookImportedCount"
+                                            :deleting="deletingImported"
+                                            @delete="confirmDeleteImported"
+                                        />
                                     </div>
                                 </div>
                             </div>
+                            End Outlook Section -->
                         </div>
+                    </div>
+                </div>
+
+                <!-- Event Popover Preview -->
+                <div
+                    v-show="showEventPopover && popoverEvent"
+                    class="event-popover"
+                    :style="{ top: popoverPosition.top + 'px', left: popoverPosition.left + 'px' }"
+                    @mouseenter="clearPopoverTimeout"
+                    @mouseleave="hideEventPopover">
+                    <div class="popover-header" :style="{ backgroundColor: popoverEvent?.colors?.bg || '#3b82f6' }">
+                        <span class="popover-icon" v-html="getEventIconHtml(popoverEvent || {})"></span>
+                        <span class="popover-type">{{ getEventTypeLabel(popoverEvent?.event_type) }}</span>
+                    </div>
+                    <div class="popover-body">
+                        <h4 class="popover-title">{{ popoverEvent?.title }}</h4>
+                        <div class="popover-datetime">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            <span>{{ formatPopoverDateTime(popoverEvent) }}</span>
+                        </div>
+                        <div v-if="popoverEvent?.location" class="popover-location">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
+                            <span>{{ popoverEvent.location }}</span>
+                        </div>
+                        <div v-if="popoverEvent?.appearance_id" class="popover-link">
+                            <a :href="'/app/interview/detail/?id=' + popoverEvent.appearance_id" class="view-interview-link">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                                </svg>
+                                View Interview Details
+                            </a>
+                        </div>
+                    </div>
+                    <div class="popover-footer">
+                        <span class="popover-hint">Click event to edit</span>
                     </div>
                 </div>
             </div>
@@ -755,6 +898,15 @@
             const selectedOutlookCalendarId = ref('');
             const syncDirection = ref('both');
             const syncEnabled = ref(true);
+            const googleImportedCount = ref(0);
+            const outlookImportedCount = ref(0);
+            const deletingImported = ref(false);
+
+            // Event popover state
+            const showEventPopover = ref(false);
+            const popoverEvent = ref(null);
+            const popoverPosition = ref({ top: 0, left: 0 });
+            let popoverTimeout = null;
 
             // Event form
             const eventForm = reactive({
@@ -797,6 +949,21 @@
             // Methods
             const getEventColor = (type) => {
                 return eventTypeColors[type] || eventTypeColors.other;
+            };
+
+            /**
+             * Check if an event is imported (synced from external calendar, not interview-related)
+             */
+            const isImportedEvent = (event) => {
+                return !event.appearance_id && event.sync_status !== 'local_only';
+            };
+
+            /**
+             * Get the icon HTML for an event (used in list view)
+             */
+            const getEventIconHtml = (event) => {
+                const isImported = isImportedEvent(event);
+                return getEventIcon(event.event_type, isImported);
             };
 
             const formatGroupDate = (dateStr) => {
@@ -855,6 +1022,71 @@
                 return result;
             };
 
+            // Popover helper functions
+            const getEventTypeLabel = (eventType) => {
+                const labels = {
+                    recording: 'Recording',
+                    air_date: 'Air Date',
+                    prep_call: 'Prep Call',
+                    follow_up: 'Follow Up',
+                    promotion: 'Promotion',
+                    deadline: 'Deadline',
+                    podrec: 'Podcast Recording',
+                    other: 'Event',
+                };
+                return labels[eventType] || 'Event';
+            };
+
+            const formatPopoverDateTime = (event) => {
+                if (!event?.start) return '';
+
+                const start = new Date(event.start);
+                const dateStr = start.toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                });
+
+                if (event.is_all_day) {
+                    return dateStr + ' (All Day)';
+                }
+
+                const timeStr = start.toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                });
+
+                let result = dateStr + ' at ' + timeStr;
+
+                if (event.end) {
+                    const end = new Date(event.end);
+                    const endTimeStr = end.toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                    });
+                    result += ' - ' + endTimeStr;
+                }
+
+                return result;
+            };
+
+            const hidePopover = () => {
+                clearTimeout(popoverTimeout);
+                showEventPopover.value = false;
+            };
+
+            const clearPopoverTimeout = () => {
+                clearTimeout(popoverTimeout);
+            };
+
+            const hideEventPopover = () => {
+                popoverTimeout = setTimeout(() => {
+                    showEventPopover.value = false;
+                }, 200);
+            };
+
             const setView = (view) => {
                 currentView.value = view;
                 if (view === 'calendar') {
@@ -881,12 +1113,14 @@
             };
 
             const initCalendar = () => {
+                if (calendarInstance) return; // Already initialized
+
                 if (!calendarEl.value) {
                     console.error('Calendar: calendarEl ref not found');
                     return;
                 }
                 if (!window.FullCalendar) {
-                    console.error('Calendar: FullCalendar library not loaded. Check if CDN is blocked.');
+                    console.error('Calendar: FullCalendar library not loaded');
                     fullCalendarError.value = true;
                     return;
                 }
@@ -903,27 +1137,99 @@
                             ? store.events.filter(e => e.event_type === filterType.value)
                             : store.events;
 
-                        const fcEvents = filtered.map(event => ({
-                            id: event.id,
-                            title: event.title,
-                            start: event.start_datetime,
-                            end: event.end_datetime || undefined,
-                            allDay: event.is_all_day,
-                            backgroundColor: getEventColor(event.event_type).bg,
-                            borderColor: getEventColor(event.event_type).border,
-                            textColor: getEventColor(event.event_type).text,
-                            extendedProps: {
-                                ...event,
-                            },
-                        }));
+                        const fcEvents = filtered.map(event => {
+                            // Determine if this is an imported event (no appearance_id = imported from external calendar)
+                            const isImported = !event.appearance_id && event.sync_status !== 'local_only';
+                            const colors = isImported ? eventTypeColors.imported : getEventColor(event.event_type);
+
+                            return {
+                                id: event.id,
+                                title: event.title,
+                                start: event.start_datetime,
+                                end: event.end_datetime || undefined,
+                                allDay: event.is_all_day,
+                                backgroundColor: colors.bg,
+                                borderColor: colors.border,
+                                textColor: colors.text,
+                                classNames: isImported ? ['fc-event-imported'] : ['fc-event-interview'],
+                                extendedProps: {
+                                    ...event,
+                                    isImported,
+                                    colors, // Pass colors for use in eventContent
+                                },
+                            };
+                        });
 
                         successCallback(fcEvents);
                     },
+                    // Custom event rendering with icons and colors
+                    eventContent: (arg) => {
+                        try {
+                            const extendedProps = arg.event.extendedProps || {};
+                            const isImported = extendedProps.isImported === true;
+                            const eventType = extendedProps.event_type || 'other';
+                            const colors = extendedProps.colors || eventTypeColors.other;
+                            const icon = getEventIcon(eventType, isImported);
+                            const timeText = arg.timeText || '';
+
+                            // Create DOM element with inline styles to ensure colors in all views
+                            const wrapper = document.createElement('div');
+                            wrapper.className = `fc-event-custom ${isImported ? 'imported' : 'interview'}`;
+                            wrapper.style.backgroundColor = colors.bg;
+                            wrapper.style.borderColor = colors.border;
+                            wrapper.style.color = colors.text;
+                            wrapper.style.borderRadius = '4px';
+                            wrapper.style.padding = '2px 4px';
+                            wrapper.innerHTML = `
+                                <span class="fc-event-icon">${icon}</span>
+                                <span class="fc-event-time">${timeText}</span>
+                                <span class="fc-event-title">${arg.event.title}</span>
+                            `;
+
+                            return { domNodes: [wrapper] };
+                        } catch (err) {
+                            console.error('eventContent error:', err);
+                            // Fallback to simple text
+                            return arg.event.title;
+                        }
+                    },
                     eventClick: (info) => {
-                        const event = info.event.extendedProps;
-                        event.id = parseInt(info.event.id);
+                        hidePopover(); // Hide popover when clicking
+                        const event = {
+                            ...info.event.extendedProps,
+                            id: parseInt(info.event.id),
+                        };
                         store.setSelectedEvent(event);
                         showDetailModal.value = true;
+                    },
+                    eventMouseEnter: (info) => {
+                        // Show popover after a short delay
+                        clearTimeout(popoverTimeout);
+                        popoverTimeout = setTimeout(() => {
+                            const rect = info.el.getBoundingClientRect();
+                            const containerRect = calendarEl.value?.getBoundingClientRect() || { top: 0, left: 0 };
+
+                            // Position popover below and to the right of the event
+                            popoverPosition.value = {
+                                top: rect.bottom - containerRect.top + 8,
+                                left: rect.left - containerRect.left,
+                            };
+
+                            popoverEvent.value = {
+                                ...info.event.extendedProps,
+                                title: info.event.title,
+                                start: info.event.start,
+                                end: info.event.end,
+                            };
+                            showEventPopover.value = true;
+                        }, 300); // 300ms delay before showing
+                    },
+                    eventMouseLeave: () => {
+                        // Hide popover after a short delay (allows moving to popover)
+                        clearTimeout(popoverTimeout);
+                        popoverTimeout = setTimeout(() => {
+                            showEventPopover.value = false;
+                        }, 200);
                     },
                     dateClick: (info) => {
                         resetEventForm();
@@ -1443,31 +1749,147 @@
                 return date.toLocaleDateString();
             };
 
-            // Watch for sync modal to load calendars
+            // ==========================================================================
+            // IMPORTED EVENTS MANAGEMENT
+            // ==========================================================================
+
+            const fetchImportedCounts = async () => {
+                const fetchCount = async (provider, countRef) => {
+                    if (syncStatus.value[provider]?.connected) {
+                        try {
+                            const response = await fetch(
+                                `${store.config.restUrl}calendar-sync/${provider}/imported-events/count`,
+                                { headers: { 'X-WP-Nonce': store.config.nonce } }
+                            );
+                            if (response.ok) {
+                                const data = await response.json();
+                                countRef.value = data.data?.count || 0;
+                            } else {
+                                countRef.value = 0;
+                            }
+                        } catch (err) {
+                            console.error(`Failed to fetch ${provider} imported count:`, err);
+                            countRef.value = 0;
+                        }
+                    }
+                };
+
+                await Promise.all([
+                    fetchCount('google', googleImportedCount),
+                    fetchCount('outlook', outlookImportedCount),
+                ]);
+            };
+
+            const confirmDeleteImported = (provider) => {
+                const count = provider === 'google' ? googleImportedCount.value : outlookImportedCount.value;
+                const providerName = provider === 'google' ? 'Google' : 'Outlook';
+
+                showConfirmation(
+                    `Delete Imported Events`,
+                    `Are you sure you want to delete ${count} imported event(s) from ${providerName} Calendar? This will only remove events that were imported from ${providerName}, not your interview-linked events. This action cannot be undone.`,
+                    () => deleteImportedEvents(provider)
+                );
+            };
+
+            const deleteImportedEvents = async (provider) => {
+                deletingImported.value = true;
+                const providerName = provider === 'google' ? 'Google' : 'Outlook';
+
+                try {
+                    const response = await fetch(
+                        `${store.config.restUrl}calendar-sync/${provider}/imported-events`,
+                        {
+                            method: 'DELETE',
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (response.ok) {
+                        // Update the count
+                        if (provider === 'google') {
+                            googleImportedCount.value = 0;
+                        } else {
+                            outlookImportedCount.value = 0;
+                        }
+
+                        // Refresh events in calendar
+                        const today = new Date();
+                        const start = new Date(today.getFullYear(), today.getMonth(), 1);
+                        const end = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+                        await store.fetchEvents(
+                            start.toISOString().split('T')[0],
+                            end.toISOString().split('T')[0]
+                        );
+
+                        if (calendarInstance) {
+                            calendarInstance.refetchEvents();
+                        }
+                    } else {
+                        const errorData = await response.json().catch(() => ({}));
+                        const errorMsg = errorData.message || `Failed to delete imported events from ${providerName}`;
+                        alert(errorMsg);
+                    }
+                } catch (err) {
+                    console.error('Failed to delete imported events:', err);
+                    alert(`Failed to delete imported events from ${providerName}. Please try again.`);
+                } finally {
+                    deletingImported.value = false;
+                }
+            };
+
+            // Watch for sync modal to load calendars and counts
             watch(showSyncModal, async (isOpen) => {
-                if (isOpen && syncStatus.value.google?.connected && googleCalendars.value.length === 0) {
-                    await loadGoogleCalendars();
+                if (isOpen) {
+                    if (syncStatus.value.google?.connected && googleCalendars.value.length === 0) {
+                        await loadGoogleCalendars();
+                    }
+                    // Fetch imported event counts when modal opens
+                    await fetchImportedCounts();
                 }
             });
 
             // Watch for calendar element to become available and initialize
             watch(calendarEl, (el) => {
-                if (el && !calendarInstance && !store.loading && currentView.value === 'calendar') {
+                if (el && currentView.value === 'calendar') {
                     initCalendar();
+                }
+            }, { immediate: true });
+
+            // Watch for loading to complete and update calendar size
+            // This is needed because v-show keeps elements in DOM but hidden,
+            // and FullCalendar can't calculate dimensions while hidden
+            watch(loading, (isLoading) => {
+                if (!isLoading && calendarInstance) {
+                    nextTick(() => {
+                        calendarInstance.updateSize();
+                    });
                 }
             });
 
-            // Also watch for loading to complete (in case ref is already set)
-            // Use flush: 'post' to ensure DOM has been updated before checking ref
-            watch(loading, (isLoading) => {
-                if (!isLoading && currentView.value === 'calendar' && !calendarInstance) {
-                    nextTick(() => {
-                        if (calendarEl.value) {
-                            initCalendar();
-                        }
-                    });
+            // Watch start_date to sync end_date (standard calendar UX)
+            // When start date changes, update end date to match if it's before start
+            watch(() => eventForm.start_date, (newStartDate, oldStartDate) => {
+                if (!newStartDate) return;
+
+                // If end date is empty or before start date, set it to start date
+                if (!eventForm.end_date || eventForm.end_date < newStartDate) {
+                    eventForm.end_date = newStartDate;
                 }
-            }, { flush: 'post' });
+                // If there was a duration, maintain it when shifting start date
+                else if (oldStartDate && eventForm.end_date) {
+                    const oldStart = new Date(oldStartDate);
+                    const oldEnd = new Date(eventForm.end_date);
+                    const durationMs = oldEnd - oldStart;
+
+                    // Only maintain duration if it was positive (valid)
+                    if (durationMs > 0) {
+                        const newEnd = new Date(new Date(newStartDate).getTime() + durationMs);
+                        eventForm.end_date = newEnd.toISOString().split('T')[0];
+                    }
+                }
+            });
 
             // Lifecycle
             onMounted(() => {
@@ -1534,6 +1956,11 @@
                 syncDirection,
                 syncEnabled,
 
+                // Popover state
+                showEventPopover,
+                popoverEvent,
+                popoverPosition,
+
                 // Computed
                 loading,
                 error,
@@ -1544,9 +1971,15 @@
 
                 // Methods
                 getEventColor,
+                isImportedEvent,
+                getEventIconHtml,
+                getEventTypeLabel,
                 formatGroupDate,
                 formatTime,
                 formatEventDateTime,
+                formatPopoverDateTime,
+                hideEventPopover,
+                clearPopoverTimeout,
                 setView,
                 applyFilter,
                 refreshEvents,
@@ -1576,6 +2009,12 @@
                 disconnectOutlook,
                 selectOutlookCalendar,
                 triggerOutlookSync,
+
+                // Imported events management
+                googleImportedCount,
+                outlookImportedCount,
+                deletingImported,
+                confirmDeleteImported,
             };
         },
     };

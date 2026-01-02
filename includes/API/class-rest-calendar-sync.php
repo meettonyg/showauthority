@@ -159,6 +159,34 @@ class PIT_REST_Calendar_Sync {
             'callback' => [__CLASS__, 'trigger_outlook_sync'],
             'permission_callback' => [__CLASS__, 'check_permission'],
         ]);
+
+        // DELETE /calendar-sync/google/imported-events - Delete all imported Google events
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/google/imported-events', [
+            'methods' => WP_REST_Server::DELETABLE,
+            'callback' => [__CLASS__, 'delete_google_imported_events'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        // DELETE /calendar-sync/outlook/imported-events - Delete all imported Outlook events
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/outlook/imported-events', [
+            'methods' => WP_REST_Server::DELETABLE,
+            'callback' => [__CLASS__, 'delete_outlook_imported_events'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        // GET /calendar-sync/google/imported-events/count - Get count of imported Google events
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/google/imported-events/count', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [__CLASS__, 'get_google_imported_count'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        // GET /calendar-sync/outlook/imported-events/count - Get count of imported Outlook events
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/outlook/imported-events/count', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [__CLASS__, 'get_outlook_imported_count'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
     }
 
     /**
@@ -506,6 +534,113 @@ class PIT_REST_Calendar_Sync {
             'success' => true,
             'message' => ucfirst($provider) . ' sync completed',
             'data' => $result,
+        ]);
+    }
+
+    /**
+     * Delete all imported Google events
+     * Only deletes events that were imported from Google (not events pushed from this app)
+     */
+    public static function delete_google_imported_events($request) {
+        return self::delete_imported_events('google');
+    }
+
+    /**
+     * Delete all imported Outlook events
+     * Only deletes events that were imported from Outlook (not events pushed from this app)
+     */
+    public static function delete_outlook_imported_events($request) {
+        return self::delete_imported_events('outlook');
+    }
+
+    /**
+     * Get count of imported Google events
+     */
+    public static function get_google_imported_count($request) {
+        return self::get_imported_events_count('google');
+    }
+
+    /**
+     * Get count of imported Outlook events
+     */
+    public static function get_outlook_imported_count($request) {
+        return self::get_imported_events_count('outlook');
+    }
+
+    /**
+     * Generic: Delete imported events for a provider
+     * Only deletes events that:
+     * - Have an external event ID (were pulled from external calendar)
+     * - Do NOT have an appearance_id (are not linked to interview events)
+     */
+    private static function delete_imported_events($provider) {
+        $allowed_providers = ['google', 'outlook'];
+        if (!in_array($provider, $allowed_providers, true)) {
+            return new WP_Error('invalid_provider', 'Invalid provider specified.', ['status' => 400]);
+        }
+
+        global $wpdb;
+
+        $user_id = get_current_user_id();
+        $events_table = PIT_Calendar_Events_Schema::get_table_name();
+
+        // Determine which column to check based on provider
+        $event_id_column = $provider === 'google' ? 'google_event_id' : 'outlook_event_id';
+
+        // Delete imported events (have external ID but no appearance_id)
+        // These are events that were pulled from external calendar, not pushed from our app
+        $deleted = $wpdb->query($wpdb->prepare(
+            "DELETE FROM $events_table
+             WHERE user_id = %d
+             AND {$event_id_column} IS NOT NULL
+             AND (appearance_id IS NULL OR appearance_id = 0)",
+            $user_id
+        ));
+
+        if ($deleted === false) {
+            return new WP_Error('delete_failed', 'Failed to delete imported events', ['status' => 500]);
+        }
+
+        return rest_ensure_response([
+            'success' => true,
+            'message' => sprintf('%d imported event(s) deleted from %s', $deleted, ucfirst($provider)),
+            'data' => [
+                'deleted_count' => $deleted,
+            ],
+        ]);
+    }
+
+    /**
+     * Generic: Get count of imported events for a provider
+     */
+    private static function get_imported_events_count($provider) {
+        $allowed_providers = ['google', 'outlook'];
+        if (!in_array($provider, $allowed_providers, true)) {
+            return new WP_Error('invalid_provider', 'Invalid provider specified.', ['status' => 400]);
+        }
+
+        global $wpdb;
+
+        $user_id = get_current_user_id();
+        $events_table = PIT_Calendar_Events_Schema::get_table_name();
+
+        // Determine which column to check based on provider
+        $event_id_column = $provider === 'google' ? 'google_event_id' : 'outlook_event_id';
+
+        // Count imported events (have external ID but no appearance_id)
+        $count = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $events_table
+             WHERE user_id = %d
+             AND {$event_id_column} IS NOT NULL
+             AND (appearance_id IS NULL OR appearance_id = 0)",
+            $user_id
+        ));
+
+        return rest_ensure_response([
+            'success' => true,
+            'data' => [
+                'count' => (int) $count,
+            ],
         ]);
     }
 

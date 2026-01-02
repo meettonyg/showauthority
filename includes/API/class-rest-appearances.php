@@ -272,15 +272,22 @@ class PIT_REST_Appearances {
         }
 
         // Allowed fields
-        $allowed = ['status', 'priority', 'source', 'is_archived', 'guest_profile_id', 
+        $allowed = ['status', 'priority', 'source', 'is_archived', 'guest_profile_id',
                     'record_date', 'air_date', 'promotion_date', 'notes', 'internal_notes',
                     'estimated_value', 'actual_value', 'audience', 'commission'];
-        
+
+        // Date fields that can be explicitly cleared (set to null/empty)
+        $date_fields = ['record_date', 'air_date', 'promotion_date'];
+
         $data = [];
         foreach ($allowed as $field) {
             $value = $request->get_param($field);
             if ($value !== null) {
                 $data[$field] = is_string($value) ? sanitize_text_field($value) : $value;
+            }
+            // Allow explicitly clearing date fields with empty string
+            elseif (in_array($field, $date_fields) && $request->has_param($field)) {
+                $data[$field] = null;
             }
         }
 
@@ -290,6 +297,11 @@ class PIT_REST_Appearances {
 
         $data['updated_at'] = current_time('mysql');
         $wpdb->update($table, $data, ['id' => $id]);
+
+        // Sync calendar events for date field changes
+        if (class_exists('PIT_Appearance_Calendar_Sync')) {
+            PIT_Appearance_Calendar_Sync::sync_appearance_dates($id, array_keys($data), $user_id);
+        }
 
         return new WP_REST_Response([
             'id' => $id,
