@@ -550,7 +550,8 @@ class PIT_Calendar_Sync_Service {
      * Cleanup old events from local database
      *
      * Deletes events older than the configured threshold to prevent database bloat.
-     * Only deletes events that are already synced or local-only (won't delete pending events).
+     * IMPORTANT: Only deletes events with event_type='other' (imported from external calendars).
+     * Never deletes locally-created interview events (recording, air_date, prep_call, etc.).
      *
      * @return array Cleanup results
      */
@@ -582,26 +583,30 @@ class PIT_Calendar_Sync_Service {
         $cutoff_date = date('Y-m-d H:i:s', strtotime("-{$days_old} days"));
 
         // First, get count of events that will be deleted (for logging)
+        // Only count events with event_type='other' (imported from external calendars)
+        // Never delete locally-created interview events
         $count = $wpdb->get_var($wpdb->prepare(
             "SELECT COUNT(*) FROM $events_table
              WHERE end_datetime < %s
+               AND event_type = 'other'
                AND sync_status IN ('synced', 'local_only', 'sync_error')",
             $cutoff_date
         ));
 
         if ($count > 0) {
-            // Delete old events that have already been synced or are local-only
-            // Don't delete pending_sync or pending_delete events to avoid data loss
+            // Delete old imported events only (event_type = 'other')
+            // Preserves all locally-created interview events (recording, air_date, prep_call, etc.)
             $deleted = $wpdb->query($wpdb->prepare(
                 "DELETE FROM $events_table
                  WHERE end_datetime < %s
+                   AND event_type = 'other'
                    AND sync_status IN ('synced', 'local_only', 'sync_error')",
                 $cutoff_date
             ));
 
             // Log the cleanup
             error_log(sprintf(
-                '[PIT Calendar Cleanup] Deleted %d events older than %s',
+                '[PIT Calendar Cleanup] Deleted %d imported events older than %s (interview events preserved)',
                 $deleted,
                 $cutoff_date
             ));
@@ -610,7 +615,7 @@ class PIT_Calendar_Sync_Service {
                 'deleted' => $deleted,
                 'skipped' => false,
                 'cutoff_date' => $cutoff_date,
-                'message' => sprintf('Deleted %d events older than %d days', $deleted, $days_old),
+                'message' => sprintf('Deleted %d imported events older than %d days (interview events preserved)', $deleted, $days_old),
             ];
         }
 
@@ -618,12 +623,14 @@ class PIT_Calendar_Sync_Service {
             'deleted' => 0,
             'skipped' => false,
             'cutoff_date' => $cutoff_date,
-            'message' => 'No old events to delete',
+            'message' => 'No old imported events to delete',
         ];
     }
 
     /**
      * Get cleanup statistics (preview what would be deleted)
+     *
+     * Only counts imported events (event_type='other') - interview events are never deleted.
      *
      * @return array Statistics about old events
      */
@@ -635,8 +642,9 @@ class PIT_Calendar_Sync_Service {
 
         if ($days_old <= 0) {
             return [
-                'events_to_delete' => 0,
-                'total_events' => $wpdb->get_var("SELECT COUNT(*) FROM $events_table"),
+                'imported_events_to_delete' => 0,
+                'total_imported_events' => (int) $wpdb->get_var("SELECT COUNT(*) FROM $events_table WHERE event_type = 'other'"),
+                'total_interview_events' => (int) $wpdb->get_var("SELECT COUNT(*) FROM $events_table WHERE event_type != 'other'"),
                 'oldest_event' => null,
                 'cleanup_enabled' => false,
             ];
@@ -645,14 +653,16 @@ class PIT_Calendar_Sync_Service {
         $cutoff_date = date('Y-m-d H:i:s', strtotime("-{$days_old} days"));
 
         return [
-            'events_to_delete' => (int) $wpdb->get_var($wpdb->prepare(
+            'imported_events_to_delete' => (int) $wpdb->get_var($wpdb->prepare(
                 "SELECT COUNT(*) FROM $events_table
                  WHERE end_datetime < %s
+                   AND event_type = 'other'
                    AND sync_status IN ('synced', 'local_only', 'sync_error')",
                 $cutoff_date
             )),
-            'total_events' => (int) $wpdb->get_var("SELECT COUNT(*) FROM $events_table"),
-            'oldest_event' => $wpdb->get_var("SELECT MIN(start_datetime) FROM $events_table"),
+            'total_imported_events' => (int) $wpdb->get_var("SELECT COUNT(*) FROM $events_table WHERE event_type = 'other'"),
+            'total_interview_events' => (int) $wpdb->get_var("SELECT COUNT(*) FROM $events_table WHERE event_type != 'other'"),
+            'oldest_imported_event' => $wpdb->get_var("SELECT MIN(start_datetime) FROM $events_table WHERE event_type = 'other'"),
             'cutoff_date' => $cutoff_date,
             'cleanup_enabled' => PIT_Settings::get('calendar_cleanup_enabled', true),
         ];
