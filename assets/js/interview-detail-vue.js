@@ -3664,7 +3664,7 @@
                         throw new Error('Failed to delete calendar event');
                     }
 
-                    // Clear the interview date field
+                    // Clear the interview date field (send empty string to clear)
                     const fieldMap = {
                         'record': 'record_date',
                         'air': 'air_date',
@@ -3672,7 +3672,7 @@
                     };
                     const field = fieldMap[dateModalType.value];
                     if (field) {
-                        await store.updateInterview(field, null);
+                        await store.updateInterview(field, '');
                     }
 
                     showSuccessMessage('Event deleted successfully');
