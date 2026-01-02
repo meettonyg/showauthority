@@ -232,6 +232,43 @@
         deadline: { bg: '#ef4444', border: '#dc2626', text: '#ffffff' },
         podrec: { bg: '#06b6d4', border: '#0891b2', text: '#ffffff' },
         other: { bg: '#6b7280', border: '#4b5563', text: '#ffffff' },
+        imported: { bg: '#94a3b8', border: '#64748b', text: '#ffffff' },
+    };
+
+    // ==========================================================================
+    // EVENT TYPE ICONS (SVG paths for inline rendering)
+    // Interview-related events get distinct icons; imported events get a subtle indicator
+    // ==========================================================================
+    const eventTypeIcons = {
+        // Microphone for recording sessions
+        recording: '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>',
+        // Broadcast/TV for air date
+        air_date: '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>',
+        // Phone for prep calls
+        prep_call: '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>',
+        // Email/envelope for follow up
+        follow_up: '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>',
+        // Megaphone for promotion
+        promotion: '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M18 11v2h4v-2h-4zm-2 6.61c.96.71 2.21 1.65 3.2 2.39.4-.53.8-1.07 1.2-1.6-.99-.74-2.24-1.68-3.2-2.4-.4.54-.8 1.08-1.2 1.61zM20.4 5.6c-.4-.53-.8-1.07-1.2-1.6-.99.74-2.24 1.68-3.2 2.4.4.53.8 1.07 1.2 1.6.96-.72 2.21-1.65 3.2-2.4zM4 9c-1.1 0-2 .9-2 2v2c0 1.1.9 2 2 2h1v4h2v-4h1l5 3V6L8 9H4zm11.5 3c0-1.33-.58-2.53-1.5-3.35v6.69c.92-.81 1.5-2.01 1.5-3.34z"/></svg>',
+        // Clock for deadlines
+        deadline: '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>',
+        // Headphones for podcast recording
+        podrec: '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z"/></svg>',
+        // Calendar for other/generic
+        other: '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9 10H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2z"/></svg>',
+        // Cloud/import icon for imported events (no appearance_id)
+        imported: '<svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" opacity="0.7"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>',
+    };
+
+    /**
+     * Get icon HTML for an event type
+     * Returns empty string for imported events (they get styled differently via CSS)
+     */
+    const getEventIcon = (eventType, isImported) => {
+        if (isImported) {
+            return eventTypeIcons.imported || '';
+        }
+        return eventTypeIcons[eventType] || eventTypeIcons.other;
     };
 
     // ==========================================================================
@@ -385,20 +422,34 @@
                                         v-for="event in group.events"
                                         :key="event.id"
                                         class="event-list-item"
-                                        :style="{ borderLeftColor: getEventColor(event.event_type).bg }"
+                                        :class="{ 'imported': isImportedEvent(event) }"
+                                        :style="{ borderLeftColor: isImportedEvent(event) ? '#94a3b8' : getEventColor(event.event_type).bg }"
                                         @click="viewEvent(event)">
                                         <div class="event-time">
                                             <span v-if="event.is_all_day">All Day</span>
                                             <span v-else>{{ formatTime(event.start_datetime) }}</span>
                                         </div>
                                         <div class="event-details">
-                                            <div class="event-title">{{ event.title }}</div>
+                                            <div class="event-title">
+                                                <span class="event-icon" v-html="getEventIconHtml(event)"></span>
+                                                {{ event.title }}
+                                            </div>
                                             <div class="event-meta">
-                                                <span class="event-type-badge" :style="{ backgroundColor: getEventColor(event.event_type).bg }">
-                                                    {{ event.event_type_label }}
+                                                <span class="event-type-badge" :style="{ backgroundColor: isImportedEvent(event) ? '#94a3b8' : getEventColor(event.event_type).bg }">
+                                                    {{ isImportedEvent(event) ? 'Imported' : event.event_type_label }}
                                                 </span>
-                                                <span v-if="event.appearance_id" class="event-link">
+                                                <span v-if="event.appearance_id" class="event-link interview-link">
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                                                    </svg>
                                                     Linked to interview
+                                                </span>
+                                                <span v-else-if="isImportedEvent(event)" class="event-link imported-link">
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                                        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+                                                    </svg>
+                                                    Synced from calendar
                                                 </span>
                                             </div>
                                         </div>
@@ -851,6 +902,21 @@
                 return eventTypeColors[type] || eventTypeColors.other;
             };
 
+            /**
+             * Check if an event is imported (synced from external calendar, not interview-related)
+             */
+            const isImportedEvent = (event) => {
+                return !event.appearance_id && event.sync_status !== 'local_only';
+            };
+
+            /**
+             * Get the icon HTML for an event (used in list view)
+             */
+            const getEventIconHtml = (event) => {
+                const isImported = isImportedEvent(event);
+                return getEventIcon(event.event_type, isImported);
+            };
+
             const formatGroupDate = (dateStr) => {
                 const date = new Date(dateStr + 'T00:00:00');
                 const today = new Date();
@@ -957,21 +1023,47 @@
                             ? store.events.filter(e => e.event_type === filterType.value)
                             : store.events;
 
-                        const fcEvents = filtered.map(event => ({
-                            id: event.id,
-                            title: event.title,
-                            start: event.start_datetime,
-                            end: event.end_datetime || undefined,
-                            allDay: event.is_all_day,
-                            backgroundColor: getEventColor(event.event_type).bg,
-                            borderColor: getEventColor(event.event_type).border,
-                            textColor: getEventColor(event.event_type).text,
-                            extendedProps: {
-                                ...event,
-                            },
-                        }));
+                        const fcEvents = filtered.map(event => {
+                            // Determine if this is an imported event (no appearance_id = imported from external calendar)
+                            const isImported = !event.appearance_id && event.sync_status !== 'local_only';
+                            const colors = isImported ? eventTypeColors.imported : getEventColor(event.event_type);
+
+                            return {
+                                id: event.id,
+                                title: event.title,
+                                start: event.start_datetime,
+                                end: event.end_datetime || undefined,
+                                allDay: event.is_all_day,
+                                backgroundColor: colors.bg,
+                                borderColor: colors.border,
+                                textColor: colors.text,
+                                classNames: isImported ? ['fc-event-imported'] : ['fc-event-interview'],
+                                extendedProps: {
+                                    ...event,
+                                    isImported,
+                                },
+                            };
+                        });
 
                         successCallback(fcEvents);
+                    },
+                    // Custom event rendering with icons
+                    eventContent: (arg) => {
+                        const event = arg.event.extendedProps;
+                        const isImported = event.isImported;
+                        const icon = getEventIcon(event.event_type, isImported);
+                        const timeText = arg.timeText || '';
+
+                        // Build custom HTML with icon
+                        const html = `
+                            <div class="fc-event-custom ${isImported ? 'imported' : 'interview'}">
+                                <span class="fc-event-icon">${icon}</span>
+                                <span class="fc-event-time">${timeText}</span>
+                                <span class="fc-event-title">${arg.event.title}</span>
+                            </div>
+                        `;
+
+                        return { html };
                     },
                     eventClick: (info) => {
                         const event = {
@@ -1716,6 +1808,8 @@
 
                 // Methods
                 getEventColor,
+                isImportedEvent,
+                getEventIconHtml,
                 formatGroupDate,
                 formatTime,
                 formatEventDateTime,
