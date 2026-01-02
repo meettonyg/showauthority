@@ -644,6 +644,20 @@
                                             Last synced: {{ formatLastSync(syncStatus.google.last_sync_at) }}
                                         </span>
                                     </div>
+
+                                    <!-- Delete Imported Events -->
+                                    <div v-if="googleImportedCount > 0" class="imported-events-section">
+                                        <div class="imported-events-info">
+                                            <span class="imported-count">{{ googleImportedCount }} imported event{{ googleImportedCount !== 1 ? 's' : '' }}</span>
+                                            <p class="imported-desc">Events pulled from Google Calendar (not interview-linked)</p>
+                                        </div>
+                                        <button
+                                            class="btn-delete-imported"
+                                            @click="confirmDeleteImported('google')"
+                                            :disabled="deletingImported">
+                                            {{ deletingImported ? 'Deleting...' : 'Delete Imported Events' }}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -713,6 +727,20 @@
                                                 Last synced: {{ formatLastSync(syncStatus.outlook.last_sync_at) }}
                                             </span>
                                         </div>
+
+                                        <!-- Delete Imported Events -->
+                                        <div v-if="outlookImportedCount > 0" class="imported-events-section">
+                                            <div class="imported-events-info">
+                                                <span class="imported-count">{{ outlookImportedCount }} imported event{{ outlookImportedCount !== 1 ? 's' : '' }}</span>
+                                                <p class="imported-desc">Events pulled from Outlook Calendar (not interview-linked)</p>
+                                            </div>
+                                            <button
+                                                class="btn-delete-imported"
+                                                @click="confirmDeleteImported('outlook')"
+                                                :disabled="deletingImported">
+                                                {{ deletingImported ? 'Deleting...' : 'Delete Imported Events' }}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -755,6 +783,9 @@
             const selectedOutlookCalendarId = ref('');
             const syncDirection = ref('both');
             const syncEnabled = ref(true);
+            const googleImportedCount = ref(0);
+            const outlookImportedCount = ref(0);
+            const deletingImported = ref(false);
 
             // Event form
             const eventForm = reactive({
@@ -1443,10 +1474,115 @@
                 return date.toLocaleDateString();
             };
 
-            // Watch for sync modal to load calendars
+            // ==========================================================================
+            // IMPORTED EVENTS MANAGEMENT
+            // ==========================================================================
+
+            const fetchImportedCounts = async () => {
+                // Fetch Google imported count
+                if (syncStatus.value.google?.connected) {
+                    try {
+                        const response = await fetch(
+                            `${store.config.restUrl}calendar-sync/google/imported-events/count`,
+                            {
+                                headers: {
+                                    'X-WP-Nonce': store.config.nonce,
+                                },
+                            }
+                        );
+                        if (response.ok) {
+                            const data = await response.json();
+                            googleImportedCount.value = data.data?.count || 0;
+                        }
+                    } catch (err) {
+                        console.error('Failed to fetch Google imported count:', err);
+                    }
+                }
+
+                // Fetch Outlook imported count
+                if (syncStatus.value.outlook?.connected) {
+                    try {
+                        const response = await fetch(
+                            `${store.config.restUrl}calendar-sync/outlook/imported-events/count`,
+                            {
+                                headers: {
+                                    'X-WP-Nonce': store.config.nonce,
+                                },
+                            }
+                        );
+                        if (response.ok) {
+                            const data = await response.json();
+                            outlookImportedCount.value = data.data?.count || 0;
+                        }
+                    } catch (err) {
+                        console.error('Failed to fetch Outlook imported count:', err);
+                    }
+                }
+            };
+
+            const confirmDeleteImported = (provider) => {
+                const count = provider === 'google' ? googleImportedCount.value : outlookImportedCount.value;
+                const providerName = provider === 'google' ? 'Google' : 'Outlook';
+
+                showConfirmation(
+                    `Delete Imported Events`,
+                    `Are you sure you want to delete ${count} imported event(s) from ${providerName} Calendar? This will only remove events that were imported from ${providerName}, not your interview-linked events. This action cannot be undone.`,
+                    () => deleteImportedEvents(provider)
+                );
+            };
+
+            const deleteImportedEvents = async (provider) => {
+                deletingImported.value = true;
+
+                try {
+                    const response = await fetch(
+                        `${store.config.restUrl}calendar-sync/${provider}/imported-events`,
+                        {
+                            method: 'DELETE',
+                            headers: {
+                                'X-WP-Nonce': store.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (response.ok) {
+                        // Update the count
+                        if (provider === 'google') {
+                            googleImportedCount.value = 0;
+                        } else {
+                            outlookImportedCount.value = 0;
+                        }
+
+                        // Refresh events in calendar
+                        const today = new Date();
+                        const start = new Date(today.getFullYear(), today.getMonth(), 1);
+                        const end = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+                        await store.fetchEvents(
+                            start.toISOString().split('T')[0],
+                            end.toISOString().split('T')[0]
+                        );
+
+                        if (calendarInstance) {
+                            calendarInstance.refetchEvents();
+                        }
+                    } else {
+                        console.error('Failed to delete imported events');
+                    }
+                } catch (err) {
+                    console.error('Failed to delete imported events:', err);
+                } finally {
+                    deletingImported.value = false;
+                }
+            };
+
+            // Watch for sync modal to load calendars and counts
             watch(showSyncModal, async (isOpen) => {
-                if (isOpen && syncStatus.value.google?.connected && googleCalendars.value.length === 0) {
-                    await loadGoogleCalendars();
+                if (isOpen) {
+                    if (syncStatus.value.google?.connected && googleCalendars.value.length === 0) {
+                        await loadGoogleCalendars();
+                    }
+                    // Fetch imported event counts when modal opens
+                    await fetchImportedCounts();
                 }
             });
 
@@ -1455,17 +1591,20 @@
                 if (el && !calendarInstance && !store.loading && currentView.value === 'calendar') {
                     initCalendar();
                 }
-            });
+            }, { immediate: true });
 
             // Also watch for loading to complete (in case ref is already set)
             // Use flush: 'post' to ensure DOM has been updated before checking ref
             watch(loading, (isLoading) => {
                 if (!isLoading && currentView.value === 'calendar' && !calendarInstance) {
-                    nextTick(() => {
-                        if (calendarEl.value) {
-                            initCalendar();
-                        }
-                    });
+                    // Use setTimeout to ensure DOM has fully updated
+                    setTimeout(() => {
+                        nextTick(() => {
+                            if (calendarEl.value && !calendarInstance) {
+                                initCalendar();
+                            }
+                        });
+                    }, 50);
                 }
             }, { flush: 'post' });
 
@@ -1492,7 +1631,15 @@
                 store.fetchEvents(
                     start.toISOString().split('T')[0],
                     end.toISOString().split('T')[0]
-                );
+                ).then(() => {
+                    // Ensure calendar is initialized after events are loaded
+                    // This is a fallback in case the watchers don't trigger properly
+                    nextTick(() => {
+                        if (calendarEl.value && !calendarInstance && currentView.value === 'calendar') {
+                            initCalendar();
+                        }
+                    });
+                });
             });
 
             // Watch for events changes to update calendar
@@ -1576,6 +1723,12 @@
                 disconnectOutlook,
                 selectOutlookCalendar,
                 triggerOutlookSync,
+
+                // Imported events management
+                googleImportedCount,
+                outlookImportedCount,
+                deletingImported,
+                confirmDeleteImported,
             };
         },
     };

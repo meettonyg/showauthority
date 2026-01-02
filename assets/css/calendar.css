@@ -1120,3 +1120,55 @@ textarea.form-input {
     font-size: 12px;
     color: var(--cal-text-secondary);
 }
+
+/* Imported Events Section */
+.imported-events-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--cal-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.imported-events-info {
+    flex: 1;
+    min-width: 200px;
+}
+
+.imported-count {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--cal-text);
+}
+
+.imported-desc {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: var(--cal-text-secondary);
+}
+
+.btn-delete-imported {
+    padding: 8px 16px;
+    background: white;
+    color: var(--cal-danger);
+    border: 1px solid var(--cal-danger);
+    border-radius: var(--cal-radius);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-delete-imported:hover {
+    background: var(--cal-danger);
+    color: white;
+}
+
+.btn-delete-imported:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
