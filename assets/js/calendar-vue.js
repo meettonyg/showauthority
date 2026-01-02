@@ -1606,6 +1606,17 @@
                 }
             }, { immediate: true });
 
+            // Watch for loading to complete and update calendar size
+            // This is needed because v-show keeps elements in DOM but hidden,
+            // and FullCalendar can't calculate dimensions while hidden
+            watch(loading, (isLoading) => {
+                if (!isLoading && calendarInstance) {
+                    nextTick(() => {
+                        calendarInstance.updateSize();
+                    });
+                }
+            });
+
             // Lifecycle
             onMounted(() => {
                 if (typeof pitCalendarData !== 'undefined') {
