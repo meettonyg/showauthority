@@ -1616,6 +1616,29 @@
                 }
             });
 
+            // Watch start_date to sync end_date (standard calendar UX)
+            // When start date changes, update end date to match if it's before start
+            watch(() => eventForm.start_date, (newStartDate, oldStartDate) => {
+                if (!newStartDate) return;
+
+                // If end date is empty or before start date, set it to start date
+                if (!eventForm.end_date || eventForm.end_date < newStartDate) {
+                    eventForm.end_date = newStartDate;
+                }
+                // If there was a duration, maintain it when shifting start date
+                else if (oldStartDate && eventForm.end_date) {
+                    const oldStart = new Date(oldStartDate);
+                    const oldEnd = new Date(eventForm.end_date);
+                    const durationMs = oldEnd - oldStart;
+
+                    // Only maintain duration if it was positive (valid)
+                    if (durationMs > 0) {
+                        const newEnd = new Date(new Date(newStartDate).getTime() + durationMs);
+                        eventForm.end_date = newEnd.toISOString().split('T')[0];
+                    }
+                }
+            });
+
             // Lifecycle
             onMounted(() => {
                 if (typeof pitCalendarData !== 'undefined') {
