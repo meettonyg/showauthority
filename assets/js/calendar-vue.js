@@ -245,7 +245,7 @@
         },
         emits: ['delete'],
         template: `
-            <div v-if="count > 0" class="imported-events-section">
+            <div class="imported-events-section">
                 <div class="imported-events-info">
                     <span class="imported-count">{{ count }} imported event{{ count !== 1 ? 's' : '' }}</span>
                     <p class="imported-desc">Events pulled from {{ providerName }} Calendar (not interview-linked)</p>
@@ -253,7 +253,7 @@
                 <button
                     class="btn-delete-imported"
                     @click="$emit('delete', provider)"
-                    :disabled="deleting">
+                    :disabled="deleting || count === 0">
                     {{ deleting ? 'Deleting...' : 'Delete Imported Events' }}
                 </button>
             </div>
