@@ -171,6 +171,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-google-calendar.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-outlook-calendar.php';
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-calendar-sync-service.php';
+        require_once PIT_PLUGIN_DIR . 'includes/integrations/class-appearance-calendar-sync.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-calendar-sync.php';
         require_once PIT_PLUGIN_DIR . 'includes/Jobs/class-calendar-sync-job.php';
     }

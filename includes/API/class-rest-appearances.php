@@ -291,6 +291,11 @@ class PIT_REST_Appearances {
         $data['updated_at'] = current_time('mysql');
         $wpdb->update($table, $data, ['id' => $id]);
 
+        // Sync calendar events for date field changes
+        if (class_exists('PIT_Appearance_Calendar_Sync')) {
+            PIT_Appearance_Calendar_Sync::sync_appearance_dates($id, array_keys($data), $user_id);
+        }
+
         return new WP_REST_Response([
             'id' => $id,
             'message' => 'Opportunity updated successfully',
