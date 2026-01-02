@@ -1589,14 +1589,15 @@
                                         <div class="sidebar-content">
                                             <div class="date-wrapper" @click="openDateModal('record')" style="cursor: pointer; padding: 8px 0;">
                                                 <div class="date-content" style="padding: 0;">
-                                                    <svg class="date-icon" style="color: #64748b;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                                                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                                                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                                                    <!-- Microphone icon for Recording -->
+                                                    <svg class="date-icon" :style="{ color: interview?.record_date ? '#3b82f6' : '#64748b' }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                                        <line x1="12" y1="19" x2="12" y2="23"></line>
+                                                        <line x1="8" y1="23" x2="16" y2="23"></line>
                                                     </svg>
                                                     <div class="date-info" style="margin-right: 8px;">
-                                                        <div class="date-label" :style="{ color: interview?.record_date ? '#0ea5e9' : '#64748b' }">Record Date</div>
+                                                        <div class="date-label" :style="{ color: interview?.record_date ? '#3b82f6' : '#64748b' }">Record Date</div>
                                                         <div class="date-value" :style="{ color: interview?.record_date ? '#334155' : '#94a3b8', fontStyle: interview?.record_date ? 'normal' : 'italic' }">
                                                             {{ interview?.record_date ? formatDate(interview.record_date) : 'Not set' }}
                                                         </div>
@@ -1609,18 +1610,16 @@
                                                     </svg>
                                                 </div>
                                             </div>
-                                            
+
                                             <div class="date-wrapper" @click="openDateModal('air')" style="cursor: pointer; padding: 8px 0;">
                                                 <div class="date-content" style="padding: 0;">
-                                                    <svg class="date-icon" style="color: #64748b;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                                                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                                                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                                                        <polyline points="20 7 12 15 8 11"></polyline>
+                                                    <!-- TV icon for Air Date -->
+                                                    <svg class="date-icon" :style="{ color: interview?.air_date ? '#10b981' : '#64748b' }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+                                                        <polyline points="17 2 12 7 7 2"></polyline>
                                                     </svg>
                                                     <div class="date-info" style="margin-right: 8px;">
-                                                        <div class="date-label" :style="{ color: interview?.air_date ? '#0ea5e9' : '#64748b' }">Air Date</div>
+                                                        <div class="date-label" :style="{ color: interview?.air_date ? '#10b981' : '#64748b' }">Air Date</div>
                                                         <div class="date-value" :style="{ color: interview?.air_date ? '#334155' : '#94a3b8', fontStyle: interview?.air_date ? 'normal' : 'italic' }">
                                                             {{ interview?.air_date ? formatDate(interview.air_date) : 'Not set' }}
                                                         </div>
@@ -1633,20 +1632,17 @@
                                                     </svg>
                                                 </div>
                                             </div>
-                                            
+
                                             <div class="date-wrapper" @click="openDateModal('promotion')" style="cursor: pointer; padding: 8px 0;">
                                                 <div class="date-content" style="padding: 0;">
-                                                    <svg class="date-icon" style="color: #64748b;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                                                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                                                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                                                        <path d="M8 14h.01"></path>
-                                                        <path d="M12 14h.01"></path>
-                                                        <path d="M16 14h.01"></path>
+                                                    <!-- Volume/Megaphone icon for Promotion -->
+                                                    <svg class="date-icon" :style="{ color: interview?.promotion_date ? '#ec4899' : '#64748b' }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                                                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                                                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
                                                     </svg>
                                                     <div class="date-info" style="margin-right: 8px;">
-                                                        <div class="date-label" :style="{ color: interview?.promotion_date ? '#0ea5e9' : '#64748b' }">Promotion Date(s)</div>
+                                                        <div class="date-label" :style="{ color: interview?.promotion_date ? '#ec4899' : '#64748b' }">Promotion Date(s)</div>
                                                         <div class="date-value" :style="{ color: interview?.promotion_date ? '#334155' : '#94a3b8', fontStyle: interview?.promotion_date ? 'normal' : 'italic' }">
                                                             {{ interview?.promotion_date ? formatDate(interview.promotion_date) : 'Not set' }}
                                                         </div>
