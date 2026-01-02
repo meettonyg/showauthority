@@ -919,7 +919,14 @@
                 initAttempts++;
                 console.log('Calendar: initCalendar attempt', initAttempts);
 
-                if (!calendarEl.value) {
+                // Try to get the element - first from ref, then fallback to DOM query
+                let targetEl = calendarEl.value;
+                if (!targetEl) {
+                    targetEl = document.querySelector('.fullcalendar-container');
+                    console.log('Calendar: Using DOM query fallback, found:', !!targetEl);
+                }
+
+                if (!targetEl) {
                     console.error('Calendar: calendarEl ref not found');
                     // Retry if we haven't exceeded max attempts
                     if (initAttempts < maxInitAttempts) {
@@ -938,7 +945,7 @@
                 }
 
                 console.log('Calendar: Creating FullCalendar instance');
-                calendarInstance = new FullCalendar.Calendar(calendarEl.value, {
+                calendarInstance = new FullCalendar.Calendar(targetEl, {
                     initialView: 'dayGridMonth',
                     headerToolbar: {
                         left: 'prev,next today',
