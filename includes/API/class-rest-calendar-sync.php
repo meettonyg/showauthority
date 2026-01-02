@@ -574,6 +574,11 @@ class PIT_REST_Calendar_Sync {
      * - Do NOT have an appearance_id (are not linked to interview events)
      */
     private static function delete_imported_events($provider) {
+        $allowed_providers = ['google', 'outlook'];
+        if (!in_array($provider, $allowed_providers, true)) {
+            return new WP_Error('invalid_provider', 'Invalid provider specified.', ['status' => 400]);
+        }
+
         global $wpdb;
 
         $user_id = get_current_user_id();
@@ -609,6 +614,11 @@ class PIT_REST_Calendar_Sync {
      * Generic: Get count of imported events for a provider
      */
     private static function get_imported_events_count($provider) {
+        $allowed_providers = ['google', 'outlook'];
+        if (!in_array($provider, $allowed_providers, true)) {
+            return new WP_Error('invalid_provider', 'Invalid provider specified.', ['status' => 400]);
+        }
+
         global $wpdb;
 
         $user_id = get_current_user_id();

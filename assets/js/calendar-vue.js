@@ -1481,45 +1481,30 @@
             // ==========================================================================
 
             const fetchImportedCounts = async () => {
-                // Fetch Google imported count
-                if (syncStatus.value.google?.connected) {
-                    try {
-                        const response = await fetch(
-                            `${store.config.restUrl}calendar-sync/google/imported-events/count`,
-                            {
-                                headers: {
-                                    'X-WP-Nonce': store.config.nonce,
-                                },
+                const fetchCount = async (provider, countRef) => {
+                    if (syncStatus.value[provider]?.connected) {
+                        try {
+                            const response = await fetch(
+                                `${store.config.restUrl}calendar-sync/${provider}/imported-events/count`,
+                                { headers: { 'X-WP-Nonce': store.config.nonce } }
+                            );
+                            if (response.ok) {
+                                const data = await response.json();
+                                countRef.value = data.data?.count || 0;
+                            } else {
+                                countRef.value = 0;
                             }
-                        );
-                        if (response.ok) {
-                            const data = await response.json();
-                            googleImportedCount.value = data.data?.count || 0;
+                        } catch (err) {
+                            console.error(`Failed to fetch ${provider} imported count:`, err);
+                            countRef.value = 0;
                         }
-                    } catch (err) {
-                        console.error('Failed to fetch Google imported count:', err);
                     }
-                }
+                };
 
-                // Fetch Outlook imported count
-                if (syncStatus.value.outlook?.connected) {
-                    try {
-                        const response = await fetch(
-                            `${store.config.restUrl}calendar-sync/outlook/imported-events/count`,
-                            {
-                                headers: {
-                                    'X-WP-Nonce': store.config.nonce,
-                                },
-                            }
-                        );
-                        if (response.ok) {
-                            const data = await response.json();
-                            outlookImportedCount.value = data.data?.count || 0;
-                        }
-                    } catch (err) {
-                        console.error('Failed to fetch Outlook imported count:', err);
-                    }
-                }
+                await Promise.all([
+                    fetchCount('google', googleImportedCount),
+                    fetchCount('outlook', outlookImportedCount),
+                ]);
             };
 
             const confirmDeleteImported = (provider) => {
@@ -1535,6 +1520,7 @@
 
             const deleteImportedEvents = async (provider) => {
                 deletingImported.value = true;
+                const providerName = provider === 'google' ? 'Google' : 'Outlook';
 
                 try {
                     const response = await fetch(
@@ -1568,10 +1554,13 @@
                             calendarInstance.refetchEvents();
                         }
                     } else {
-                        console.error('Failed to delete imported events');
+                        const errorData = await response.json().catch(() => ({}));
+                        const errorMsg = errorData.message || `Failed to delete imported events from ${providerName}`;
+                        alert(errorMsg);
                     }
                 } catch (err) {
                     console.error('Failed to delete imported events:', err);
+                    alert(`Failed to delete imported events from ${providerName}. Please try again.`);
                 } finally {
                     deletingImported.value = false;
                 }
