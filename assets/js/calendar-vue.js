@@ -911,9 +911,24 @@
                 store.fetchEvents();
             };
 
+            // Track initialization attempts
+            let initAttempts = 0;
+            const maxInitAttempts = 10;
+
             const initCalendar = () => {
+                initAttempts++;
+                console.log('Calendar: initCalendar attempt', initAttempts);
+
                 if (!calendarEl.value) {
                     console.error('Calendar: calendarEl ref not found');
+                    // Retry if we haven't exceeded max attempts
+                    if (initAttempts < maxInitAttempts) {
+                        setTimeout(() => {
+                            if (!calendarInstance && currentView.value === 'calendar') {
+                                initCalendar();
+                            }
+                        }, 200);
+                    }
                     return;
                 }
                 if (!window.FullCalendar) {
@@ -922,6 +937,7 @@
                     return;
                 }
 
+                console.log('Calendar: Creating FullCalendar instance');
                 calendarInstance = new FullCalendar.Calendar(calendarEl.value, {
                     initialView: 'dayGridMonth',
                     headerToolbar: {
@@ -1640,6 +1656,14 @@
                         }
                     });
                 });
+
+                // Final fallback: try to initialize after a delay regardless of state
+                setTimeout(() => {
+                    if (!calendarInstance && currentView.value === 'calendar') {
+                        console.log('Calendar: Delayed fallback initialization');
+                        initCalendar();
+                    }
+                }, 500);
             });
 
             // Watch for events changes to update calendar
