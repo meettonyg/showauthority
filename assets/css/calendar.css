@@ -304,6 +304,32 @@
     transition: all 0.15s ease;
 }
 
+/* Month view (dayGrid) specific styling - make outer wrapper transparent */
+.fc .fc-daygrid-event.fc-event-interview,
+.fc .fc-daygrid-event.fc-event-imported {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+.fc .fc-daygrid-event .fc-event-main {
+    padding: 0 !important;
+}
+
+/* Let inner wrapper handle all styling */
+.fc-daygrid-event .fc-event-custom {
+    border-width: 2px;
+    border-style: solid;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.fc-daygrid-event .fc-event-custom.imported {
+    border-style: dashed;
+    border-width: 1px;
+    opacity: 0.85;
+}
+
 /* Imported events - muted, subtle (outer wrapper styling) */
 .fc .fc-event.fc-event-imported,
 .fc-event.fc-event-imported {
@@ -312,6 +338,12 @@
     opacity: 0.85;
     background-color: #94a3b8 !important;
     border-color: #64748b !important;
+}
+
+.fc .fc-daygrid-event.fc-event-imported {
+    background-color: #94a3b8 !important;
+    border-color: #64748b !important;
+    color: #fff !important;
 }
 
 .fc .fc-event.fc-event-imported:hover,
@@ -324,12 +356,29 @@
     opacity: 0.7;
 }
 
-/* Week/Day view adjustments */
+/* Week/Day view (timeGrid) - make outer wrapper transparent */
+.fc .fc-timegrid-event.fc-event-interview,
+.fc .fc-timegrid-event.fc-event-imported {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
 .fc-timegrid-event .fc-event-custom {
     flex-direction: column;
     align-items: flex-start;
     gap: 2px;
     padding: 4px;
+    height: 100%;
+    border-width: 2px;
+    border-style: solid;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.fc-timegrid-event .fc-event-custom.imported {
+    border-style: dashed;
+    border-width: 1px;
+    opacity: 0.85;
 }
 
 .fc-timegrid-event .fc-event-custom .fc-event-icon {
@@ -345,6 +394,10 @@
 /* Ensure FullCalendar doesn't hide our custom content */
 .fc .fc-event .fc-event-main {
     overflow: visible;
+}
+
+.fc-timegrid-event .fc-event-main {
+    height: 100%;
 }
 
 /* ==========================================================================

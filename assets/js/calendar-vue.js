@@ -1041,24 +1041,31 @@
                                 extendedProps: {
                                     ...event,
                                     isImported,
+                                    colors, // Pass colors for use in eventContent
                                 },
                             };
                         });
 
                         successCallback(fcEvents);
                     },
-                    // Custom event rendering with icons
+                    // Custom event rendering with icons and colors
                     eventContent: (arg) => {
                         try {
                             const extendedProps = arg.event.extendedProps || {};
                             const isImported = extendedProps.isImported === true;
                             const eventType = extendedProps.event_type || 'other';
+                            const colors = extendedProps.colors || eventTypeColors.other;
                             const icon = getEventIcon(eventType, isImported);
                             const timeText = arg.timeText || '';
 
-                            // Create DOM element for more reliable rendering
+                            // Create DOM element with inline styles to ensure colors in all views
                             const wrapper = document.createElement('div');
                             wrapper.className = `fc-event-custom ${isImported ? 'imported' : 'interview'}`;
+                            wrapper.style.backgroundColor = colors.bg;
+                            wrapper.style.borderColor = colors.border;
+                            wrapper.style.color = colors.text;
+                            wrapper.style.borderRadius = '4px';
+                            wrapper.style.padding = '2px 4px';
                             wrapper.innerHTML = `
                                 <span class="fc-event-icon">${icon}</span>
                                 <span class="fc-event-time">${timeText}</span>
