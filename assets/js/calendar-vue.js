@@ -235,9 +235,43 @@
     };
 
     // ==========================================================================
+    // IMPORTED EVENTS SECTION COMPONENT
+    // ==========================================================================
+    const ImportedEventsSection = {
+        props: {
+            provider: { type: String, required: true },
+            count: { type: Number, required: true },
+            deleting: { type: Boolean, default: false },
+        },
+        emits: ['delete'],
+        template: `
+            <div v-if="count > 0" class="imported-events-section">
+                <div class="imported-events-info">
+                    <span class="imported-count">{{ count }} imported event{{ count !== 1 ? 's' : '' }}</span>
+                    <p class="imported-desc">Events pulled from {{ providerName }} Calendar (not interview-linked)</p>
+                </div>
+                <button
+                    class="btn-delete-imported"
+                    @click="$emit('delete', provider)"
+                    :disabled="deleting">
+                    {{ deleting ? 'Deleting...' : 'Delete Imported Events' }}
+                </button>
+            </div>
+        `,
+        computed: {
+            providerName() {
+                return this.provider === 'google' ? 'Google' : 'Outlook';
+            }
+        }
+    };
+
+    // ==========================================================================
     // MAIN APP COMPONENT
     // ==========================================================================
     const CalendarApp = {
+        components: {
+            ImportedEventsSection,
+        },
         template: `
             <div class="pit-calendar-container">
                 <!-- Header -->
@@ -646,18 +680,12 @@
                                     </div>
 
                                     <!-- Delete Imported Events -->
-                                    <div v-if="googleImportedCount > 0" class="imported-events-section">
-                                        <div class="imported-events-info">
-                                            <span class="imported-count">{{ googleImportedCount }} imported event{{ googleImportedCount !== 1 ? 's' : '' }}</span>
-                                            <p class="imported-desc">Events pulled from Google Calendar (not interview-linked)</p>
-                                        </div>
-                                        <button
-                                            class="btn-delete-imported"
-                                            @click="confirmDeleteImported('google')"
-                                            :disabled="deletingImported">
-                                            {{ deletingImported ? 'Deleting...' : 'Delete Imported Events' }}
-                                        </button>
-                                    </div>
+                                    <imported-events-section
+                                        provider="google"
+                                        :count="googleImportedCount"
+                                        :deleting="deletingImported"
+                                        @delete="confirmDeleteImported"
+                                    />
                                 </div>
                             </div>
 
@@ -729,18 +757,12 @@
                                         </div>
 
                                         <!-- Delete Imported Events -->
-                                        <div v-if="outlookImportedCount > 0" class="imported-events-section">
-                                            <div class="imported-events-info">
-                                                <span class="imported-count">{{ outlookImportedCount }} imported event{{ outlookImportedCount !== 1 ? 's' : '' }}</span>
-                                                <p class="imported-desc">Events pulled from Outlook Calendar (not interview-linked)</p>
-                                            </div>
-                                            <button
-                                                class="btn-delete-imported"
-                                                @click="confirmDeleteImported('outlook')"
-                                                :disabled="deletingImported">
-                                                {{ deletingImported ? 'Deleting...' : 'Delete Imported Events' }}
-                                            </button>
-                                        </div>
+                                        <imported-events-section
+                                            provider="outlook"
+                                            :count="outlookImportedCount"
+                                            :deleting="deletingImported"
+                                            @delete="confirmDeleteImported"
+                                        />
                                     </div>
                                 </div>
                             </div>
