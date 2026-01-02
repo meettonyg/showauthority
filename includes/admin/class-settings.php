@@ -40,6 +40,12 @@ class PIT_Settings {
         // Microsoft Outlook Calendar Integration
         'outlook_client_id' => '',
         'outlook_client_secret' => '',
+
+        // Calendar Sync Date Limits
+        'calendar_sync_days_back' => 30,      // Only sync events from last X days
+        'calendar_sync_days_forward' => 365,  // Sync events up to X days in the future
+        'calendar_cleanup_days_old' => 90,    // Delete local events older than X days
+        'calendar_cleanup_enabled' => true,   // Enable automatic cleanup of old events
     ];
 
     /**
@@ -273,6 +279,37 @@ class PIT_Settings {
                 'label' => 'Microsoft Outlook Client Secret',
                 'description' => 'OAuth 2.0 Client Secret from Azure Portal',
                 'required' => false,
+                'section' => 'calendar',
+            ],
+            'calendar_sync_days_back' => [
+                'type' => 'number',
+                'label' => 'Sync Days Back',
+                'description' => 'Only sync events from the last X days (0 = no limit)',
+                'min' => 0,
+                'default' => 30,
+                'section' => 'calendar',
+            ],
+            'calendar_sync_days_forward' => [
+                'type' => 'number',
+                'label' => 'Sync Days Forward',
+                'description' => 'Sync events up to X days in the future (0 = no limit)',
+                'min' => 0,
+                'default' => 365,
+                'section' => 'calendar',
+            ],
+            'calendar_cleanup_days_old' => [
+                'type' => 'number',
+                'label' => 'Cleanup Events Older Than',
+                'description' => 'Automatically delete local events older than X days (0 = never delete)',
+                'min' => 0,
+                'default' => 90,
+                'section' => 'calendar',
+            ],
+            'calendar_cleanup_enabled' => [
+                'type' => 'boolean',
+                'label' => 'Enable Auto-Cleanup',
+                'description' => 'Automatically delete old events from local database',
+                'default' => true,
                 'section' => 'calendar',
             ],
         ];

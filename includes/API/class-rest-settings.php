@@ -211,6 +211,23 @@ class PIT_REST_Settings {
             $sanitized['outlook_client_secret'] = sanitize_text_field($settings['outlook_client_secret']);
         }
 
+        // Calendar Sync Date Limits
+        if (isset($settings['calendar_sync_days_back'])) {
+            $sanitized['calendar_sync_days_back'] = absint($settings['calendar_sync_days_back']);
+        }
+
+        if (isset($settings['calendar_sync_days_forward'])) {
+            $sanitized['calendar_sync_days_forward'] = absint($settings['calendar_sync_days_forward']);
+        }
+
+        if (isset($settings['calendar_cleanup_days_old'])) {
+            $sanitized['calendar_cleanup_days_old'] = absint($settings['calendar_cleanup_days_old']);
+        }
+
+        if (isset($settings['calendar_cleanup_enabled'])) {
+            $sanitized['calendar_cleanup_enabled'] = (bool) $settings['calendar_cleanup_enabled'];
+        }
+
         return $sanitized;
     }
 }

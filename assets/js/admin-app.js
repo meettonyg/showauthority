@@ -971,6 +971,38 @@ const Settings = {
                             <li><code>User.Read</code> - Read user profile</li>
                         </ul>
                     </div>
+
+                    <h4>Sync & Cleanup Settings</h4>
+                    <p class="description">
+                        Control which events are synced and when old events are automatically cleaned up.
+                    </p>
+
+                    <div class="setting-row">
+                        <label for="calendar_sync_days_back">Sync Days Back</label>
+                        <input type="number" id="calendar_sync_days_back" v-model.number="settings.calendar_sync_days_back"
+                            min="0" max="365" class="small-text">
+                        <span class="description">Only sync events from the last X days (0 = no limit)</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="calendar_sync_days_forward">Sync Days Forward</label>
+                        <input type="number" id="calendar_sync_days_forward" v-model.number="settings.calendar_sync_days_forward"
+                            min="0" max="730" class="small-text">
+                        <span class="description">Sync events up to X days in the future (0 = no limit)</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="calendar_cleanup_days_old">Cleanup Events Older Than</label>
+                        <input type="number" id="calendar_cleanup_days_old" v-model.number="settings.calendar_cleanup_days_old"
+                            min="0" max="365" class="small-text">
+                        <span class="description">Automatically delete local events older than X days (0 = never delete)</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="calendar_cleanup_enabled">Enable Auto-Cleanup</label>
+                        <input type="checkbox" id="calendar_cleanup_enabled" v-model="settings.calendar_cleanup_enabled">
+                        <span class="description">Automatically delete old events from local database (runs daily)</span>
+                    </div>
                 </div>
 
                 <p class="submit">
@@ -999,6 +1031,11 @@ const Settings = {
                 google_client_secret: '',
                 outlook_client_id: '',
                 outlook_client_secret: '',
+                // Calendar Sync & Cleanup Settings
+                calendar_sync_days_back: 30,
+                calendar_sync_days_forward: 365,
+                calendar_cleanup_days_old: 90,
+                calendar_cleanup_enabled: true,
             },
             availablePlatforms: ['youtube', 'twitter', 'instagram', 'facebook', 'linkedin', 'tiktok', 'spotify', 'apple_podcasts'],
             saving: false,
