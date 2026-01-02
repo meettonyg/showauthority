@@ -305,6 +305,71 @@
     padding-bottom: 10px;
 }
 
+.settings-section h4 {
+    margin: 20px 0 10px 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.settings-section h4.google-heading {
+    color: #1e3a5f;
+}
+
+.settings-section h4.outlook-heading {
+    color: #0078d4;
+}
+
+/* Settings Info Boxes */
+.settings-info-box {
+    background: #f0f6fc;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+.settings-info-box strong {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.settings-info-box code {
+    background: #fff;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 5px;
+    word-break: break-all;
+}
+
+.settings-info-box .description {
+    margin-top: 5px;
+    display: block;
+}
+
+/* Settings Warning Box */
+.settings-warning-box {
+    background: #fff8e5;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 15px;
+    border: 1px solid #f0c36d;
+}
+
+.settings-warning-box strong {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.settings-warning-box ul {
+    margin: 5px 0 0 20px;
+    padding: 0;
+}
+
+.settings-warning-box code {
+    background: #fff;
+    padding: 1px 4px;
+    border-radius: 2px;
+}
+
 .setting-row {
     margin-bottom: 20px;
 }

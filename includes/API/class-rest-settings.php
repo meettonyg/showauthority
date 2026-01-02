@@ -193,6 +193,41 @@ class PIT_REST_Settings {
             $sanitized['formidable_auto_sync'] = (bool) $settings['formidable_auto_sync'];
         }
 
+        // Google Calendar Integration
+        if (isset($settings['google_client_id'])) {
+            $sanitized['google_client_id'] = sanitize_text_field($settings['google_client_id']);
+        }
+
+        if (isset($settings['google_client_secret'])) {
+            $sanitized['google_client_secret'] = sanitize_text_field($settings['google_client_secret']);
+        }
+
+        // Microsoft Outlook Calendar Integration
+        if (isset($settings['outlook_client_id'])) {
+            $sanitized['outlook_client_id'] = sanitize_text_field($settings['outlook_client_id']);
+        }
+
+        if (isset($settings['outlook_client_secret'])) {
+            $sanitized['outlook_client_secret'] = sanitize_text_field($settings['outlook_client_secret']);
+        }
+
+        // Calendar Sync Date Limits
+        if (isset($settings['calendar_sync_days_back'])) {
+            $sanitized['calendar_sync_days_back'] = absint($settings['calendar_sync_days_back']);
+        }
+
+        if (isset($settings['calendar_sync_days_forward'])) {
+            $sanitized['calendar_sync_days_forward'] = absint($settings['calendar_sync_days_forward']);
+        }
+
+        if (isset($settings['calendar_cleanup_days_old'])) {
+            $sanitized['calendar_cleanup_days_old'] = absint($settings['calendar_cleanup_days_old']);
+        }
+
+        if (isset($settings['calendar_cleanup_enabled'])) {
+            $sanitized['calendar_cleanup_enabled'] = (bool) $settings['calendar_cleanup_enabled'];
+        }
+
         return $sanitized;
     }
 }

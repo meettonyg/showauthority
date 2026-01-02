@@ -21,14 +21,23 @@ class PIT_Calendar_Sync_Job {
     const HOOK = 'pit_calendar_sync';
 
     /**
+     * Hook name for the cleanup cron job
+     */
+    const CLEANUP_HOOK = 'pit_calendar_cleanup';
+
+    /**
      * Initialize the job scheduler
      */
     public static function init() {
         // Schedule cron job if not already scheduled
         add_action('init', [__CLASS__, 'schedule_sync']);
+        add_action('init', [__CLASS__, 'schedule_cleanup']);
 
         // Hook the sync action
         add_action(self::HOOK, [__CLASS__, 'run_sync']);
+
+        // Hook the cleanup action
+        add_action(self::CLEANUP_HOOK, [__CLASS__, 'run_cleanup']);
 
         // Also run sync on user login (optional, for freshness)
         add_action('wp_login', [__CLASS__, 'sync_on_login'], 10, 2);
@@ -45,6 +54,17 @@ class PIT_Calendar_Sync_Job {
     }
 
     /**
+     * Schedule the cleanup cron job (runs daily)
+     */
+    public static function schedule_cleanup() {
+        if (!wp_next_scheduled(self::CLEANUP_HOOK)) {
+            // Run daily at 3:00 AM
+            $next_run = strtotime('tomorrow 3:00 AM');
+            wp_schedule_event($next_run, 'daily', self::CLEANUP_HOOK);
+        }
+    }
+
+    /**
      * Add custom cron interval
      */
     public static function add_cron_interval($schedules) {
@@ -53,6 +73,31 @@ class PIT_Calendar_Sync_Job {
             'display' => __('Every 15 Minutes', 'podcast-influence-tracker'),
         ];
         return $schedules;
+    }
+
+    /**
+     * Run cleanup for old calendar events
+     */
+    public static function run_cleanup() {
+        if (!class_exists('PIT_Calendar_Sync_Service')) {
+            return;
+        }
+
+        try {
+            $result = PIT_Calendar_Sync_Service::cleanup_old_events();
+
+            if (!$result['skipped']) {
+                error_log(sprintf(
+                    'PIT Calendar Cleanup: %s',
+                    $result['message']
+                ));
+            }
+        } catch (Exception $e) {
+            error_log(sprintf(
+                'PIT Calendar Cleanup: Exception: %s',
+                $e->getMessage()
+            ));
+        }
     }
 
     /**
@@ -175,6 +220,11 @@ class PIT_Calendar_Sync_Job {
         $timestamp = wp_next_scheduled(self::HOOK);
         if ($timestamp) {
             wp_unschedule_event($timestamp, self::HOOK);
+        }
+
+        $cleanup_timestamp = wp_next_scheduled(self::CLEANUP_HOOK);
+        if ($cleanup_timestamp) {
+            wp_unschedule_event($cleanup_timestamp, self::CLEANUP_HOOK);
         }
     }
 }

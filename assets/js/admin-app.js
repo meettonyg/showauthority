@@ -906,82 +906,102 @@ const Settings = {
                 </div>
 
                 <div class="settings-section">
-                    <h3>Formidable Forms Integration</h3>
+                    <h3>Calendar Integration</h3>
+                    <p class="description">
+                        Configure OAuth credentials to enable calendar sync for your users.
+                        Each user will connect their own calendar after you set up the app credentials.
+                    </p>
+
+                    <h4 class="google-heading">Google Calendar</h4>
+                    <p class="description">
+                        <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> →
+                        Create project → Enable Calendar API → Create OAuth 2.0 credentials
+                    </p>
 
                     <div class="setting-row">
-                        <label for="tracker_form_id">Interview Tracker Form ID</label>
-                        <input type="number" id="tracker_form_id" v-model="settings.tracker_form_id"
-                            min="0" class="small-text">
-                        <span class="description">The Formidable form ID for the Interview Tracker</span>
+                        <label for="google_client_id">Google Client ID</label>
+                        <input type="text" id="google_client_id" v-model="settings.google_client_id"
+                            placeholder="xxxx.apps.googleusercontent.com" class="regular-text">
+                        <span class="description">OAuth 2.0 Client ID from Google Cloud Console</span>
                     </div>
 
                     <div class="setting-row">
-                        <label for="rss_field_id">RSS Feed Field ID</label>
-                        <input type="number" id="rss_field_id" v-model="settings.rss_field_id"
-                            min="0" class="small-text">
-                        <span class="description">Field ID that contains the RSS feed URL</span>
+                        <label for="google_client_secret">Google Client Secret</label>
+                        <input type="password" id="google_client_secret" v-model="settings.google_client_secret"
+                            placeholder="GOCSPX-..." class="regular-text">
+                        <span class="description">OAuth 2.0 Client Secret (keep this private)</span>
                     </div>
 
-                    <div class="setting-row" style="margin-top:20px;padding-top:20px;border-top:1px solid #ddd">
-                        <h4 style="margin-top:0">Sync Interview Tracker Entries</h4>
-                        <p class="description" style="margin-bottom:10px">
-                            Sync existing Interview Tracker entries with the podcast database. 
-                            This will create podcast records for any entries not yet linked.
-                        </p>
-                        <div style="display:flex;align-items:center;gap:15px;flex-wrap:wrap">
-                            <button type="button" @click="syncFormidableEntries" class="button" :disabled="syncing">
-                                {{ syncing ? 'Syncing...' : 'Sync Now' }}
-                            </button>
-                            <button type="button" @click="retryFailedEntries" class="button" :disabled="retrying || !syncStats?.failed_entries">
-                                {{ retrying ? 'Retrying...' : 'Retry Failed (' + (syncStats?.failed_entries || 0) + ')' }}
-                            </button>
-                            <button type="button" @click="toggleFailedEntries" class="button" 
-                                v-if="syncStats?.failed_entries > 0">
-                                {{ showFailedEntries ? 'Hide Failed' : 'View Failed Entries' }}
-                            </button>
-                            <span v-if="syncStatus" :class="syncStatus.success ? 'success-message' : 'error-message'">
-                                {{ syncStatus.message }}
-                            </span>
-                        </div>
-                        <div v-if="syncStats" style="margin-top:15px;padding:10px;background:#f5f5f5;border-radius:4px">
-                            <strong>Sync Status:</strong>
-                            <ul style="margin:5px 0 0 20px;padding:0">
-                                <li>Total linked entries: {{ syncStats.total_entries }}</li>
-                                <li>Unique podcasts: {{ syncStats.unique_podcasts }}</li>
-                                <li>Failed entries: <span :style="syncStats.failed_entries > 0 ? 'color:#dc3232;font-weight:bold' : ''">{{ syncStats.failed_entries }}</span></li>
-                                <li v-if="syncStats.last_sync">Last sync: {{ formatDate(syncStats.last_sync) }}</li>
-                            </ul>
-                        </div>
+                    <div class="settings-info-box">
+                        <strong>Redirect URI:</strong>
+                        <code>{{ siteUrl }}/wp-json/pit/v1/calendar-sync/google/callback</code>
+                        <span class="description">Add this URI to your Google OAuth consent screen's authorized redirect URIs</span>
+                    </div>
 
-                        <!-- Failed Entries Table -->
-                        <div v-if="showFailedEntries && failedEntries.length > 0" style="margin-top:15px">
-                            <h4 style="margin-bottom:10px;color:#dc3232">Failed Entries ({{ failedEntries.length }})</h4>
-                            <table class="wp-list-table widefat fixed striped" style="margin-top:10px">
-                                <thead>
-                                    <tr>
-                                        <th style="width:80px">Entry ID</th>
-                                        <th>Podcast Name</th>
-                                        <th>RSS URL</th>
-                                        <th>Error</th>
-                                        <th style="width:80px">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="entry in failedEntries" :key="entry.id">
-                                        <td><strong>#{{ entry.formidable_entry_id }}</strong></td>
-                                        <td>{{ entry.podcast_name || '(Unknown)' }}</td>
-                                        <td style="word-break:break-all;font-size:12px">{{ entry.rss_url || '(No RSS)' }}</td>
-                                        <td style="color:#dc3232;font-size:12px">{{ entry.sync_error || 'Unknown error' }}</td>
-                                        <td>
-                                            <a :href="entry.edit_url" target="_blank" class="button button-small">Edit</a>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div v-else-if="showFailedEntries && loadingFailed" style="margin-top:15px;padding:20px;text-align:center">
-                            Loading failed entries...
-                        </div>
+                    <h4 class="outlook-heading">Microsoft Outlook</h4>
+                    <p class="description">
+                        <a href="https://portal.azure.com/" target="_blank" rel="noopener noreferrer">Azure Portal</a> →
+                        Azure Active Directory → App registrations → New registration
+                    </p>
+
+                    <div class="setting-row">
+                        <label for="outlook_client_id">Outlook Client ID</label>
+                        <input type="text" id="outlook_client_id" v-model="settings.outlook_client_id"
+                            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" class="regular-text">
+                        <span class="description">Application (client) ID from Azure Portal</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="outlook_client_secret">Outlook Client Secret</label>
+                        <input type="password" id="outlook_client_secret" v-model="settings.outlook_client_secret"
+                            placeholder="Client secret value" class="regular-text">
+                        <span class="description">Client secret value (not the secret ID)</span>
+                    </div>
+
+                    <div class="settings-info-box">
+                        <strong>Redirect URI:</strong>
+                        <code>{{ siteUrl }}/wp-json/pit/v1/calendar-sync/outlook/callback</code>
+                        <span class="description">Add this as a Web redirect URI in your Azure app registration</span>
+                    </div>
+
+                    <div class="settings-warning-box">
+                        <strong>Required API Permissions (Microsoft Graph):</strong>
+                        <ul>
+                            <li><code>Calendars.ReadWrite</code> - Read and write calendar events</li>
+                            <li><code>User.Read</code> - Read user profile</li>
+                        </ul>
+                    </div>
+
+                    <h4>Sync & Cleanup Settings</h4>
+                    <p class="description">
+                        Control which events are synced and when old events are automatically cleaned up.
+                    </p>
+
+                    <div class="setting-row">
+                        <label for="calendar_sync_days_back">Sync Days Back</label>
+                        <input type="number" id="calendar_sync_days_back" v-model.number="settings.calendar_sync_days_back"
+                            min="0" max="365" class="small-text">
+                        <span class="description">Only sync events from the last X days (0 = no limit)</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="calendar_sync_days_forward">Sync Days Forward</label>
+                        <input type="number" id="calendar_sync_days_forward" v-model.number="settings.calendar_sync_days_forward"
+                            min="0" max="730" class="small-text">
+                        <span class="description">Sync events up to X days in the future (0 = no limit)</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="calendar_cleanup_days_old">Cleanup Events Older Than</label>
+                        <input type="number" id="calendar_cleanup_days_old" v-model.number="settings.calendar_cleanup_days_old"
+                            min="0" max="365" class="small-text">
+                        <span class="description">Automatically delete local events older than X days (0 = never delete)</span>
+                    </div>
+
+                    <div class="setting-row">
+                        <label for="calendar_cleanup_enabled">Enable Auto-Cleanup</label>
+                        <input type="checkbox" id="calendar_cleanup_enabled" v-model="settings.calendar_cleanup_enabled">
+                        <span class="description">Automatically delete old events from local database (runs daily)</span>
                     </div>
                 </div>
 
@@ -1006,22 +1026,27 @@ const Settings = {
                 cache_duration: 7,
                 auto_refresh: true,
                 default_platforms: ['youtube', 'twitter', 'instagram'],
-                tracker_form_id: '',
-                rss_field_id: '',
+                // Calendar Integration
+                google_client_id: '',
+                google_client_secret: '',
+                outlook_client_id: '',
+                outlook_client_secret: '',
+                // Calendar Sync & Cleanup Settings
+                calendar_sync_days_back: 30,
+                calendar_sync_days_forward: 365,
+                calendar_cleanup_days_old: 90,
+                calendar_cleanup_enabled: true,
             },
             availablePlatforms: ['youtube', 'twitter', 'instagram', 'facebook', 'linkedin', 'tiktok', 'spotify', 'apple_podcasts'],
             saving: false,
             saved: false,
             error: null,
-            syncing: false,
-            syncStatus: null,
-            syncStats: null,
-            // Failed entries handling
-            showFailedEntries: false,
-            failedEntries: [],
-            loadingFailed: false,
-            retrying: false,
         };
+    },
+    computed: {
+        siteUrl() {
+            return pitData.siteUrl || window.location.origin;
+        },
     },
     methods: {
         formatDate(dateStr) {
@@ -1082,120 +1107,6 @@ const Settings = {
                 this.saving = false;
             }
         },
-        async syncFormidableEntries() {
-            this.syncing = true;
-            this.syncStatus = null;
-
-            try {
-                const response = await fetch(`${pitData.apiUrl}/formidable/sync`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-WP-Nonce': pitData.nonce,
-                    },
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.message || 'Sync failed');
-                }
-
-                this.syncStatus = {
-                    success: true,
-                    message: `Synced ${data.synced || 0} entries, created ${data.podcasts_created || 0} podcasts`,
-                };
-
-                // Refresh stats after sync
-                await this.fetchSyncStats();
-                
-                // Refresh failed entries if showing
-                if (this.showFailedEntries) {
-                    await this.fetchFailedEntries();
-                }
-            } catch (error) {
-                this.syncStatus = {
-                    success: false,
-                    message: error.message,
-                };
-            } finally {
-                this.syncing = false;
-            }
-        },
-        async fetchSyncStats() {
-            try {
-                const response = await fetch(`${pitData.apiUrl}/formidable/status`, {
-                    headers: { 'X-WP-Nonce': pitData.nonce },
-                });
-
-                if (response.ok) {
-                    this.syncStats = await response.json();
-                }
-            } catch (error) {
-                console.error('Failed to fetch sync stats:', error);
-            }
-        },
-        async toggleFailedEntries() {
-            this.showFailedEntries = !this.showFailedEntries;
-            if (this.showFailedEntries && this.failedEntries.length === 0) {
-                await this.fetchFailedEntries();
-            }
-        },
-        async fetchFailedEntries() {
-            this.loadingFailed = true;
-            try {
-                const response = await fetch(`${pitData.apiUrl}/formidable/failed`, {
-                    headers: { 'X-WP-Nonce': pitData.nonce },
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    this.failedEntries = data.failed_entries || [];
-                }
-            } catch (error) {
-                console.error('Failed to fetch failed entries:', error);
-            } finally {
-                this.loadingFailed = false;
-            }
-        },
-        async retryFailedEntries() {
-            this.retrying = true;
-            this.syncStatus = null;
-
-            try {
-                const response = await fetch(`${pitData.apiUrl}/formidable/retry`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-WP-Nonce': pitData.nonce,
-                    },
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.message || 'Retry failed');
-                }
-
-                this.syncStatus = {
-                    success: true,
-                    message: `Retried ${data.retried || 0} entries`,
-                };
-
-                // Refresh stats and failed entries
-                await this.fetchSyncStats();
-                if (this.showFailedEntries) {
-                    await this.fetchFailedEntries();
-                }
-            } catch (error) {
-                this.syncStatus = {
-                    success: false,
-                    message: error.message,
-                };
-            } finally {
-                this.retrying = false;
-            }
-        },
     },
     mounted() {
         // Load initial settings from pitData if available
@@ -1203,7 +1114,6 @@ const Settings = {
             this.settings = { ...this.settings, ...pitData.settings };
         }
         this.fetchSettings();
-        this.fetchSyncStats();
     },
 };
 
