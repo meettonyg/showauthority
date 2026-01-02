@@ -819,6 +819,49 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Event Popover Preview -->
+                <div
+                    v-show="showEventPopover && popoverEvent"
+                    class="event-popover"
+                    :style="{ top: popoverPosition.top + 'px', left: popoverPosition.left + 'px' }"
+                    @mouseenter="clearPopoverTimeout"
+                    @mouseleave="hideEventPopover">
+                    <div class="popover-header" :style="{ backgroundColor: popoverEvent?.colors?.bg || '#3b82f6' }">
+                        <span class="popover-icon" v-html="getEventIconHtml(popoverEvent || {})"></span>
+                        <span class="popover-type">{{ getEventTypeLabel(popoverEvent?.event_type) }}</span>
+                    </div>
+                    <div class="popover-body">
+                        <h4 class="popover-title">{{ popoverEvent?.title }}</h4>
+                        <div class="popover-datetime">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            <span>{{ formatPopoverDateTime(popoverEvent) }}</span>
+                        </div>
+                        <div v-if="popoverEvent?.location" class="popover-location">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
+                            <span>{{ popoverEvent.location }}</span>
+                        </div>
+                        <div v-if="popoverEvent?.appearance_id" class="popover-link">
+                            <a :href="'/interview/' + popoverEvent.appearance_id" class="view-interview-link">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                                </svg>
+                                View Interview Details
+                            </a>
+                        </div>
+                    </div>
+                    <div class="popover-footer">
+                        <span class="popover-hint">Click event to edit</span>
+                    </div>
+                </div>
             </div>
         `,
 
@@ -858,6 +901,12 @@
             const googleImportedCount = ref(0);
             const outlookImportedCount = ref(0);
             const deletingImported = ref(false);
+
+            // Event popover state
+            const showEventPopover = ref(false);
+            const popoverEvent = ref(null);
+            const popoverPosition = ref({ top: 0, left: 0 });
+            let popoverTimeout = null;
 
             // Event form
             const eventForm = reactive({
@@ -973,6 +1022,71 @@
                 return result;
             };
 
+            // Popover helper functions
+            const getEventTypeLabel = (eventType) => {
+                const labels = {
+                    recording: 'Recording',
+                    air_date: 'Air Date',
+                    prep_call: 'Prep Call',
+                    follow_up: 'Follow Up',
+                    promotion: 'Promotion',
+                    deadline: 'Deadline',
+                    podrec: 'Podcast Recording',
+                    other: 'Event',
+                };
+                return labels[eventType] || 'Event';
+            };
+
+            const formatPopoverDateTime = (event) => {
+                if (!event?.start) return '';
+
+                const start = new Date(event.start);
+                const dateStr = start.toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                });
+
+                if (event.is_all_day) {
+                    return dateStr + ' (All Day)';
+                }
+
+                const timeStr = start.toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                });
+
+                let result = dateStr + ' at ' + timeStr;
+
+                if (event.end) {
+                    const end = new Date(event.end);
+                    const endTimeStr = end.toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                    });
+                    result += ' - ' + endTimeStr;
+                }
+
+                return result;
+            };
+
+            const hidePopover = () => {
+                clearTimeout(popoverTimeout);
+                showEventPopover.value = false;
+            };
+
+            const clearPopoverTimeout = () => {
+                clearTimeout(popoverTimeout);
+            };
+
+            const hideEventPopover = () => {
+                popoverTimeout = setTimeout(() => {
+                    showEventPopover.value = false;
+                }, 200);
+            };
+
             const setView = (view) => {
                 currentView.value = view;
                 if (view === 'calendar') {
@@ -1080,12 +1194,42 @@
                         }
                     },
                     eventClick: (info) => {
+                        hidePopover(); // Hide popover when clicking
                         const event = {
                             ...info.event.extendedProps,
                             id: parseInt(info.event.id),
                         };
                         store.setSelectedEvent(event);
                         showDetailModal.value = true;
+                    },
+                    eventMouseEnter: (info) => {
+                        // Show popover after a short delay
+                        clearTimeout(popoverTimeout);
+                        popoverTimeout = setTimeout(() => {
+                            const rect = info.el.getBoundingClientRect();
+                            const containerRect = calendarEl.value?.getBoundingClientRect() || { top: 0, left: 0 };
+
+                            // Position popover below and to the right of the event
+                            popoverPosition.value = {
+                                top: rect.bottom - containerRect.top + 8,
+                                left: rect.left - containerRect.left,
+                            };
+
+                            popoverEvent.value = {
+                                ...info.event.extendedProps,
+                                title: info.event.title,
+                                start: info.event.start,
+                                end: info.event.end,
+                            };
+                            showEventPopover.value = true;
+                        }, 300); // 300ms delay before showing
+                    },
+                    eventMouseLeave: () => {
+                        // Hide popover after a short delay (allows moving to popover)
+                        clearTimeout(popoverTimeout);
+                        popoverTimeout = setTimeout(() => {
+                            showEventPopover.value = false;
+                        }, 200);
                     },
                     dateClick: (info) => {
                         resetEventForm();
@@ -1812,6 +1956,11 @@
                 syncDirection,
                 syncEnabled,
 
+                // Popover state
+                showEventPopover,
+                popoverEvent,
+                popoverPosition,
+
                 // Computed
                 loading,
                 error,
@@ -1824,9 +1973,13 @@
                 getEventColor,
                 isImportedEvent,
                 getEventIconHtml,
+                getEventTypeLabel,
                 formatGroupDate,
                 formatTime,
                 formatEventDateTime,
+                formatPopoverDateTime,
+                hideEventPopover,
+                clearPopoverTimeout,
                 setView,
                 applyFilter,
                 refreshEvents,
