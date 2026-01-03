@@ -122,6 +122,9 @@ class Podcast_Influence_Tracker {
         // COST TRACKING
         require_once PIT_PLUGIN_DIR . 'includes/class-cost-tracker.php';
 
+        // VIRTUAL PAGES (v4.2)
+        require_once PIT_PLUGIN_DIR . 'includes/class-virtual-pages.php';
+
         // FRONTEND / SHORTCODES
         require_once PIT_PLUGIN_DIR . 'includes/class-shortcodes.php';
 
@@ -190,6 +193,9 @@ class Podcast_Influence_Tracker {
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
         add_action('wp_enqueue_scripts', [$this, 'enqueue_frontend_scripts']);
 
+        // Virtual pages (v4.2)
+        PIT_Virtual_Pages::init();
+
         // AJAX handlers for admin diagnostics
         add_action('wp_ajax_pit_enrichment_status', [$this, 'ajax_enrichment_status']);
         add_action('wp_ajax_pit_test_single_enrichment', [$this, 'ajax_test_single_enrichment']);
@@ -207,6 +213,9 @@ class Podcast_Influence_Tracker {
         // Create notifications table (v3.6+)
         PIT_Notifications_Schema::create_table();
         update_option('pit_notifications_table_created', '1');
+
+        // Register virtual pages rewrite rules (v4.2)
+        PIT_Virtual_Pages::activate();
 
         if (!wp_next_scheduled('pit_background_refresh')) {
             wp_schedule_event(time(), 'weekly', 'pit_background_refresh');
