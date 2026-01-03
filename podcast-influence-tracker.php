@@ -160,6 +160,7 @@ class Podcast_Influence_Tracker {
         // MIGRATIONS
         require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
         require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-events-schema.php';
+        require_once PIT_PLUGIN_DIR . 'includes/database/class-notifications-schema.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-tracker-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-detail-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-calendar-shortcode.php';
@@ -174,6 +175,10 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/integrations/class-appearance-calendar-sync.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-calendar-sync.php';
         require_once PIT_PLUGIN_DIR . 'includes/Jobs/class-calendar-sync-job.php';
+
+        // NOTIFICATIONS (v3.6+)
+        require_once PIT_PLUGIN_DIR . 'includes/Jobs/class-notification-processor.php';
+        require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-notifications.php';
     }
 
     private function init_hooks() {
@@ -199,6 +204,10 @@ class Podcast_Influence_Tracker {
         PIT_Calendar_Connections_Schema::create_table();
         update_option('pit_calendar_tables_created', '1');
 
+        // Create notifications table (v3.6+)
+        PIT_Notifications_Schema::create_table();
+        update_option('pit_notifications_table_created', '1');
+
         if (!wp_next_scheduled('pit_background_refresh')) {
             wp_schedule_event(time(), 'weekly', 'pit_background_refresh');
         }
@@ -211,6 +220,9 @@ class Podcast_Influence_Tracker {
         if (!wp_next_scheduled('pit_monthly_usage_reset')) {
             wp_schedule_event(time(), 'daily', 'pit_monthly_usage_reset');
         }
+        if (!wp_next_scheduled('pit_process_notifications')) {
+            wp_schedule_event(time(), 'every_fifteen_minutes', 'pit_process_notifications');
+        }
 
         flush_rewrite_rules();
     }
@@ -220,9 +232,11 @@ class Podcast_Influence_Tracker {
         wp_clear_scheduled_hook('pit_process_jobs');
         wp_clear_scheduled_hook('pit_rate_limit_cleanup');
         wp_clear_scheduled_hook('pit_monthly_usage_reset');
+        wp_clear_scheduled_hook('pit_process_notifications');
         PIT_Calendar_Sync_Job::deactivate();
         // Reset calendar tables flag so they're checked on reactivation
         delete_option('pit_calendar_tables_created');
+        delete_option('pit_notifications_table_created');
         flush_rewrite_rules();
     }
 
@@ -245,6 +259,14 @@ class Podcast_Influence_Tracker {
             update_option('pit_calendar_tables_created', '1');
         }
 
+        // Ensure notifications table exists (v3.6+)
+        if (get_option('pit_notifications_table_created') !== '1') {
+            if (!PIT_Notifications_Schema::table_exists()) {
+                PIT_Notifications_Schema::create_table();
+            }
+            update_option('pit_notifications_table_created', '1');
+        }
+
         add_filter('cron_schedules', [$this, 'add_cron_schedules']);
 
         PIT_Admin_Page::init();
@@ -259,10 +281,12 @@ class Podcast_Influence_Tracker {
         PIT_Tasks_Shortcode::init();
         PIT_Notes_Shortcode::init();
         PIT_Calendar_Sync_Job::init();
+        PIT_Notification_Processor::init();
 
         add_action('pit_process_jobs', ['PIT_Job_Queue', 'process_next_job']);
         add_action('pit_rate_limit_cleanup', ['PIT_Rate_Limiter', 'cleanup']);
         add_action('pit_monthly_usage_reset', ['PIT_User_Limits_Repository', 'reset_monthly_usage']);
+        add_action('pit_process_notifications', ['PIT_Notification_Processor', 'process']);
     }
 
     public function register_rest_routes() {
@@ -291,12 +315,19 @@ class Podcast_Influence_Tracker {
 
         // v4.2 Guestify Outreach Bridge - Email Integration
         PIT_REST_Guestify_Bridge::register_routes();
+
+        // v3.6 Notifications
+        PIT_REST_Notifications::register_routes();
     }
 
     public function add_cron_schedules($schedules) {
         $schedules['every_minute'] = [
             'interval' => 60,
             'display' => __('Every Minute', 'podcast-influence-tracker'),
+        ];
+        $schedules['every_fifteen_minutes'] = [
+            'interval' => 900,
+            'display' => __('Every 15 Minutes', 'podcast-influence-tracker'),
         ];
         return $schedules;
     }

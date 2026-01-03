@@ -39,6 +39,7 @@
         task_type: 'todo',
         priority: 'medium',
         due_date: '',
+        reminder_date: '',
     });
 
     // =====================================================
@@ -628,6 +629,17 @@
                                     v-model="store.newTask.due_date"
                                     class="pit-form-input"
                                 />
+                            </div>
+
+                            <!-- Reminder Date -->
+                            <div class="pit-form-group">
+                                <label class="pit-form-label">{{ t('reminderDate') }}</label>
+                                <input
+                                    type="date"
+                                    v-model="store.newTask.reminder_date"
+                                    class="pit-form-input"
+                                />
+                                <p class="pit-form-help">{{ t('reminderHelp') }}</p>
                             </div>
                         </div>
 

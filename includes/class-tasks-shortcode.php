@@ -120,6 +120,8 @@ class PIT_Tasks_Shortcode {
             'allPriorities'      => __('All Priorities', 'podcast-influence-tracker'),
             'newestFirst'        => __('Newest First', 'podcast-influence-tracker'),
             'dueDate'            => __('Due Date', 'podcast-influence-tracker'),
+            'reminderDate'       => __('Reminder Date', 'podcast-influence-tracker'),
+            'reminderHelp'       => __('Get notified on this date about this task', 'podcast-influence-tracker'),
             'priority'           => __('Priority', 'podcast-influence-tracker'),
             'clearFilters'       => __('Clear Filters', 'podcast-influence-tracker'),
 
