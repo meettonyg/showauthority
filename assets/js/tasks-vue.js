@@ -31,6 +31,16 @@
         nonce: pitTasksData.nonce,
     });
 
+    // Factory function for creating default newTask object
+    const createDefaultTask = () => ({
+        appearance_id: '',
+        title: '',
+        description: '',
+        task_type: 'todo',
+        priority: 'medium',
+        due_date: '',
+    });
+
     // =====================================================
     // PINIA STORE
     // =====================================================
@@ -63,14 +73,7 @@
             createError: null,
             appearances: [],
             appearancesLoading: false,
-            newTask: {
-                appearance_id: '',
-                title: '',
-                description: '',
-                task_type: 'todo',
-                priority: 'medium',
-                due_date: '',
-            },
+            newTask: createDefaultTask(),
         }),
 
         getters: {
@@ -204,14 +207,7 @@
             },
 
             resetNewTask() {
-                this.newTask = {
-                    appearance_id: '',
-                    title: '',
-                    description: '',
-                    task_type: 'todo',
-                    priority: 'medium',
-                    due_date: '',
-                };
+                this.newTask = createDefaultTask();
             },
 
             async fetchAppearances() {
@@ -253,12 +249,10 @@
                         payload.due_date = this.newTask.due_date;
                     }
 
-                    const result = await api.post('tasks', payload);
+                    await api.post('tasks', payload);
 
-                    // Add the new task to the list if it matches current filters
-                    if (result.data) {
-                        this.tasks.unshift(result.data);
-                    }
+                    // Refresh the tasks list to show the new task while respecting current filters
+                    this.fetchTasks();
 
                     // Refresh stats
                     this.fetchStats();

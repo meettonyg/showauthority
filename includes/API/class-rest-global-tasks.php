@@ -75,10 +75,24 @@ class PIT_REST_Global_Tasks {
                     'due_date' => [
                         'type'              => 'string',
                         'sanitize_callback' => 'sanitize_text_field',
+                        'validate_callback' => function($value) {
+                            if (empty($value)) {
+                                return true;
+                            }
+                            $d = DateTime::createFromFormat('Y-m-d', $value);
+                            return $d && $d->format('Y-m-d') === $value;
+                        },
                     ],
                     'reminder_date' => [
                         'type'              => 'string',
                         'sanitize_callback' => 'sanitize_text_field',
+                        'validate_callback' => function($value) {
+                            if (empty($value)) {
+                                return true;
+                            }
+                            $d = DateTime::createFromFormat('Y-m-d', $value);
+                            return $d && $d->format('Y-m-d') === $value;
+                        },
                     ],
                 ],
             ],
@@ -188,17 +202,24 @@ class PIT_REST_Global_Tasks {
 
         $tasks_table = $wpdb->prefix . 'pit_appearance_tasks';
         $appearances_table = $wpdb->prefix . 'pit_guest_appearances';
+        $opportunities_table = $wpdb->prefix . 'pit_opportunities';
         $podcasts_table = $wpdb->prefix . 'pit_podcasts';
         $user_id = get_current_user_id();
 
         // Build query with joins to get appearance and podcast context
+        // Support both pit_guest_appearances and pit_opportunities tables
         $select = "SELECT t.*,
-                   a.podcast_id, a.status as appearance_status, a.episode_title,
-                   p.title as podcast_name, p.artwork_url as podcast_artwork";
+                   COALESCE(a.podcast_id, o.podcast_id) as podcast_id,
+                   COALESCE(a.status, o.status) as appearance_status,
+                   a.episode_title,
+                   COALESCE(p1.title, p2.title) as podcast_name,
+                   COALESCE(p1.artwork_url, p2.artwork_url) as podcast_artwork";
 
         $from = " FROM {$tasks_table} t
-                  INNER JOIN {$appearances_table} a ON t.appearance_id = a.id
-                  LEFT JOIN {$podcasts_table} p ON a.podcast_id = p.id";
+                  LEFT JOIN {$appearances_table} a ON t.appearance_id = a.id
+                  LEFT JOIN {$opportunities_table} o ON t.appearance_id = o.id AND a.id IS NULL
+                  LEFT JOIN {$podcasts_table} p1 ON a.podcast_id = p1.id
+                  LEFT JOIN {$podcasts_table} p2 ON o.podcast_id = p2.id";
 
         $where = ['t.user_id = %d'];
         $params = [$user_id];
@@ -209,9 +230,10 @@ class PIT_REST_Global_Tasks {
             $params[] = $appearance_id;
         }
 
-        // Filter by podcast
+        // Filter by podcast (check both tables)
         if ($podcast_id = $request->get_param('podcast_id')) {
-            $where[] = 'a.podcast_id = %d';
+            $where[] = '(a.podcast_id = %d OR o.podcast_id = %d)';
+            $params[] = $podcast_id;
             $params[] = $podcast_id;
         }
 
@@ -243,10 +265,11 @@ class PIT_REST_Global_Tasks {
             $params[] = $due_to;
         }
 
-        // Search in title and description
+        // Search in title and description (check both podcast tables)
         if ($search = $request->get_param('search')) {
             $like = '%' . $wpdb->esc_like($search) . '%';
-            $where[] = '(t.title LIKE %s OR t.description LIKE %s OR p.title LIKE %s)';
+            $where[] = '(t.title LIKE %s OR t.description LIKE %s OR p1.title LIKE %s OR p2.title LIKE %s)';
+            $params[] = $like;
             $params[] = $like;
             $params[] = $like;
             $params[] = $like;
@@ -516,6 +539,7 @@ class PIT_REST_Global_Tasks {
 
     /**
      * GET /tasks/appearances - Get appearances for task creation dropdown
+     * Fetches from both pit_opportunities and pit_guest_appearances tables
      */
     public static function get_appearances_for_tasks($request) {
         global $wpdb;
@@ -523,38 +547,57 @@ class PIT_REST_Global_Tasks {
         $user_id = get_current_user_id();
         $search = $request->get_param('search');
 
-        // Get from opportunities table (primary)
         $opportunities_table = $wpdb->prefix . 'pit_opportunities';
+        $appearances_table = $wpdb->prefix . 'pit_guest_appearances';
         $podcasts_table = $wpdb->prefix . 'pit_podcasts';
 
-        $where = ['o.user_id = %d', '(o.is_archived = 0 OR o.is_archived IS NULL)'];
-        $params = [$user_id];
-
+        // Build search condition
+        $search_condition = '';
+        $search_params = [];
         if ($search) {
             $like = '%' . $wpdb->esc_like($search) . '%';
-            $where[] = 'p.title LIKE %s';
-            $params[] = $like;
+            $search_condition = 'AND p.title LIKE %s';
+            $search_params = [$like];
         }
 
-        $where_sql = implode(' AND ', $where);
-
-        $appearances = $wpdb->get_results($wpdb->prepare(
-            "SELECT o.id, o.status,
-                    p.title as podcast_name, p.artwork_url as podcast_artwork
+        // Query opportunities table
+        $opp_params = array_merge([$user_id], $search_params);
+        $opp_sql = $wpdb->prepare(
+            "SELECT o.id, o.status, 'opportunity' as source,
+                    p.title as podcast_name, p.artwork_url as podcast_artwork,
+                    o.updated_at
              FROM {$opportunities_table} o
              LEFT JOIN {$podcasts_table} p ON o.podcast_id = p.id
-             WHERE {$where_sql}
-             ORDER BY o.updated_at DESC
-             LIMIT 100",
-            $params
-        ), ARRAY_A);
+             WHERE o.user_id = %d
+             AND (o.is_archived = 0 OR o.is_archived IS NULL)
+             {$search_condition}",
+            $opp_params
+        );
+
+        // Query guest_appearances table
+        $app_params = array_merge([$user_id], $search_params);
+        $app_sql = $wpdb->prepare(
+            "SELECT a.id, a.status, 'appearance' as source,
+                    p.title as podcast_name, p.artwork_url as podcast_artwork,
+                    a.updated_at
+             FROM {$appearances_table} a
+             LEFT JOIN {$podcasts_table} p ON a.podcast_id = p.id
+             WHERE a.user_id = %d
+             {$search_condition}",
+            $app_params
+        );
+
+        // Combine with UNION and order by updated_at
+        $combined_sql = "({$opp_sql}) UNION ({$app_sql}) ORDER BY updated_at DESC LIMIT 100";
+        $appearances = $wpdb->get_results($combined_sql, ARRAY_A);
 
         $data = array_map(function($row) {
             return [
-                'id'             => (int) $row['id'],
-                'podcast_name'   => $row['podcast_name'] ?: 'Unknown Podcast',
+                'id'              => (int) $row['id'],
+                'podcast_name'    => $row['podcast_name'] ?: 'Unknown Podcast',
                 'podcast_artwork' => $row['podcast_artwork'] ?: '',
-                'status'         => $row['status'] ?: 'potential',
+                'status'          => $row['status'] ?: 'potential',
+                'source'          => $row['source'],
             ];
         }, $appearances ?: []);
 
