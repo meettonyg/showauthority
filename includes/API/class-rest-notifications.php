@@ -496,6 +496,14 @@ class PIT_REST_Notifications {
 
         $result = PIT_Push_Subscriptions_Schema::delete_by_endpoint($endpoint);
 
+        if ($result === false) {
+            return new WP_Error(
+                'delete_failed',
+                'Failed to remove push subscription from database.',
+                ['status' => 500]
+            );
+        }
+
         return rest_ensure_response([
             'success' => true,
             'message' => 'Push subscription removed',

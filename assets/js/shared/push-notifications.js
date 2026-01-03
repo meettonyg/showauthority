@@ -10,22 +10,35 @@
 const PushNotifications = (function() {
     'use strict';
 
-    // VAPID public key (to be set from WordPress)
-    let vapidPublicKey = null;
-    let apiNonce = null;
-    let swPath = '/wp-content/plugins/podcast-influence-tracker/assets/js/sw-push.js';
+    // Configuration (set via init)
+    let config = {
+        vapidPublicKey: null,
+        nonce: '',
+        serviceWorkerPath: '/wp-content/plugins/podcast-influence-tracker/assets/js/sw-push.js',
+        restUrl: '/wp-json/guestify/v1/',
+        pluginUrl: '/wp-content/plugins/podcast-influence-tracker/'
+    };
     let isInitialized = false;
 
     /**
      * Initialize the push notifications manager
-     * @param {Object} config Configuration object
+     * @param {Object} options Configuration object
+     * @param {string} options.vapidPublicKey - VAPID public key
+     * @param {string} options.nonce - WordPress REST API nonce
+     * @param {string} options.serviceWorkerPath - Path to service worker file
+     * @param {string} options.restUrl - Base REST API URL (e.g., '/wp-json/guestify/v1/')
+     * @param {string} options.pluginUrl - Plugin base URL for assets
      */
-    function init(config) {
+    function init(options) {
         if (isInitialized) return;
 
-        vapidPublicKey = config.vapidPublicKey || null;
-        apiNonce = config.nonce || '';
-        swPath = config.serviceWorkerPath || swPath;
+        config = {
+            vapidPublicKey: options.vapidPublicKey || null,
+            nonce: options.nonce || '',
+            serviceWorkerPath: options.serviceWorkerPath || config.serviceWorkerPath,
+            restUrl: options.restUrl || config.restUrl,
+            pluginUrl: options.pluginUrl || config.pluginUrl
+        };
 
         isInitialized = true;
     }
@@ -57,6 +70,18 @@ const PushNotifications = (function() {
     }
 
     /**
+     * Build service worker URL with config params
+     * @returns {string}
+     */
+    function buildServiceWorkerUrl() {
+        const url = new URL(config.serviceWorkerPath, window.location.origin);
+        url.searchParams.set('vapidKey', config.vapidPublicKey || '');
+        url.searchParams.set('restUrl', config.restUrl);
+        url.searchParams.set('pluginUrl', config.pluginUrl);
+        return url.toString();
+    }
+
+    /**
      * Register the service worker
      * @returns {Promise<ServiceWorkerRegistration>}
      */
@@ -66,7 +91,9 @@ const PushNotifications = (function() {
         }
 
         try {
-            const registration = await navigator.serviceWorker.register(swPath, {
+            // Pass config to service worker via URL params
+            const swUrl = buildServiceWorkerUrl();
+            const registration = await navigator.serviceWorker.register(swUrl, {
                 scope: '/'
             });
             console.log('Service Worker registered:', registration.scope);
@@ -91,7 +118,7 @@ const PushNotifications = (function() {
      * @returns {Promise<Object>} Subscription details
      */
     async function subscribe() {
-        if (!vapidPublicKey) {
+        if (!config.vapidPublicKey) {
             throw new Error('VAPID public key not configured');
         }
 
@@ -103,19 +130,19 @@ const PushNotifications = (function() {
         const registration = await navigator.serviceWorker.ready;
 
         // Convert VAPID key to Uint8Array
-        const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+        const applicationServerKey = urlBase64ToUint8Array(config.vapidPublicKey);
 
         const subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: applicationServerKey
         });
 
-        // Send subscription to server
-        const response = await fetch('/wp-json/guestify/v1/notifications/subscribe', {
+        // Send subscription to server using configured REST URL
+        const response = await fetch(config.restUrl + 'notifications/subscribe', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-WP-Nonce': apiNonce
+                'X-WP-Nonce': config.nonce
             },
             credentials: 'same-origin',
             body: JSON.stringify({
@@ -152,12 +179,12 @@ const PushNotifications = (function() {
             throw new Error('Failed to unsubscribe from browser');
         }
 
-        // Remove from server
-        await fetch('/wp-json/guestify/v1/notifications/unsubscribe', {
+        // Remove from server using configured REST URL
+        await fetch(config.restUrl + 'notifications/unsubscribe', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-WP-Nonce': apiNonce
+                'X-WP-Nonce': config.nonce
             },
             credentials: 'same-origin',
             body: JSON.stringify({ endpoint: endpoint })

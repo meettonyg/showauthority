@@ -5,6 +5,14 @@
  * Handles sending push notifications to subscribed browsers
  * using the Web Push protocol.
  *
+ * IMPORTANT: The payload encryption in this class is a placeholder implementation.
+ * For production use, you MUST either:
+ * 1. Install and use the minishlink/web-push library (recommended):
+ *    composer require minishlink/web-push
+ * 2. Implement full RFC 8291 encryption (ECDH + HKDF + AES-128-GCM)
+ *
+ * Without proper encryption, push notifications will be rejected by push services.
+ *
  * @package Podcast_Influence_Tracker
  * @since 3.6.0
  */
@@ -171,7 +179,7 @@ class PIT_Web_Push_Sender {
         $payload = [
             'aud' => $audience,
             'exp' => $expiration,
-            'sub' => 'mailto:notifications@guestify.ai',
+            'sub' => 'mailto:' . get_option('admin_email', 'notifications@guestify.ai'),
         ];
 
         $header_b64 = self::base64url_encode(json_encode($header));
@@ -240,6 +248,7 @@ class PIT_Web_Push_Sender {
      */
     private static function encrypt_payload($payload, $p256dh, $auth) {
         if (!function_exists('openssl_pkey_new')) {
+            error_log('PIT Web Push: OpenSSL extension not available');
             return false;
         }
 
@@ -254,6 +263,7 @@ class PIT_Web_Push_Sender {
         ]);
 
         if (!$server_key) {
+            error_log('PIT Web Push: Failed to generate EC key pair');
             return false;
         }
 
@@ -261,18 +271,21 @@ class PIT_Web_Push_Sender {
         $server_public = $server_details['ec']['x'] . $server_details['ec']['y'];
         $server_public = "\x04" . $server_public; // Uncompressed point format
 
-        // Note: Full Web Push encryption is complex and requires additional
-        // cryptographic operations. For production, consider using a library
-        // like minishlink/web-push or implementing the full RFC 8291 spec.
+        // WARNING: This is a PLACEHOLDER implementation!
+        // Full Web Push encryption requires RFC 8291 compliance:
+        // 1. Compute ECDH shared secret between server and client keys
+        // 2. Derive encryption keys using HKDF with auth secret
+        // 3. Encrypt payload with AES-128-GCM
+        //
+        // For production, install minishlink/web-push via Composer:
+        //   composer require minishlink/web-push
+        //
+        // Push services will REJECT unencrypted payloads.
+        error_log('PIT Web Push: WARNING - Using placeholder encryption. Install minishlink/web-push for production use.');
 
-        // This is a simplified placeholder - in production, you would:
-        // 1. Compute ECDH shared secret
-        // 2. Derive encryption keys using HKDF
-        // 3. Encrypt with AES-GCM
-
-        // For now, return a placeholder that indicates encryption is needed
+        // Placeholder return - actual encryption needed for production
         return [
-            'ciphertext'    => $payload, // Placeholder - needs real encryption
+            'ciphertext'    => $payload,
             'server_public' => self::base64url_encode($server_public),
         ];
     }

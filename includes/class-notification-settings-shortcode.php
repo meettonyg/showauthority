@@ -33,6 +33,15 @@ class PIT_Notification_Settings_Shortcode {
             return '<div class="pit-notification-settings__message pit-notification-settings__message--error">Please <a href="' . esc_url(wp_login_url(get_permalink())) . '">log in</a> to view notification settings.</div>';
         }
 
+        // Enqueue the shared push notifications script
+        wp_enqueue_script(
+            'pit-push-notifications',
+            PIT_PLUGIN_URL . 'assets/js/shared/push-notifications.js',
+            [],
+            PIT_VERSION,
+            true
+        );
+
         ob_start();
         ?>
         <div class="pit-notification-settings">
@@ -239,11 +248,28 @@ class PIT_Notification_Settings_Shortcode {
             }
         </style>
 
+        <?php
+        // Output push config for JavaScript (before the main script)
+        $vapid_public_key = get_option('pit_vapid_public_key', '');
+        $rest_url = rest_url('guestify/v1/');
+        $nonce = wp_create_nonce('wp_rest');
+        ?>
+        <script>
+            window.guestifyPushConfig = {
+                vapidPublicKey: <?php echo json_encode($vapid_public_key); ?>,
+                serviceWorkerPath: <?php echo json_encode(PIT_PLUGIN_URL . 'assets/js/sw-push.js'); ?>,
+                restUrl: <?php echo json_encode($rest_url); ?>,
+                pluginUrl: <?php echo json_encode(PIT_PLUGIN_URL); ?>,
+                nonce: <?php echo json_encode($nonce); ?>
+            };
+        </script>
+
         <script>
         (function() {
             const app = document.getElementById('notificationSettingsApp');
-            const nonce = window.guestifyAppNav?.nonce || '';
-            const restUrl = window.guestifyAppNav?.restUrl || '/wp-json/guestify/v1/';
+            const config = window.guestifyPushConfig || {};
+            const nonce = config.nonce || window.guestifyAppNav?.nonce || '';
+            const restUrl = config.restUrl || window.guestifyAppNav?.restUrl || '/wp-json/guestify/v1/';
 
             let settings = {};
             let saving = false;
@@ -368,7 +394,7 @@ class PIT_Notification_Settings_Shortcode {
 
                 app.innerHTML = html;
 
-                // Initialize push notifications UI
+                // Initialize push notifications UI using shared module
                 initPushNotifications();
 
                 app.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
@@ -380,39 +406,43 @@ class PIT_Notification_Settings_Shortcode {
                 document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
             }
 
-            // Push Notifications Logic
+            // Push Notifications Logic - uses shared PushNotifications module
             async function initPushNotifications() {
                 const container = document.getElementById('pushNotificationsContainer');
                 if (!container) return;
 
+                // Check if PushNotifications module is available
+                if (typeof PushNotifications === 'undefined') {
+                    container.innerHTML = '<div class="pit-notification-settings__push-unsupported">Push notifications module not loaded.</div>';
+                    return;
+                }
+
                 // Check browser support
-                if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+                if (!PushNotifications.isSupported()) {
                     container.innerHTML = '<div class="pit-notification-settings__push-unsupported">Desktop notifications are not supported in this browser.</div>';
                     return;
                 }
 
-                const vapidKey = window.guestifyPushConfig?.vapidPublicKey || '';
+                const vapidKey = config.vapidPublicKey || '';
                 if (!vapidKey) {
                     container.innerHTML = '<div class="pit-notification-settings__push-unsupported">Push notifications are not configured. Contact your administrator.</div>';
                     return;
                 }
 
+                // Initialize the PushNotifications module with config
+                PushNotifications.init({
+                    vapidPublicKey: vapidKey,
+                    nonce: nonce,
+                    serviceWorkerPath: config.serviceWorkerPath,
+                    restUrl: restUrl,
+                    pluginUrl: config.pluginUrl
+                });
+
                 // Check current status
-                const permission = Notification.permission;
-                const isSubscribed = await checkPushSubscription();
+                const permission = PushNotifications.getPermission();
+                const isSubscribed = await PushNotifications.isSubscribed();
 
                 renderPushUI(container, permission, isSubscribed);
-            }
-
-            async function checkPushSubscription() {
-                try {
-                    const registration = await navigator.serviceWorker.getRegistration();
-                    if (!registration) return false;
-                    const subscription = await registration.pushManager.getSubscription();
-                    return subscription !== null;
-                } catch (e) {
-                    return false;
-                }
             }
 
             function renderPushUI(container, permission, isSubscribed) {
@@ -466,116 +496,28 @@ class PIT_Notification_Settings_Shortcode {
 
                 try {
                     if (currentlySubscribed) {
-                        await unsubscribePush();
+                        await PushNotifications.unsubscribe();
                         showMessage('Desktop notifications disabled.', 'success');
                     } else {
-                        await subscribePush();
+                        // Register service worker first, then subscribe
+                        await PushNotifications.registerServiceWorker();
+                        await PushNotifications.subscribe();
                         showMessage('Desktop notifications enabled!', 'success');
                     }
 
                     // Re-check status and re-render
-                    const isSubscribed = await checkPushSubscription();
-                    renderPushUI(container, Notification.permission, isSubscribed);
+                    const isSubscribed = await PushNotifications.isSubscribed();
+                    renderPushUI(container, PushNotifications.getPermission(), isSubscribed);
                 } catch (error) {
                     showMessage(error.message || 'Failed to update notification settings.', 'error');
                     if (btn) btn.disabled = false;
                 }
             }
 
-            async function subscribePush() {
-                const vapidKey = window.guestifyPushConfig?.vapidPublicKey;
-                if (!vapidKey) throw new Error('Push not configured');
-
-                // Request permission
-                const permission = await Notification.requestPermission();
-                if (permission !== 'granted') {
-                    throw new Error('Notification permission denied');
-                }
-
-                // Register service worker
-                const swPath = (window.guestifyPushConfig?.swPath || '/wp-content/plugins/podcast-influence-tracker/assets/js/sw-push.js');
-                const registration = await navigator.serviceWorker.register(swPath);
-                await navigator.serviceWorker.ready;
-
-                // Convert VAPID key
-                const applicationServerKey = urlBase64ToUint8Array(vapidKey);
-
-                // Subscribe
-                const subscription = await registration.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: applicationServerKey
-                });
-
-                // Send to server
-                const response = await fetch(restUrl + 'notifications/subscribe', {
-                    method: 'POST',
-                    headers: {
-                        'X-WP-Nonce': nonce,
-                        'Content-Type': 'application/json',
-                    },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({
-                        subscription: subscription.toJSON(),
-                        device_info: {
-                            user_agent: navigator.userAgent
-                        }
-                    })
-                });
-
-                if (!response.ok) throw new Error('Failed to save subscription');
-            }
-
-            async function unsubscribePush() {
-                const registration = await navigator.serviceWorker.getRegistration();
-                if (!registration) return;
-
-                const subscription = await registration.pushManager.getSubscription();
-                if (!subscription) return;
-
-                const endpoint = subscription.endpoint;
-                await subscription.unsubscribe();
-
-                // Remove from server
-                await fetch(restUrl + 'notifications/unsubscribe', {
-                    method: 'POST',
-                    headers: {
-                        'X-WP-Nonce': nonce,
-                        'Content-Type': 'application/json',
-                    },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ endpoint: endpoint })
-                });
-            }
-
-            function urlBase64ToUint8Array(base64String) {
-                const padding = '='.repeat((4 - base64String.length % 4) % 4);
-                const base64 = (base64String + padding)
-                    .replace(/-/g, '+')
-                    .replace(/_/g, '/');
-                const rawData = window.atob(base64);
-                const outputArray = new Uint8Array(rawData.length);
-                for (let i = 0; i < rawData.length; ++i) {
-                    outputArray[i] = rawData.charCodeAt(i);
-                }
-                return outputArray;
-            }
-
             loadSettings();
         })();
         </script>
         <?php
-        // Output push config for JavaScript
-        $vapid_public_key = get_option('pit_vapid_public_key', '');
-        if ($vapid_public_key) :
-        ?>
-        <script>
-            window.guestifyPushConfig = {
-                vapidPublicKey: <?php echo json_encode($vapid_public_key); ?>,
-                swPath: <?php echo json_encode(PIT_PLUGIN_URL . 'assets/js/sw-push.js'); ?>
-            };
-        </script>
-        <?php
-        endif;
         return ob_get_clean();
     }
 }
