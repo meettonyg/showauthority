@@ -37,6 +37,8 @@
     const useCalendarStore = defineStore('calendar', {
         state: () => ({
             events: [],
+            tasks: [],
+            showTasks: true,
             loading: true,
             error: null,
             selectedEvent: null,
@@ -217,6 +219,67 @@
             setFilter(key, value) {
                 this.filters[key] = value;
             },
+
+            toggleShowTasks() {
+                this.showTasks = !this.showTasks;
+            },
+
+            async fetchTasks(start, end) {
+                try {
+                    const params = new URLSearchParams();
+                    if (start) params.append('start_date', start);
+                    if (end) params.append('end_date', end);
+                    params.append('show_completed', 'false');
+
+                    const response = await fetch(
+                        `${this.config.guestifyRestUrl}tasks/calendar?${params}`,
+                        {
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-WP-Nonce': this.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch tasks');
+                    }
+
+                    const data = await response.json();
+                    this.tasks = data.data || [];
+                } catch (err) {
+                    console.error('Failed to fetch tasks:', err);
+                }
+            },
+
+            async toggleTask(taskId) {
+                try {
+                    const response = await fetch(
+                        `${this.config.guestifyRestUrl}tasks/${taskId}/toggle`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-WP-Nonce': this.config.nonce,
+                            },
+                        }
+                    );
+
+                    if (!response.ok) {
+                        throw new Error('Failed to toggle task');
+                    }
+
+                    const data = await response.json();
+                    // Remove completed task from list
+                    if (data.is_done) {
+                        this.tasks = this.tasks.filter(t => t.task_id !== taskId);
+                    }
+                    return data;
+                } catch (err) {
+                    console.error('Failed to toggle task:', err);
+                    throw err;
+                }
+            },
         },
     });
 
@@ -234,6 +297,20 @@
         other: { bg: '#6b7280', border: '#4b5563', text: '#ffffff' },
         imported: { bg: '#94a3b8', border: '#64748b', text: '#ffffff' },
     };
+
+    // ==========================================================================
+    // TASK PRIORITY COLORS
+    // ==========================================================================
+    const taskPriorityColors = {
+        urgent: { bg: '#fef2f2', border: '#ef4444', text: '#991b1b' },
+        high: { bg: '#fff7ed', border: '#f97316', text: '#9a3412' },
+        medium: { bg: '#f0fdf4', border: '#22c55e', text: '#166534' },
+        low: { bg: '#f0f9ff', border: '#0ea5e9', text: '#0c4a6e' },
+    };
+
+    // Checkbox icon for tasks
+    const taskCheckboxIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="3" y="3" width="18" height="18" rx="2"></rect></svg>';
+    const taskCheckboxCheckedIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="3" y="3" width="18" height="18" rx="2"></rect><polyline points="9 11 12 14 22 4"></polyline></svg>';
 
     // ==========================================================================
     // EVENT TYPE ICONS (Feather-style stroke SVGs for consistency)
@@ -324,6 +401,17 @@
                                     {{ type.label }}
                                 </option>
                             </select>
+                            <button
+                                class="tasks-toggle-btn"
+                                :class="{ active: showTasks }"
+                                @click="toggleShowTasks"
+                                :title="showTasks ? 'Hide Tasks' : 'Show Tasks'">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                    <path d="M9 11l3 3 5-5"></path>
+                                </svg>
+                                <span>Tasks</span>
+                            </button>
                         </div>
                         <div class="view-toggle">
                             <button
@@ -875,6 +963,15 @@
             const currentView = ref('calendar');
             const filterType = ref('');
 
+            // Tasks state - use computed to bind to store
+            const showTasks = computed(() => store.showTasks);
+            const toggleShowTasks = () => {
+                store.toggleShowTasks();
+                if (calendarInstance) {
+                    calendarInstance.refetchEvents();
+                }
+            };
+
             // Modal states
             const showEventModal = ref(false);
             const showDetailModal = ref(false);
@@ -1155,10 +1252,34 @@
                                 extendedProps: {
                                     ...event,
                                     isImported,
+                                    isTask: false,
                                     colors, // Pass colors for use in eventContent
                                 },
                             };
                         });
+
+                        // Add tasks to calendar if enabled
+                        if (store.showTasks) {
+                            const fcTasks = store.tasks.map(task => {
+                                const colors = taskPriorityColors[task.priority] || taskPriorityColors.medium;
+                                return {
+                                    id: task.id,
+                                    title: task.title,
+                                    start: task.start,
+                                    allDay: true,
+                                    backgroundColor: colors.bg,
+                                    borderColor: colors.border,
+                                    textColor: colors.text,
+                                    classNames: ['fc-event-task', task.is_overdue ? 'fc-event-task-overdue' : ''],
+                                    extendedProps: {
+                                        ...task,
+                                        isTask: true,
+                                        colors,
+                                    },
+                                };
+                            });
+                            fcEvents.push(...fcTasks);
+                        }
 
                         successCallback(fcEvents);
                     },
@@ -1166,25 +1287,47 @@
                     eventContent: (arg) => {
                         try {
                             const extendedProps = arg.event.extendedProps || {};
+                            const isTask = extendedProps.isTask === true;
                             const isImported = extendedProps.isImported === true;
-                            const eventType = extendedProps.event_type || 'other';
                             const colors = extendedProps.colors || eventTypeColors.other;
-                            const icon = getEventIcon(eventType, isImported);
-                            const timeText = arg.timeText || '';
 
                             // Create DOM element with inline styles to ensure colors in all views
                             const wrapper = document.createElement('div');
-                            wrapper.className = `fc-event-custom ${isImported ? 'imported' : 'interview'}`;
-                            wrapper.style.backgroundColor = colors.bg;
-                            wrapper.style.borderColor = colors.border;
-                            wrapper.style.color = colors.text;
-                            wrapper.style.borderRadius = '4px';
-                            wrapper.style.padding = '2px 4px';
-                            wrapper.innerHTML = `
-                                <span class="fc-event-icon">${icon}</span>
-                                <span class="fc-event-time">${timeText}</span>
-                                <span class="fc-event-title">${arg.event.title}</span>
-                            `;
+
+                            if (isTask) {
+                                // Task rendering with checkbox
+                                const isDone = extendedProps.is_done;
+                                const isOverdue = extendedProps.is_overdue;
+                                wrapper.className = `fc-event-custom task ${isDone ? 'done' : ''} ${isOverdue ? 'overdue' : ''}`;
+                                wrapper.style.backgroundColor = colors.bg;
+                                wrapper.style.borderColor = colors.border;
+                                wrapper.style.borderWidth = '2px';
+                                wrapper.style.borderStyle = 'solid';
+                                wrapper.style.borderLeftWidth = '3px';
+                                wrapper.style.color = colors.text;
+                                wrapper.style.borderRadius = '4px';
+                                wrapper.style.padding = '2px 6px';
+                                wrapper.innerHTML = `
+                                    <span class="fc-task-checkbox" style="cursor: pointer;">${isDone ? taskCheckboxCheckedIcon : taskCheckboxIcon}</span>
+                                    <span class="fc-event-title" style="${isDone ? 'text-decoration: line-through; opacity: 0.7;' : ''}">${arg.event.title}</span>
+                                `;
+                            } else {
+                                // Event rendering with type icon
+                                const eventType = extendedProps.event_type || 'other';
+                                const icon = getEventIcon(eventType, isImported);
+                                const timeText = arg.timeText || '';
+                                wrapper.className = `fc-event-custom ${isImported ? 'imported' : 'interview'}`;
+                                wrapper.style.backgroundColor = colors.bg;
+                                wrapper.style.borderColor = colors.border;
+                                wrapper.style.color = colors.text;
+                                wrapper.style.borderRadius = '4px';
+                                wrapper.style.padding = '2px 4px';
+                                wrapper.innerHTML = `
+                                    <span class="fc-event-icon">${icon}</span>
+                                    <span class="fc-event-time">${timeText}</span>
+                                    <span class="fc-event-title">${arg.event.title}</span>
+                                `;
+                            }
 
                             return { domNodes: [wrapper] };
                         } catch (err) {
@@ -1193,10 +1336,26 @@
                             return arg.event.title;
                         }
                     },
-                    eventClick: (info) => {
+                    eventClick: async (info) => {
                         hidePopover(); // Hide popover when clicking
+                        const extendedProps = info.event.extendedProps || {};
+
+                        // Handle task click - toggle completion
+                        if (extendedProps.isTask) {
+                            const taskId = extendedProps.task_id;
+                            try {
+                                await store.toggleTask(taskId);
+                                // Refetch to update calendar
+                                calendarInstance.refetchEvents();
+                            } catch (err) {
+                                console.error('Failed to toggle task:', err);
+                            }
+                            return;
+                        }
+
+                        // Handle regular event click
                         const event = {
-                            ...info.event.extendedProps,
+                            ...extendedProps,
                             id: parseInt(info.event.id),
                         };
                         store.setSelectedEvent(event);
@@ -1241,6 +1400,7 @@
                         const start = info.startStr.split('T')[0];
                         const end = info.endStr.split('T')[0];
                         store.fetchEvents(start, end);
+                        store.fetchTasks(start, end);
                     },
                     height: 'auto',
                     eventTimeFormat: {
@@ -1932,6 +2092,8 @@
                 // State
                 currentView,
                 filterType,
+                showTasks,
+                toggleShowTasks,
                 showEventModal,
                 showDetailModal,
                 showDeleteModal,

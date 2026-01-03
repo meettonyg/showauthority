@@ -104,6 +104,7 @@ class PIT_Tasks_Shortcode {
         return [
             // Header
             'tasks'              => __('Tasks', 'podcast-influence-tracker'),
+            'addTask'            => __('Add Task', 'podcast-influence-tracker'),
 
             // Stats
             'totalTasks'         => __('Total Tasks', 'podcast-influence-tracker'),
@@ -119,6 +120,8 @@ class PIT_Tasks_Shortcode {
             'allPriorities'      => __('All Priorities', 'podcast-influence-tracker'),
             'newestFirst'        => __('Newest First', 'podcast-influence-tracker'),
             'dueDate'            => __('Due Date', 'podcast-influence-tracker'),
+            'reminderDate'       => __('Reminder Date', 'podcast-influence-tracker'),
+            'reminderHelp'       => __('Get notified on this date about this task', 'podcast-influence-tracker'),
             'priority'           => __('Priority', 'podcast-influence-tracker'),
             'clearFilters'       => __('Clear Filters', 'podcast-influence-tracker'),
 
@@ -146,6 +149,27 @@ class PIT_Tasks_Shortcode {
             'previous'           => __('Previous', 'podcast-influence-tracker'),
             'next'               => __('Next', 'podcast-influence-tracker'),
             'pageOf'             => __('Page %1$d of %2$d', 'podcast-influence-tracker'),
+
+            // Task Creation Modal
+            'interview'          => __('Interview', 'podcast-influence-tracker'),
+            'selectInterview'    => __('Select an interview...', 'podcast-influence-tracker'),
+            'loading'            => __('Loading...', 'podcast-influence-tracker'),
+            'taskTitle'          => __('Task Title', 'podcast-influence-tracker'),
+            'enterTaskTitle'     => __('Enter task title...', 'podcast-influence-tracker'),
+            'description'        => __('Description', 'podcast-influence-tracker'),
+            'enterDescription'   => __('Enter task description (optional)...', 'podcast-influence-tracker'),
+            'taskType'           => __('Task Type', 'podcast-influence-tracker'),
+            'typeTodo'           => __('To Do', 'podcast-influence-tracker'),
+            'typeFollowUp'       => __('Follow Up', 'podcast-influence-tracker'),
+            'typePrep'           => __('Preparation', 'podcast-influence-tracker'),
+            'typeOutreach'       => __('Outreach', 'podcast-influence-tracker'),
+            'typeReview'         => __('Review', 'podcast-influence-tracker'),
+            'cancel'             => __('Cancel', 'podcast-influence-tracker'),
+            'createTask'         => __('Create Task', 'podcast-influence-tracker'),
+            'creating'           => __('Creating...', 'podcast-influence-tracker'),
+            'titleRequired'      => __('Task title is required.', 'podcast-influence-tracker'),
+            'appearanceRequired' => __('Please select an interview.', 'podcast-influence-tracker'),
+            'failedToCreate'     => __('Failed to create task. Please try again.', 'podcast-influence-tracker'),
         ];
     }
 }

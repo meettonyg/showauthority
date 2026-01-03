@@ -364,10 +364,195 @@
     color: #6b7280;
 }
 
+/* Primary Button */
+.pit-tasks-page .pit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: none;
+}
+.pit-tasks-page .pit-btn-primary {
+    background: #0ea5e9;
+    color: white;
+}
+.pit-tasks-page .pit-btn-primary:hover {
+    background: #0284c7;
+}
+.pit-tasks-page .pit-btn-primary:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+}
+.pit-tasks-page .pit-btn-secondary {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+}
+.pit-tasks-page .pit-btn-secondary:hover {
+    background: #e2e8f0;
+}
+.pit-tasks-page .pit-btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.pit-btn-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: pit-spin 0.8s linear infinite;
+}
+
+/* Modal Overlay */
+.pit-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100000;
+    padding: 20px;
+}
+
+/* Modal Container */
+.pit-modal {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+    width: 100%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Modal Header */
+.pit-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.pit-modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #1f2937;
+}
+.pit-modal-close {
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: #9ca3af;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.pit-modal-close:hover {
+    background: #f1f5f9;
+    color: #1f2937;
+}
+
+/* Modal Body */
+.pit-modal-body {
+    padding: 24px;
+    overflow-y: auto;
+}
+
+/* Modal Footer */
+.pit-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+/* Form Elements */
+.pit-form-group {
+    margin-bottom: 16px;
+}
+.pit-form-group:last-child {
+    margin-bottom: 0;
+}
+.pit-form-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 6px;
+}
+.pit-form-label .required {
+    color: #ef4444;
+}
+.pit-form-input,
+.pit-form-select,
+.pit-form-textarea {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: white;
+    color: #1f2937;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    box-sizing: border-box;
+}
+.pit-form-input:focus,
+.pit-form-select:focus,
+.pit-form-textarea:focus {
+    outline: none;
+    border-color: #0ea5e9;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+}
+.pit-form-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+}
+.pit-form-textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+.pit-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+.pit-form-error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .pit-tasks-page {
         padding: 12px;
+    }
+    .pit-tasks-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
     }
     .pit-tasks-toolbar {
         flex-direction: column;
@@ -382,4 +567,19 @@
     .pit-tasks-stats {
         grid-template-columns: repeat(2, 1fr);
     }
+    .pit-modal {
+        max-height: 100vh;
+        border-radius: 12px;
+    }
+    .pit-form-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Form Help Text */
+.pit-form-help {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--pit-text-muted, #64748b);
+    line-height: 1.4;
 }

@@ -1485,3 +1485,84 @@ textarea.form-input {
     opacity: 0.6;
     cursor: not-allowed;
 }
+
+/* ==========================================================================
+   TASKS TOGGLE BUTTON
+   ========================================================================== */
+.tasks-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: var(--cal-bg);
+    border: 1px solid var(--cal-border);
+    border-radius: var(--cal-radius);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--cal-text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.tasks-toggle-btn:hover {
+    border-color: var(--cal-primary);
+    color: var(--cal-primary);
+}
+
+.tasks-toggle-btn.active {
+    background: var(--cal-primary);
+    border-color: var(--cal-primary);
+    color: white;
+}
+
+.tasks-toggle-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* ==========================================================================
+   CALENDAR TASK EVENTS
+   ========================================================================== */
+.fc-event-task {
+    cursor: pointer !important;
+}
+
+.fc-event-task .fc-event-custom.task {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.fc-task-checkbox {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.fc-task-checkbox:hover svg {
+    stroke-width: 2.5;
+}
+
+.fc-event-custom.task.done {
+    opacity: 0.6;
+}
+
+.fc-event-custom.task.overdue {
+    border-color: var(--cal-danger) !important;
+    animation: pulse-overdue 2s ease-in-out infinite;
+}
+
+@keyframes pulse-overdue {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+    }
+}
+
+/* Task priority indicators on calendar */
+.fc-event-task-overdue .fc-event-custom {
+    border-left-color: var(--cal-danger) !important;
+}
