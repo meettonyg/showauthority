@@ -124,6 +124,41 @@ class PIT_REST_Global_Tasks {
                 ],
             ],
         ]);
+
+        // GET /tasks/calendar - Get tasks formatted for FullCalendar
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/calendar', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [__CLASS__, 'get_tasks_for_calendar'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args'                => [
+                'start_date' => [
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'end_date' => [
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'show_completed' => [
+                    'type'              => 'boolean',
+                    'default'           => false,
+                ],
+            ],
+        ]);
+
+        // POST /tasks/{id}/toggle - Toggle task completion from calendar
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/(?P<task_id>\d+)/toggle', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [__CLASS__, 'toggle_task'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args'                => [
+                'task_id' => [
+                    'required'          => true,
+                    'type'              => 'integer',
+                    'sanitize_callback' => 'absint',
+                ],
+            ],
+        ]);
     }
 
     /**
@@ -604,6 +639,131 @@ class PIT_REST_Global_Tasks {
         return rest_ensure_response([
             'success' => true,
             'data'    => $data,
+        ]);
+    }
+
+    /**
+     * GET /tasks/calendar - Get tasks formatted for FullCalendar
+     * Returns tasks with due dates as calendar events
+     */
+    public static function get_tasks_for_calendar($request) {
+        global $wpdb;
+
+        $user_id = get_current_user_id();
+        $start_date = $request->get_param('start_date');
+        $end_date = $request->get_param('end_date');
+        $show_completed = $request->get_param('show_completed');
+
+        $tasks_table = $wpdb->prefix . 'pit_appearance_tasks';
+        $opportunities_table = $wpdb->prefix . 'pit_opportunities';
+        $appearances_table = $wpdb->prefix . 'pit_guest_appearances';
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+
+        // Build query - only get tasks with due dates
+        $where = ['t.user_id = %d', 't.due_date IS NOT NULL'];
+        $params = [$user_id];
+
+        // Filter by date range
+        if ($start_date) {
+            $where[] = 't.due_date >= %s';
+            $params[] = $start_date;
+        }
+        if ($end_date) {
+            $where[] = 't.due_date <= %s';
+            $params[] = $end_date;
+        }
+
+        // Optionally exclude completed tasks
+        if (!$show_completed) {
+            $where[] = 't.is_done = 0';
+        }
+
+        $where_sql = implode(' AND ', $where);
+
+        // Query with joins to both tables
+        $sql = $wpdb->prepare(
+            "SELECT t.*,
+                    COALESCE(a.podcast_id, o.podcast_id) as podcast_id,
+                    COALESCE(p1.title, p2.title) as podcast_name,
+                    COALESCE(p1.artwork_url, p2.artwork_url) as podcast_artwork
+             FROM {$tasks_table} t
+             LEFT JOIN {$appearances_table} a ON t.appearance_id = a.id
+             LEFT JOIN {$opportunities_table} o ON t.appearance_id = o.id AND a.id IS NULL
+             LEFT JOIN {$podcasts_table} p1 ON a.podcast_id = p1.id
+             LEFT JOIN {$podcasts_table} p2 ON o.podcast_id = p2.id
+             WHERE {$where_sql}
+             ORDER BY t.due_date ASC",
+            $params
+        );
+
+        $tasks = $wpdb->get_results($sql, ARRAY_A);
+
+        // Format for FullCalendar
+        $calendar_tasks = array_map(function($task) {
+            $is_overdue = !$task['is_done'] && strtotime($task['due_date']) < strtotime('today');
+
+            return [
+                'id'              => 'task-' . $task['id'],
+                'task_id'         => (int) $task['id'],
+                'title'           => $task['title'],
+                'start'           => $task['due_date'],
+                'allDay'          => true,
+                'is_task'         => true,
+                'is_done'         => (bool) $task['is_done'],
+                'is_overdue'      => $is_overdue,
+                'priority'        => $task['priority'],
+                'task_type'       => $task['task_type'],
+                'appearance_id'   => (int) $task['appearance_id'],
+                'podcast_name'    => $task['podcast_name'] ?: '',
+                'podcast_artwork' => $task['podcast_artwork'] ?: '',
+                'description'     => $task['description'] ?: '',
+            ];
+        }, $tasks ?: []);
+
+        return rest_ensure_response([
+            'success' => true,
+            'data'    => $calendar_tasks,
+        ]);
+    }
+
+    /**
+     * POST /tasks/{id}/toggle - Toggle task completion
+     */
+    public static function toggle_task($request) {
+        global $wpdb;
+
+        $task_id = (int) $request->get_param('task_id');
+        $user_id = get_current_user_id();
+
+        $tasks_table = $wpdb->prefix . 'pit_appearance_tasks';
+
+        // Get current task
+        $task = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$tasks_table} WHERE id = %d AND user_id = %d",
+            $task_id,
+            $user_id
+        ));
+
+        if (!$task) {
+            return new WP_Error('not_found', 'Task not found', ['status' => 404]);
+        }
+
+        // Toggle completion
+        $new_done = $task->is_done ? 0 : 1;
+        $new_status = $new_done ? 'completed' : 'pending';
+        $completed_at = $new_done ? current_time('mysql') : null;
+
+        $wpdb->update($tasks_table, [
+            'is_done'      => $new_done,
+            'status'       => $new_status,
+            'completed_at' => $completed_at,
+            'updated_at'   => current_time('mysql'),
+        ], ['id' => $task_id]);
+
+        return rest_ensure_response([
+            'success'  => true,
+            'is_done'  => (bool) $new_done,
+            'message'  => $new_done ? 'Task completed' : 'Task reopened',
         ]);
     }
 
