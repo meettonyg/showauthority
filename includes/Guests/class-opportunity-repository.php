@@ -368,4 +368,33 @@ class PIT_Opportunity_Repository {
     public static function link_engagement($opportunity_id, $engagement_id) {
         return self::update($opportunity_id, ['engagement_id' => $engagement_id]);
     }
+
+    /**
+     * Get upcoming interviews for notifications
+     *
+     * Returns opportunities with record_date on the specified date
+     * that haven't been notified yet.
+     *
+     * @param string $target_date Date to check (Y-m-d format)
+     * @return array
+     */
+    public static function get_upcoming_interviews($target_date) {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'pit_opportunities';
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+        $notifications_table = $wpdb->prefix . 'pit_notifications';
+
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT o.*, p.title as podcast_name
+             FROM {$table} o
+             JOIN {$podcasts_table} p ON o.podcast_id = p.id
+             WHERE o.record_date = %s
+               AND o.id NOT IN (
+                   SELECT appearance_id FROM {$notifications_table}
+                   WHERE type = 'interview_soon' AND appearance_id IS NOT NULL
+               )",
+            $target_date
+        ), ARRAY_A);
+    }
 }

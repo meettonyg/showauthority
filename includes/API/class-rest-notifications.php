@@ -126,13 +126,51 @@ class PIT_REST_Notifications {
                 ],
             ],
         ]);
+
+        // POST /notifications/subscribe - Subscribe to push notifications
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/subscribe', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [__CLASS__, 'subscribe_push'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args'                => [
+                'subscription' => [
+                    'required' => true,
+                    'type'     => 'object',
+                ],
+                'device_info' => [
+                    'type' => 'object',
+                ],
+            ],
+        ]);
+
+        // POST /notifications/unsubscribe - Unsubscribe from push notifications
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/unsubscribe', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [__CLASS__, 'unsubscribe_push'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args'                => [
+                'endpoint' => [
+                    'required' => true,
+                    'type'     => 'string',
+                ],
+            ],
+        ]);
+
+        // GET /notifications/push-subscriptions - List user's push subscriptions
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/push-subscriptions', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [__CLASS__, 'get_push_subscriptions'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
     }
 
     /**
      * Check if user has permission
+     *
+     * Validates both login status and basic capability
      */
     public static function check_permission($request) {
-        return is_user_logged_in();
+        return is_user_logged_in() && current_user_can('read');
     }
 
     /**
@@ -401,5 +439,91 @@ class PIT_REST_Notifications {
         $result = $wpdb->insert($table, $insert_data);
 
         return $result ? $wpdb->insert_id : false;
+    }
+
+    /**
+     * POST /notifications/subscribe - Subscribe to push notifications
+     */
+    public static function subscribe_push($request) {
+        $user_id = get_current_user_id();
+        $subscription = $request->get_param('subscription');
+        $device_info = $request->get_param('device_info') ?? [];
+
+        if (empty($subscription['endpoint']) || empty($subscription['keys'])) {
+            return new WP_Error(
+                'invalid_subscription',
+                'Invalid subscription data',
+                ['status' => 400]
+            );
+        }
+
+        $subscription_id = PIT_Push_Subscriptions_Schema::save_subscription(
+            $user_id,
+            $subscription,
+            $device_info
+        );
+
+        if (!$subscription_id) {
+            return new WP_Error(
+                'save_failed',
+                'Failed to save push subscription',
+                ['status' => 500]
+            );
+        }
+
+        return rest_ensure_response([
+            'success' => true,
+            'message' => 'Push subscription saved',
+            'data'    => [
+                'subscription_id' => $subscription_id,
+            ],
+        ]);
+    }
+
+    /**
+     * POST /notifications/unsubscribe - Unsubscribe from push notifications
+     */
+    public static function unsubscribe_push($request) {
+        $endpoint = $request->get_param('endpoint');
+
+        if (empty($endpoint)) {
+            return new WP_Error(
+                'missing_endpoint',
+                'Endpoint is required',
+                ['status' => 400]
+            );
+        }
+
+        $result = PIT_Push_Subscriptions_Schema::delete_by_endpoint($endpoint);
+
+        return rest_ensure_response([
+            'success' => true,
+            'message' => 'Push subscription removed',
+        ]);
+    }
+
+    /**
+     * GET /notifications/push-subscriptions - List user's push subscriptions
+     */
+    public static function get_push_subscriptions($request) {
+        $user_id = get_current_user_id();
+
+        $subscriptions = PIT_Push_Subscriptions_Schema::get_user_subscriptions($user_id);
+
+        // Format for response (hide sensitive keys)
+        $formatted = array_map(function($sub) {
+            return [
+                'id'           => (int) $sub['id'],
+                'device_name'  => $sub['device_name'] ?? 'Unknown Device',
+                'is_active'    => (bool) $sub['is_active'],
+                'last_used_at' => $sub['last_used_at'],
+                'created_at'   => $sub['created_at'],
+            ];
+        }, $subscriptions);
+
+        return rest_ensure_response([
+            'success' => true,
+            'data'    => $formatted,
+        ]);
     }
 }

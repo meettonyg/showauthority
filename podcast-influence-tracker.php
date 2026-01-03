@@ -55,6 +55,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/Core/class-user-podcasts-repository.php';
         require_once PIT_PLUGIN_DIR . 'includes/Core/class-rate-limiter.php';
         require_once PIT_PLUGIN_DIR . 'includes/Core/class-pipeline-stage-repository.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Core/class-task-repository.php';
 
         // PODCASTS DOMAIN
         require_once PIT_PLUGIN_DIR . 'includes/Podcasts/class-podcast-repository.php';
@@ -164,6 +165,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/migrations/class-schema-migration-v4.php';
         require_once PIT_PLUGIN_DIR . 'includes/database/class-calendar-events-schema.php';
         require_once PIT_PLUGIN_DIR . 'includes/database/class-notifications-schema.php';
+        require_once PIT_PLUGIN_DIR . 'includes/database/class-push-subscriptions-schema.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-tracker-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-interview-detail-shortcode.php';
         require_once PIT_PLUGIN_DIR . 'includes/class-calendar-shortcode.php';
@@ -181,6 +183,7 @@ class Podcast_Influence_Tracker {
 
         // NOTIFICATIONS (v3.6+)
         require_once PIT_PLUGIN_DIR . 'includes/Jobs/class-notification-processor.php';
+        require_once PIT_PLUGIN_DIR . 'includes/Jobs/class-web-push-sender.php';
         require_once PIT_PLUGIN_DIR . 'includes/API/class-rest-notifications.php';
     }
 
@@ -213,6 +216,10 @@ class Podcast_Influence_Tracker {
         // Create notifications table (v3.6+)
         PIT_Notifications_Schema::create_table();
         update_option('pit_notifications_table_created', '1');
+
+        // Create push subscriptions table (v3.6+)
+        PIT_Push_Subscriptions_Schema::create_table();
+        update_option('pit_push_subscriptions_table_created', '1');
 
 
         if (!wp_next_scheduled('pit_background_refresh')) {
@@ -272,6 +279,14 @@ class Podcast_Influence_Tracker {
                 PIT_Notifications_Schema::create_table();
             }
             update_option('pit_notifications_table_created', '1');
+        }
+
+        // Ensure push subscriptions table exists (v3.6+)
+        if (get_option('pit_push_subscriptions_table_created') !== '1') {
+            if (!PIT_Push_Subscriptions_Schema::table_exists()) {
+                PIT_Push_Subscriptions_Schema::create_table();
+            }
+            update_option('pit_push_subscriptions_table_created', '1');
         }
 
         add_filter('cron_schedules', [$this, 'add_cron_schedules']);

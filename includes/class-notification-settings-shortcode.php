@@ -181,6 +181,62 @@ class PIT_Notification_Settings_Shortcode {
                 background: #fee2e2;
                 color: #991b1b;
             }
+            .pit-notification-settings__push-section {
+                margin-top: 2rem;
+                padding-top: 2rem;
+                border-top: 1px solid #e5e7eb;
+            }
+            .pit-notification-settings__push-status {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                font-size: 0.875rem;
+                color: #6b7280;
+                margin-bottom: 1rem;
+            }
+            .pit-notification-settings__push-status--active {
+                color: #059669;
+            }
+            .pit-notification-settings__push-status--inactive {
+                color: #6b7280;
+            }
+            .pit-notification-settings__push-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                padding: 0.75rem 1.5rem;
+                border: 2px solid #14b8a6;
+                border-radius: 6px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .pit-notification-settings__push-btn--enable {
+                background: #14b8a6;
+                color: white;
+            }
+            .pit-notification-settings__push-btn--enable:hover {
+                background: #0d9488;
+                border-color: #0d9488;
+            }
+            .pit-notification-settings__push-btn--disable {
+                background: white;
+                color: #14b8a6;
+            }
+            .pit-notification-settings__push-btn--disable:hover {
+                background: #f0fdfa;
+            }
+            .pit-notification-settings__push-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+            .pit-notification-settings__push-unsupported {
+                padding: 1rem;
+                background: #fef3c7;
+                color: #92400e;
+                border-radius: 6px;
+                font-size: 0.875rem;
+            }
         </style>
 
         <script>
@@ -301,9 +357,19 @@ class PIT_Notification_Settings_Shortcode {
                 });
 
                 html += '</div>';
+
+                // Push Notifications Section
+                html += '<div class="pit-notification-settings__push-section">';
+                html += '<h3 class="pit-notification-settings__section-title">Desktop Notifications</h3>';
+                html += '<div id="pushNotificationsContainer"></div>';
+                html += '</div>';
+
                 html += '<button id="saveSettingsBtn" class="pit-notification-settings__save">Save Settings</button>';
 
                 app.innerHTML = html;
+
+                // Initialize push notifications UI
+                initPushNotifications();
 
                 app.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
                     checkbox.addEventListener('change', function() {
@@ -314,10 +380,202 @@ class PIT_Notification_Settings_Shortcode {
                 document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
             }
 
+            // Push Notifications Logic
+            async function initPushNotifications() {
+                const container = document.getElementById('pushNotificationsContainer');
+                if (!container) return;
+
+                // Check browser support
+                if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+                    container.innerHTML = '<div class="pit-notification-settings__push-unsupported">Desktop notifications are not supported in this browser.</div>';
+                    return;
+                }
+
+                const vapidKey = window.guestifyPushConfig?.vapidPublicKey || '';
+                if (!vapidKey) {
+                    container.innerHTML = '<div class="pit-notification-settings__push-unsupported">Push notifications are not configured. Contact your administrator.</div>';
+                    return;
+                }
+
+                // Check current status
+                const permission = Notification.permission;
+                const isSubscribed = await checkPushSubscription();
+
+                renderPushUI(container, permission, isSubscribed);
+            }
+
+            async function checkPushSubscription() {
+                try {
+                    const registration = await navigator.serviceWorker.getRegistration();
+                    if (!registration) return false;
+                    const subscription = await registration.pushManager.getSubscription();
+                    return subscription !== null;
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            function renderPushUI(container, permission, isSubscribed) {
+                let html = '';
+
+                if (permission === 'denied') {
+                    html = '<div class="pit-notification-settings__push-unsupported">Notifications are blocked. Please enable them in your browser settings.</div>';
+                } else if (isSubscribed) {
+                    html = `
+                        <div class="pit-notification-settings__option">
+                            <div class="pit-notification-settings__option-info">
+                                <h4>Desktop Notifications</h4>
+                                <p class="pit-notification-settings__push-status pit-notification-settings__push-status--active">
+                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>
+                                    Enabled - You will receive desktop notifications
+                                </p>
+                            </div>
+                            <button id="pushToggleBtn" class="pit-notification-settings__push-btn pit-notification-settings__push-btn--disable">
+                                Disable
+                            </button>
+                        </div>
+                    `;
+                } else {
+                    html = `
+                        <div class="pit-notification-settings__option">
+                            <div class="pit-notification-settings__option-info">
+                                <h4>Desktop Notifications</h4>
+                                <p class="pit-notification-settings__push-status pit-notification-settings__push-status--inactive">
+                                    Get instant notifications even when this tab is closed
+                                </p>
+                            </div>
+                            <button id="pushToggleBtn" class="pit-notification-settings__push-btn pit-notification-settings__push-btn--enable">
+                                Enable Desktop Notifications
+                            </button>
+                        </div>
+                    `;
+                }
+
+                container.innerHTML = html;
+
+                const btn = document.getElementById('pushToggleBtn');
+                if (btn) {
+                    btn.addEventListener('click', () => togglePushNotifications(isSubscribed));
+                }
+            }
+
+            async function togglePushNotifications(currentlySubscribed) {
+                const btn = document.getElementById('pushToggleBtn');
+                const container = document.getElementById('pushNotificationsContainer');
+                if (btn) btn.disabled = true;
+
+                try {
+                    if (currentlySubscribed) {
+                        await unsubscribePush();
+                        showMessage('Desktop notifications disabled.', 'success');
+                    } else {
+                        await subscribePush();
+                        showMessage('Desktop notifications enabled!', 'success');
+                    }
+
+                    // Re-check status and re-render
+                    const isSubscribed = await checkPushSubscription();
+                    renderPushUI(container, Notification.permission, isSubscribed);
+                } catch (error) {
+                    showMessage(error.message || 'Failed to update notification settings.', 'error');
+                    if (btn) btn.disabled = false;
+                }
+            }
+
+            async function subscribePush() {
+                const vapidKey = window.guestifyPushConfig?.vapidPublicKey;
+                if (!vapidKey) throw new Error('Push not configured');
+
+                // Request permission
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    throw new Error('Notification permission denied');
+                }
+
+                // Register service worker
+                const swPath = (window.guestifyPushConfig?.swPath || '/wp-content/plugins/podcast-influence-tracker/assets/js/sw-push.js');
+                const registration = await navigator.serviceWorker.register(swPath);
+                await navigator.serviceWorker.ready;
+
+                // Convert VAPID key
+                const applicationServerKey = urlBase64ToUint8Array(vapidKey);
+
+                // Subscribe
+                const subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: applicationServerKey
+                });
+
+                // Send to server
+                const response = await fetch(restUrl + 'notifications/subscribe', {
+                    method: 'POST',
+                    headers: {
+                        'X-WP-Nonce': nonce,
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        subscription: subscription.toJSON(),
+                        device_info: {
+                            user_agent: navigator.userAgent
+                        }
+                    })
+                });
+
+                if (!response.ok) throw new Error('Failed to save subscription');
+            }
+
+            async function unsubscribePush() {
+                const registration = await navigator.serviceWorker.getRegistration();
+                if (!registration) return;
+
+                const subscription = await registration.pushManager.getSubscription();
+                if (!subscription) return;
+
+                const endpoint = subscription.endpoint;
+                await subscription.unsubscribe();
+
+                // Remove from server
+                await fetch(restUrl + 'notifications/unsubscribe', {
+                    method: 'POST',
+                    headers: {
+                        'X-WP-Nonce': nonce,
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ endpoint: endpoint })
+                });
+            }
+
+            function urlBase64ToUint8Array(base64String) {
+                const padding = '='.repeat((4 - base64String.length % 4) % 4);
+                const base64 = (base64String + padding)
+                    .replace(/-/g, '+')
+                    .replace(/_/g, '/');
+                const rawData = window.atob(base64);
+                const outputArray = new Uint8Array(rawData.length);
+                for (let i = 0; i < rawData.length; ++i) {
+                    outputArray[i] = rawData.charCodeAt(i);
+                }
+                return outputArray;
+            }
+
             loadSettings();
         })();
         </script>
         <?php
+        // Output push config for JavaScript
+        $vapid_public_key = get_option('pit_vapid_public_key', '');
+        if ($vapid_public_key) :
+        ?>
+        <script>
+            window.guestifyPushConfig = {
+                vapidPublicKey: <?php echo json_encode($vapid_public_key); ?>,
+                swPath: <?php echo json_encode(PIT_PLUGIN_URL . 'assets/js/sw-push.js'); ?>
+            };
+        </script>
+        <?php
+        endif;
         return ob_get_clean();
     }
 }

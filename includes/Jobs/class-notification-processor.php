@@ -43,36 +43,10 @@ class PIT_Notification_Processor {
      * Process task reminders
      */
     private static function process_task_reminders() {
-        global $wpdb;
-
-        $tasks_table = $wpdb->prefix . 'pit_appearance_tasks';
-        $notifications_table = $wpdb->prefix . 'pit_notifications';
-        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
-        $appearances_table = $wpdb->prefix . 'pit_guest_appearances';
-        $opportunities_table = $wpdb->prefix . 'pit_opportunities';
-
-        // Get tasks with reminder_date = today that haven't been notified
         $today = current_time('Y-m-d');
 
-        $tasks = $wpdb->get_results($wpdb->prepare(
-            "SELECT t.*,
-                    COALESCE(a.podcast_id, o.podcast_id) as podcast_id,
-                    COALESCE(p1.title, p2.title) as podcast_name
-             FROM {$tasks_table} t
-             LEFT JOIN {$appearances_table} a ON t.appearance_id = a.id
-             LEFT JOIN {$opportunities_table} o ON t.appearance_id = o.id AND a.id IS NULL
-             LEFT JOIN {$podcasts_table} p1 ON a.podcast_id = p1.id
-             LEFT JOIN {$podcasts_table} p2 ON o.podcast_id = p2.id
-             WHERE t.reminder_date = %s
-               AND t.is_done = 0
-               AND t.id NOT IN (
-                   SELECT source_id FROM {$notifications_table}
-                   WHERE source = 'task' AND type = 'task_reminder'
-                   AND DATE(created_at) = %s
-               )",
-            $today,
-            $today
-        ), ARRAY_A);
+        // Use repository pattern for better maintainability
+        $tasks = PIT_Task_Repository::get_due_reminders($today);
 
         foreach ($tasks as $task) {
             self::create_task_reminder_notification($task);
@@ -83,36 +57,10 @@ class PIT_Notification_Processor {
      * Process overdue tasks
      */
     private static function process_overdue_tasks() {
-        global $wpdb;
-
-        $tasks_table = $wpdb->prefix . 'pit_appearance_tasks';
-        $notifications_table = $wpdb->prefix . 'pit_notifications';
-        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
-        $appearances_table = $wpdb->prefix . 'pit_guest_appearances';
-        $opportunities_table = $wpdb->prefix . 'pit_opportunities';
-
-        // Get tasks that became overdue today
         $today = current_time('Y-m-d');
-        $yesterday = date('Y-m-d', strtotime('-1 day', strtotime($today)));
 
-        $tasks = $wpdb->get_results($wpdb->prepare(
-            "SELECT t.*,
-                    COALESCE(a.podcast_id, o.podcast_id) as podcast_id,
-                    COALESCE(p1.title, p2.title) as podcast_name
-             FROM {$tasks_table} t
-             LEFT JOIN {$appearances_table} a ON t.appearance_id = a.id
-             LEFT JOIN {$opportunities_table} o ON t.appearance_id = o.id AND a.id IS NULL
-             LEFT JOIN {$podcasts_table} p1 ON a.podcast_id = p1.id
-             LEFT JOIN {$podcasts_table} p2 ON o.podcast_id = p2.id
-             WHERE t.due_date = %s
-               AND t.is_done = 0
-               AND t.id NOT IN (
-                   SELECT source_id FROM {$notifications_table}
-                   WHERE source = 'task' AND type = 'task_overdue'
-                   AND source_id = t.id
-               )",
-            $yesterday
-        ), ARRAY_A);
+        // Use repository pattern for better maintainability
+        $tasks = PIT_Task_Repository::get_overdue_tasks($today);
 
         foreach ($tasks as $task) {
             self::create_overdue_notification($task);
@@ -123,46 +71,19 @@ class PIT_Notification_Processor {
      * Process upcoming interviews (recording dates within 24 hours)
      */
     private static function process_upcoming_interviews() {
-        global $wpdb;
+        // Use WordPress timezone-aware function
+        $today = current_time('Y-m-d');
+        $tomorrow = date('Y-m-d', strtotime('+1 day', strtotime($today)));
 
-        $appearances_table = $wpdb->prefix . 'pit_guest_appearances';
-        $opportunities_table = $wpdb->prefix . 'pit_opportunities';
-        $notifications_table = $wpdb->prefix . 'pit_notifications';
-        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
-
-        $tomorrow = date('Y-m-d', strtotime('+1 day'));
-
-        // Check guest_appearances
-        $appearances = $wpdb->get_results($wpdb->prepare(
-            "SELECT a.*, p.title as podcast_name
-             FROM {$appearances_table} a
-             JOIN {$podcasts_table} p ON a.podcast_id = p.id
-             WHERE a.record_date = %s
-               AND a.id NOT IN (
-                   SELECT appearance_id FROM {$notifications_table}
-                   WHERE type = 'interview_soon' AND appearance_id IS NOT NULL
-                   AND DATE(created_at) = CURDATE()
-               )",
-            $tomorrow
-        ), ARRAY_A);
+        // Use repository pattern for better maintainability
+        $appearances = PIT_Appearance_Repository::get_upcoming_interviews($tomorrow);
 
         foreach ($appearances as $appearance) {
             self::create_interview_notification($appearance, 'appearance');
         }
 
         // Check opportunities
-        $opportunities = $wpdb->get_results($wpdb->prepare(
-            "SELECT o.*, p.title as podcast_name
-             FROM {$opportunities_table} o
-             JOIN {$podcasts_table} p ON o.podcast_id = p.id
-             WHERE o.record_date = %s
-               AND o.id NOT IN (
-                   SELECT appearance_id FROM {$notifications_table}
-                   WHERE type = 'interview_soon' AND appearance_id IS NOT NULL
-                   AND DATE(created_at) = CURDATE()
-               )",
-            $tomorrow
-        ), ARRAY_A);
+        $opportunities = PIT_Opportunity_Repository::get_upcoming_interviews($tomorrow);
 
         foreach ($opportunities as $opp) {
             self::create_interview_notification($opp, 'opportunity');
@@ -195,9 +116,10 @@ class PIT_Notification_Processor {
 
         $notification_id = PIT_REST_Notifications::create_notification($user_id, $notification_data);
 
-        // Send email if enabled
+        // Send email and push notification if enabled
         if ($notification_id) {
             self::maybe_send_email($user_id, 'task_reminder', $notification_data);
+            self::maybe_send_push($user_id, $notification_id, $notification_data);
         }
     }
 
@@ -227,9 +149,10 @@ class PIT_Notification_Processor {
 
         $notification_id = PIT_REST_Notifications::create_notification($user_id, $notification_data);
 
-        // Send email if enabled
+        // Send email and push notification if enabled
         if ($notification_id) {
             self::maybe_send_email($user_id, 'overdue_task', $notification_data);
+            self::maybe_send_push($user_id, $notification_id, $notification_data);
         }
     }
 
@@ -259,10 +182,42 @@ class PIT_Notification_Processor {
 
         $notification_id = PIT_REST_Notifications::create_notification($user_id, $notification_data);
 
-        // Send email if enabled
+        // Send email and push notification if enabled
         if ($notification_id) {
             self::maybe_send_email($user_id, 'interview_reminder', $notification_data);
+            self::maybe_send_push($user_id, $notification_id, $notification_data);
         }
+    }
+
+    /**
+     * Maybe send a push notification
+     */
+    private static function maybe_send_push($user_id, $notification_id, $data) {
+        // Check if push notifications are configured
+        if (!PIT_Web_Push_Sender::is_configured()) {
+            return;
+        }
+
+        // Check user notification settings for push
+        $settings = get_user_meta($user_id, 'pit_notification_settings', true);
+        $settings = is_array($settings) ? $settings : [];
+
+        // Check if push is enabled (default: enabled if not explicitly disabled)
+        if (isset($settings['push_enabled']) && !$settings['push_enabled']) {
+            return;
+        }
+
+        // Prepare push payload
+        $payload = [
+            'title'           => $data['title'],
+            'body'            => $data['message'] ?? '',
+            'notification_id' => $notification_id,
+            'url'             => $data['action_url'] ?? home_url('/app/'),
+            'tag'             => $data['type'] ?? 'guestify-notification',
+        ];
+
+        // Send to all user's subscriptions
+        PIT_Web_Push_Sender::send_to_user($user_id, $payload);
     }
 
     /**
@@ -351,62 +306,33 @@ class PIT_Notification_Processor {
 
     /**
      * Get email body based on type
+     *
+     * Loads the email template from templates/emails/notification-default.php
      */
     private static function get_email_body($type, $data, $name) {
+        // Template variables
+        $title = $data['title'];
+        $message = $data['message'];
         $action_url = $data['action_url'] ?? home_url('/app/');
         $action_label = $data['action_label'] ?? 'View in Guestify';
+        $meta = $data['meta'] ?? [];
 
-        $body = '<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0; font-size: 24px;">Guestify</h1>
-    </div>
-    <div style="background: #ffffff; padding: 30px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 10px 10px;">
-        <p style="margin-top: 0;">Hi ' . esc_html($name) . ',</p>
-        <h2 style="color: #1e293b; margin-top: 20px;">' . esc_html($data['title']) . '</h2>
-        <p style="color: #64748b;">' . esc_html($data['message']) . '</p>';
+        // Allow custom templates per type
+        $template_file = apply_filters(
+            'pit_notification_email_template',
+            PIT_PLUGIN_DIR . 'templates/emails/notification-default.php',
+            $type
+        );
 
-        // Add metadata based on type
-        if (!empty($data['meta'])) {
-            $meta = $data['meta'];
-            if (!empty($meta['podcast_name'])) {
-                $body .= '<p><strong>Podcast:</strong> ' . esc_html($meta['podcast_name']) . '</p>';
-            }
-            if (!empty($meta['due_date'])) {
-                $body .= '<p><strong>Due Date:</strong> ' . esc_html($meta['due_date']) . '</p>';
-            }
-            if (!empty($meta['record_date'])) {
-                $body .= '<p><strong>Interview Date:</strong> ' . esc_html($meta['record_date']) . '</p>';
-            }
-            if (!empty($meta['priority'])) {
-                $priority_colors = [
-                    'urgent' => '#ef4444',
-                    'high'   => '#f97316',
-                    'medium' => '#22c55e',
-                    'low'    => '#0ea5e9',
-                ];
-                $color = $priority_colors[$meta['priority']] ?? '#6b7280';
-                $body .= '<p><strong>Priority:</strong> <span style="color: ' . $color . '; font-weight: 600;">' . ucfirst(esc_html($meta['priority'])) . '</span></p>';
-            }
+        // Load template with output buffering
+        ob_start();
+        if (file_exists($template_file)) {
+            include $template_file;
+        } else {
+            // Fallback to default if custom template not found
+            include PIT_PLUGIN_DIR . 'templates/emails/notification-default.php';
         }
-
-        $body .= '
-        <div style="margin-top: 30px;">
-            <a href="' . esc_url($action_url) . '" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600;">' . esc_html($action_label) . '</a>
-        </div>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
-        <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0;">
-            You\'re receiving this email because you have notifications enabled in Guestify.
-            <a href="' . esc_url(home_url('/app/settings/')) . '" style="color: #667eea;">Manage notification settings</a>
-        </p>
-    </div>
-</body>
-</html>';
+        $body = ob_get_clean();
 
         return $body;
     }
@@ -418,7 +344,8 @@ class PIT_Notification_Processor {
         global $wpdb;
 
         $table = $wpdb->prefix . 'pit_notifications';
-        $cutoff = date('Y-m-d H:i:s', strtotime('-30 days'));
+        // Use WordPress timezone-aware time calculation
+        $cutoff = date('Y-m-d H:i:s', strtotime('-30 days', current_time('timestamp')));
 
         $wpdb->query($wpdb->prepare(
             "DELETE FROM {$table} WHERE created_at < %s AND is_dismissed = 1",
