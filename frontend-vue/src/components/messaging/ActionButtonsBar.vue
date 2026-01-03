@@ -2,27 +2,44 @@
   <div class="action-buttons-bar">
     <!-- Single Email Mode -->
     <template v-if="mode === 'single'">
+<<<<<<< Updated upstream
       <!-- Left Side Actions -->
       <div class="action-buttons-left">
+=======
+      <!-- Left Group: Open/Copy/Save -->
+      <div class="buttons-left">
+>>>>>>> Stashed changes
         <button
           @click="handleOpenInEmail"
           class="btn btn-outline"
           :disabled="disabled || !isValid"
           title="Open in your default email client"
         >
+<<<<<<< Updated upstream
           <span class="btn-icon">📧</span>
           Open in Email
+=======
+          📧 Open in Email
+>>>>>>> Stashed changes
         </button>
 
         <button
           @click="handleCopyBody"
           class="btn btn-outline"
+<<<<<<< Updated upstream
           :class="{ 'btn-copied': copied }"
           :disabled="disabled || !body"
           title="Copy email body to clipboard"
         >
           <span class="btn-icon">{{ copied ? '✓' : '📋' }}</span>
           {{ copied ? 'Copied!' : 'Copy Body' }}
+=======
+          :class="{ 'btn-success': copied }"
+          :disabled="disabled || !body"
+          title="Copy email body to clipboard"
+        >
+          {{ copied ? '✓ Copied!' : '📋 Copy Body' }}
+>>>>>>> Stashed changes
         </button>
 
         <button
@@ -31,6 +48,7 @@
           :disabled="disabled || !hasContent"
           title="Save as draft for later"
         >
+<<<<<<< Updated upstream
           <span class="btn-icon">💾</span>
           Save Draft
         </button>
@@ -43,33 +61,60 @@
           class="btn btn-outline"
           :disabled="disabled"
           title="Cancel and close composer"
+=======
+          💾 Save Draft
+        </button>
+      </div>
+
+      <!-- Right Group: Cancel/Mark as Sent -->
+      <div class="buttons-right">
+        <button
+          @click="handleCancel"
+          class="btn btn-outline"
+          :disabled="disabled"
+          title="Cancel and close"
+>>>>>>> Stashed changes
         >
           Cancel
         </button>
 
         <button
           @click="handleMarkAsSent"
+<<<<<<< Updated upstream
           class="btn btn-primary"
+=======
+          class="btn btn-primary btn-teal"
+>>>>>>> Stashed changes
           :disabled="disabled || !isValid || loading"
           title="Mark this email as manually sent"
         >
           <span v-if="loading" class="btn-spinner"></span>
+<<<<<<< Updated upstream
           <span v-else class="btn-icon">✓</span>
           Mark as Sent
+=======
+          <span v-else>✓ Mark as Sent</span>
+>>>>>>> Stashed changes
         </button>
       </div>
     </template>
 
     <!-- Campaign Mode -->
     <template v-else>
+<<<<<<< Updated upstream
       <!-- Left Side Actions -->
       <div class="action-buttons-left">
+=======
+      <!-- Left Group -->
+      <div class="buttons-left">
+>>>>>>> Stashed changes
         <button
           @click="handleSaveDraft"
           class="btn btn-outline"
           :disabled="disabled"
           title="Save campaign setup as draft"
         >
+<<<<<<< Updated upstream
           <span class="btn-icon">💾</span>
           Save Draft
         </button>
@@ -82,20 +127,41 @@
           class="btn btn-outline"
           :disabled="disabled"
           title="Cancel and close composer"
+=======
+          💾 Save Draft
+        </button>
+      </div>
+
+      <!-- Right Group -->
+      <div class="buttons-right">
+        <button
+          @click="handleCancel"
+          class="btn btn-outline"
+          :disabled="disabled"
+          title="Cancel and close"
+>>>>>>> Stashed changes
         >
           Cancel
         </button>
 
         <button
           @click="handleStartCampaign"
+<<<<<<< Updated upstream
           class="btn btn-primary"
+=======
+          class="btn btn-primary btn-teal"
+>>>>>>> Stashed changes
           :disabled="disabled || !isCampaignValid || loading"
           title="Start the email campaign"
         >
           <span v-if="loading" class="btn-spinner"></span>
+<<<<<<< Updated upstream
           <span v-else class="btn-icon">▶</span>
           Start Campaign
           <span v-if="customizedCount > 0" class="customized-badge">{{ customizedCount }} customized</span>
+=======
+          <span v-else>▶ Start Campaign</span>
+>>>>>>> Stashed changes
         </button>
       </div>
     </template>
