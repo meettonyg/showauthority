@@ -37,6 +37,51 @@ class PIT_REST_Global_Tasks {
                 'permission_callback' => [__CLASS__, 'check_permission'],
                 'args'                => self::get_collection_params(),
             ],
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [__CLASS__, 'create_task'],
+                'permission_callback' => [__CLASS__, 'check_permission'],
+                'args'                => [
+                    'appearance_id' => [
+                        'required'          => true,
+                        'type'              => 'integer',
+                        'sanitize_callback' => 'absint',
+                    ],
+                    'title' => [
+                        'required'          => true,
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                    'description' => [
+                        'type'              => 'string',
+                        'sanitize_callback' => 'wp_kses_post',
+                    ],
+                    'task_type' => [
+                        'type'              => 'string',
+                        'default'           => 'todo',
+                        'sanitize_callback' => 'sanitize_text_field',
+                        'validate_callback' => function($value) {
+                            return in_array($value, ['todo', 'follow_up', 'prep', 'outreach', 'review']);
+                        },
+                    ],
+                    'priority' => [
+                        'type'              => 'string',
+                        'default'           => 'medium',
+                        'sanitize_callback' => 'sanitize_text_field',
+                        'validate_callback' => function($value) {
+                            return in_array($value, ['low', 'medium', 'high', 'urgent']);
+                        },
+                    ],
+                    'due_date' => [
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                    'reminder_date' => [
+                        'type'              => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                ],
+            ],
         ]);
 
         // GET /tasks/stats - Get task statistics
@@ -51,6 +96,19 @@ class PIT_REST_Global_Tasks {
             'methods'             => WP_REST_Server::READABLE,
             'callback'            => [__CLASS__, 'get_task_types'],
             'permission_callback' => [__CLASS__, 'check_permission'],
+        ]);
+
+        // GET /tasks/appearances - Get appearances for task creation dropdown
+        register_rest_route(self::NAMESPACE, '/' . self::BASE . '/appearances', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [__CLASS__, 'get_appearances_for_tasks'],
+            'permission_callback' => [__CLASS__, 'check_permission'],
+            'args'                => [
+                'search' => [
+                    'type'              => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+            ],
         ]);
     }
 
@@ -357,6 +415,152 @@ class PIT_REST_Global_Tasks {
                     'review'    => 'Review',
                 ],
             ],
+        ]);
+    }
+
+    /**
+     * POST /tasks - Create a new task
+     */
+    public static function create_task($request) {
+        global $wpdb;
+
+        $user_id = get_current_user_id();
+        $appearance_id = (int) $request->get_param('appearance_id');
+
+        // Verify appearance ownership
+        $appearances_table = $wpdb->prefix . 'pit_guest_appearances';
+        $opportunities_table = $wpdb->prefix . 'pit_opportunities';
+
+        // Check both tables for the appearance
+        $appearance_exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$appearances_table} WHERE id = %d AND user_id = %d",
+            $appearance_id,
+            $user_id
+        ));
+
+        // Also check opportunities table
+        if (!$appearance_exists) {
+            $appearance_exists = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM {$opportunities_table} WHERE id = %d AND user_id = %d",
+                $appearance_id,
+                $user_id
+            ));
+        }
+
+        if (!$appearance_exists && !current_user_can('manage_options')) {
+            return new WP_Error('not_found', 'Appearance not found or not owned by user', ['status' => 404]);
+        }
+
+        $tasks_table = $wpdb->prefix . 'pit_appearance_tasks';
+
+        $data = [
+            'appearance_id' => $appearance_id,
+            'user_id'       => $user_id,
+            'title'         => $request->get_param('title'),
+            'description'   => $request->get_param('description') ?: '',
+            'task_type'     => $request->get_param('task_type') ?: 'todo',
+            'status'        => 'pending',
+            'priority'      => $request->get_param('priority') ?: 'medium',
+            'is_done'       => 0,
+            'due_date'      => $request->get_param('due_date') ?: null,
+            'reminder_date' => $request->get_param('reminder_date') ?: null,
+            'created_at'    => current_time('mysql'),
+            'updated_at'    => current_time('mysql'),
+        ];
+
+        $result = $wpdb->insert($tasks_table, $data);
+
+        if ($result === false) {
+            return new WP_Error('insert_failed', 'Failed to create task', ['status' => 500]);
+        }
+
+        $task_id = $wpdb->insert_id;
+
+        // Fetch the created task with appearance context
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+
+        // Try guest_appearances first
+        $task = $wpdb->get_row($wpdb->prepare(
+            "SELECT t.*,
+                    a.podcast_id, a.status as appearance_status, a.episode_title,
+                    p.title as podcast_name, p.artwork_url as podcast_artwork
+             FROM {$tasks_table} t
+             LEFT JOIN {$appearances_table} a ON t.appearance_id = a.id
+             LEFT JOIN {$podcasts_table} p ON a.podcast_id = p.id
+             WHERE t.id = %d",
+            $task_id
+        ), ARRAY_A);
+
+        // If no podcast info, try opportunities table
+        if ($task && empty($task['podcast_name'])) {
+            $opp_data = $wpdb->get_row($wpdb->prepare(
+                "SELECT o.podcast_id, o.status as appearance_status,
+                        p.title as podcast_name, p.artwork_url as podcast_artwork
+                 FROM {$opportunities_table} o
+                 LEFT JOIN {$podcasts_table} p ON o.podcast_id = p.id
+                 WHERE o.id = %d",
+                $appearance_id
+            ), ARRAY_A);
+
+            if ($opp_data) {
+                $task = array_merge($task, $opp_data);
+            }
+        }
+
+        return rest_ensure_response([
+            'success' => true,
+            'data'    => self::format_task($task),
+            'message' => 'Task created successfully',
+        ]);
+    }
+
+    /**
+     * GET /tasks/appearances - Get appearances for task creation dropdown
+     */
+    public static function get_appearances_for_tasks($request) {
+        global $wpdb;
+
+        $user_id = get_current_user_id();
+        $search = $request->get_param('search');
+
+        // Get from opportunities table (primary)
+        $opportunities_table = $wpdb->prefix . 'pit_opportunities';
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+
+        $where = ['o.user_id = %d', '(o.is_archived = 0 OR o.is_archived IS NULL)'];
+        $params = [$user_id];
+
+        if ($search) {
+            $like = '%' . $wpdb->esc_like($search) . '%';
+            $where[] = 'p.title LIKE %s';
+            $params[] = $like;
+        }
+
+        $where_sql = implode(' AND ', $where);
+
+        $appearances = $wpdb->get_results($wpdb->prepare(
+            "SELECT o.id, o.status,
+                    p.title as podcast_name, p.artwork_url as podcast_artwork
+             FROM {$opportunities_table} o
+             LEFT JOIN {$podcasts_table} p ON o.podcast_id = p.id
+             WHERE {$where_sql}
+             ORDER BY o.updated_at DESC
+             LIMIT 100",
+            $params
+        ), ARRAY_A);
+
+        $data = array_map(function($row) {
+            return [
+                'id'             => (int) $row['id'],
+                'podcast_name'   => $row['podcast_name'] ?: 'Unknown Podcast',
+                'podcast_artwork' => $row['podcast_artwork'] ?: '',
+                'status'         => $row['status'] ?: 'potential',
+            ];
+        }, $appearances ?: []);
+
+        return rest_ensure_response([
+            'success' => true,
+            'data'    => $data,
         ]);
     }
 

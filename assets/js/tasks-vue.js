@@ -57,6 +57,20 @@
                 total: 0,
                 total_pages: 0,
             },
+            // Task creation modal
+            showCreateModal: false,
+            createLoading: false,
+            createError: null,
+            appearances: [],
+            appearancesLoading: false,
+            newTask: {
+                appearance_id: '',
+                title: '',
+                description: '',
+                task_type: 'todo',
+                priority: 'medium',
+                due_date: '',
+            },
         }),
 
         getters: {
@@ -174,6 +188,90 @@
                 this.pagination.page = 1;
                 this.fetchTasks();
             },
+
+            // Task creation modal actions
+            async openCreateModal() {
+                this.showCreateModal = true;
+                this.createError = null;
+                this.resetNewTask();
+                await this.fetchAppearances();
+            },
+
+            closeCreateModal() {
+                this.showCreateModal = false;
+                this.createError = null;
+                this.resetNewTask();
+            },
+
+            resetNewTask() {
+                this.newTask = {
+                    appearance_id: '',
+                    title: '',
+                    description: '',
+                    task_type: 'todo',
+                    priority: 'medium',
+                    due_date: '',
+                };
+            },
+
+            async fetchAppearances() {
+                this.appearancesLoading = true;
+                try {
+                    const result = await api.get('tasks/appearances');
+                    this.appearances = result.data || [];
+                } catch (err) {
+                    console.error('Failed to fetch appearances:', err);
+                    this.appearances = [];
+                } finally {
+                    this.appearancesLoading = false;
+                }
+            },
+
+            async createTask() {
+                if (!this.newTask.title.trim()) {
+                    this.createError = __('titleRequired');
+                    return;
+                }
+                if (!this.newTask.appearance_id) {
+                    this.createError = __('appearanceRequired');
+                    return;
+                }
+
+                this.createLoading = true;
+                this.createError = null;
+
+                try {
+                    const payload = {
+                        appearance_id: parseInt(this.newTask.appearance_id, 10),
+                        title: this.newTask.title.trim(),
+                        description: this.newTask.description.trim(),
+                        task_type: this.newTask.task_type,
+                        priority: this.newTask.priority,
+                    };
+
+                    if (this.newTask.due_date) {
+                        payload.due_date = this.newTask.due_date;
+                    }
+
+                    const result = await api.post('tasks', payload);
+
+                    // Add the new task to the list if it matches current filters
+                    if (result.data) {
+                        this.tasks.unshift(result.data);
+                    }
+
+                    // Refresh stats
+                    this.fetchStats();
+
+                    // Close modal
+                    this.closeCreateModal();
+                } catch (err) {
+                    console.error('Failed to create task:', err);
+                    this.createError = err.message || __('failedToCreate');
+                } finally {
+                    this.createLoading = false;
+                }
+            },
         },
     });
 
@@ -277,6 +375,13 @@
                 <!-- Header -->
                 <div class="pit-tasks-header">
                     <h1>{{ t('tasks') }}</h1>
+                    <button class="pit-btn pit-btn-primary" @click="store.openCreateModal()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        {{ t('addTask') }}
+                    </button>
                 </div>
 
                 <!-- Stats Cards -->
@@ -439,6 +544,109 @@
                     </svg>
                     <p v-if="store.hasFilters">{{ t('noTasksMatch') }}</p>
                     <p v-else>{{ t('noTasksYet') }}</p>
+                </div>
+
+                <!-- Create Task Modal -->
+                <div v-if="store.showCreateModal" class="pit-modal-overlay" @click.self="store.closeCreateModal()">
+                    <div class="pit-modal">
+                        <div class="pit-modal-header">
+                            <h2>{{ t('addTask') }}</h2>
+                            <button class="pit-modal-close" @click="store.closeCreateModal()">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"/>
+                                    <line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div class="pit-modal-body">
+                            <!-- Error Message -->
+                            <div v-if="store.createError" class="pit-form-error">
+                                {{ store.createError }}
+                            </div>
+
+                            <!-- Interview/Appearance Select -->
+                            <div class="pit-form-group">
+                                <label class="pit-form-label">{{ t('interview') }} <span class="required">*</span></label>
+                                <select
+                                    v-model="store.newTask.appearance_id"
+                                    class="pit-form-select"
+                                    :disabled="store.appearancesLoading"
+                                >
+                                    <option value="">{{ store.appearancesLoading ? t('loading') : t('selectInterview') }}</option>
+                                    <option v-for="app in store.appearances" :key="app.id" :value="app.id">
+                                        {{ app.podcast_name }}
+                                    </option>
+                                </select>
+                            </div>
+
+                            <!-- Title -->
+                            <div class="pit-form-group">
+                                <label class="pit-form-label">{{ t('taskTitle') }} <span class="required">*</span></label>
+                                <input
+                                    type="text"
+                                    v-model="store.newTask.title"
+                                    class="pit-form-input"
+                                    :placeholder="t('enterTaskTitle')"
+                                />
+                            </div>
+
+                            <!-- Description -->
+                            <div class="pit-form-group">
+                                <label class="pit-form-label">{{ t('description') }}</label>
+                                <textarea
+                                    v-model="store.newTask.description"
+                                    class="pit-form-textarea"
+                                    :placeholder="t('enterDescription')"
+                                    rows="3"
+                                ></textarea>
+                            </div>
+
+                            <!-- Task Type and Priority Row -->
+                            <div class="pit-form-row">
+                                <div class="pit-form-group">
+                                    <label class="pit-form-label">{{ t('taskType') }}</label>
+                                    <select v-model="store.newTask.task_type" class="pit-form-select">
+                                        <option value="todo">{{ t('typeTodo') }}</option>
+                                        <option value="follow_up">{{ t('typeFollowUp') }}</option>
+                                        <option value="prep">{{ t('typePrep') }}</option>
+                                        <option value="outreach">{{ t('typeOutreach') }}</option>
+                                        <option value="review">{{ t('typeReview') }}</option>
+                                    </select>
+                                </div>
+
+                                <div class="pit-form-group">
+                                    <label class="pit-form-label">{{ t('priority') }}</label>
+                                    <select v-model="store.newTask.priority" class="pit-form-select">
+                                        <option value="low">{{ t('low') }}</option>
+                                        <option value="medium">{{ t('medium') }}</option>
+                                        <option value="high">{{ t('high') }}</option>
+                                        <option value="urgent">{{ t('urgent') }}</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Due Date -->
+                            <div class="pit-form-group">
+                                <label class="pit-form-label">{{ t('dueDate') }}</label>
+                                <input
+                                    type="date"
+                                    v-model="store.newTask.due_date"
+                                    class="pit-form-input"
+                                />
+                            </div>
+                        </div>
+
+                        <div class="pit-modal-footer">
+                            <button class="pit-btn pit-btn-secondary" @click="store.closeCreateModal()" :disabled="store.createLoading">
+                                {{ t('cancel') }}
+                            </button>
+                            <button class="pit-btn pit-btn-primary" @click="store.createTask()" :disabled="store.createLoading">
+                                <span v-if="store.createLoading" class="pit-btn-spinner"></span>
+                                {{ store.createLoading ? t('creating') : t('createTask') }}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         `,
