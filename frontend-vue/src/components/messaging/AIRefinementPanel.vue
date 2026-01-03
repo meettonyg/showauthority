@@ -5,7 +5,11 @@
         <span class="ai-icon">✨</span>
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         <h3 class="ai-label">Refine with AI</h3>
+=======
+        <span class="ai-label">Refine with AI</span>
+>>>>>>> Stashed changes
 =======
         <span class="ai-label">Refine with AI</span>
 >>>>>>> Stashed changes
@@ -18,7 +22,11 @@
 
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     <!-- Quick Actions -->
+=======
+    <!-- Quick Actions with Emojis -->
+>>>>>>> Stashed changes
 =======
     <!-- Quick Actions with Emojis -->
 >>>>>>> Stashed changes
@@ -37,7 +45,11 @@
         >
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
           <span class="action-icon">{{ action.icon }}</span>
+=======
+          <span class="action-emoji">{{ action.emoji }}</span>
+>>>>>>> Stashed changes
 =======
           <span class="action-emoji">{{ action.emoji }}</span>
 >>>>>>> Stashed changes
@@ -52,7 +64,11 @@
     <!-- Custom Instruction Input -->
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     <div class="custom-instruction-section">
+=======
+    <div class="custom-section">
+>>>>>>> Stashed changes
 =======
     <div class="custom-section">
 >>>>>>> Stashed changes
@@ -66,6 +82,7 @@
         placeholder="e.g., Write a warm intro that mentions their recent episode about marketing..."
         :disabled="loading"
         rows="2"
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
         @keydown.enter.meta="handleCustomInstruction"
@@ -87,12 +104,20 @@
     </div>
 
 >>>>>>> Stashed changes
+=======
+      ></textarea>
+    </div>
+
+>>>>>>> Stashed changes
     <!-- Tone & Length Selectors -->
     <div class="options-row">
       <div class="option-group">
         <label class="option-label">Tone:</label>
         <select v-model="tone" class="option-select" :disabled="loading">
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -106,7 +131,11 @@
         <label class="option-label">Length:</label>
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         <select v-model="selectedLength" class="option-select" :disabled="loading">
+=======
+        <select v-model="length" class="option-select" :disabled="loading">
+>>>>>>> Stashed changes
 =======
         <select v-model="length" class="option-select" :disabled="loading">
 >>>>>>> Stashed changes
@@ -125,6 +154,7 @@
       class="generate-btn"
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
       :disabled="loading || (!customInstruction.trim() && !lastQuickAction) || !hasContent"
       @click="handleGenerate"
     >
@@ -132,6 +162,8 @@
       <span v-else>✨</span>
       {{ loading ? 'Generating...' : 'Generate Email' }}
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
       :disabled="loading || !hasContent"
@@ -144,6 +176,9 @@
         <span>✨</span> Generate Email
       </span>
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -216,6 +251,7 @@ const emit = defineEmits([
   'loading', // Emitted when loading state changes
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   'close' // Emitted when close button is clicked
 ])
 
@@ -240,6 +276,13 @@ const quickActions = [
 // Quick action definitions with emojis matching the JSX design
 const quickActions = [
 >>>>>>> Stashed changes
+=======
+  'close' // Emitted when panel should close
+])
+
+// Quick action definitions with emojis matching the JSX design
+const quickActions = [
+>>>>>>> Stashed changes
   { id: 'shorten', label: 'Make it shorter', emoji: '📏', instruction: 'Make the email more concise by removing unnecessary words and phrases. Keep the key points but reduce length by about 30%.' },
   { id: 'personal', label: 'Make it more personal', emoji: '💬', instruction: 'Make this more personal and conversational, referencing specific details about the recipient.' },
   { id: 'social', label: 'Add social proof', emoji: '⭐', instruction: 'Add social proof and credibility markers to make the pitch more compelling.' },
@@ -247,6 +290,9 @@ const quickActions = [
   { id: 'episode', label: 'Reference recent episode', emoji: '🎙️', instruction: 'Add a reference to their recent episode to show genuine interest.' },
   { id: 'urgency', label: 'Add urgency', emoji: '⏰', instruction: 'Add appropriate urgency without being pushy.' }
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -259,9 +305,14 @@ const customInstruction = ref('')
 const suggestion = ref(null)
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 const selectedTone = ref('professional')
 const selectedLength = ref('medium')
 const lastQuickAction = ref(null)
+=======
+const tone = ref('professional')
+const length = ref('medium')
+>>>>>>> Stashed changes
 =======
 const tone = ref('professional')
 const length = ref('medium')
@@ -288,6 +339,7 @@ async function handleQuickAction(action) {
 /**
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
  * Handle custom instruction submission (Enter key)
  */
 async function handleCustomInstruction() {
@@ -302,6 +354,12 @@ async function handleCustomInstruction() {
 async function handleGenerate() {
   const instruction = customInstruction.value.trim() || lastQuickAction.value?.instruction
   if (!instruction) return
+=======
+ * Handle generate button click
+ */
+async function handleGenerate() {
+  const instruction = customInstruction.value.trim() || 'Improve this email pitch'
+>>>>>>> Stashed changes
 =======
  * Handle generate button click
  */
@@ -334,9 +392,15 @@ async function refineContent(instruction) {
       instruction: instruction,
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
       tone: selectedTone.value,
       length: selectedLength.value,
       appearance_id: props.appearanceId
+=======
+      appearance_id: props.appearanceId,
+      tone: tone.value,
+      length: length.value
+>>>>>>> Stashed changes
 =======
       appearance_id: props.appearanceId,
       tone: tone.value,
@@ -392,7 +456,11 @@ function rejectSuggestion() {
 .ai-panel {
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   background: linear-gradient(to right, #faf5ff, #eff6ff);
+=======
+  background: linear-gradient(135deg, #f5f3ff 0%, #eff6ff 100%);
+>>>>>>> Stashed changes
 =======
   background: linear-gradient(135deg, #f5f3ff 0%, #eff6ff 100%);
 >>>>>>> Stashed changes
@@ -451,8 +519,11 @@ function rejectSuggestion() {
 
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 /* Section Labels */
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 .close-btn {
@@ -475,6 +546,9 @@ function rejectSuggestion() {
 }
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -488,6 +562,7 @@ function rejectSuggestion() {
 
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 /* Quick Actions */
 .quick-actions-section {
   margin-bottom: 12px;
@@ -497,6 +572,12 @@ function rejectSuggestion() {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+=======
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+>>>>>>> Stashed changes
 =======
 .quick-actions {
   display: flex;
@@ -529,9 +610,14 @@ function rejectSuggestion() {
 .quick-action-btn:hover:not(:disabled) {
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   background: #f5f3ff;
   border-color: #a78bfa;
   color: #7c3aed;
+=======
+  border-color: #a78bfa;
+  background: #faf5ff;
+>>>>>>> Stashed changes
 =======
   border-color: #a78bfa;
   background: #faf5ff;
@@ -549,6 +635,7 @@ function rejectSuggestion() {
 
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 .action-icon {
   font-size: 12px;
 }
@@ -558,6 +645,8 @@ function rejectSuggestion() {
 =======
 =======
 >>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
 .action-emoji {
   font-size: 12px;
 }
@@ -565,6 +654,9 @@ function rejectSuggestion() {
 /* Custom Section */
 .custom-section {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -575,7 +667,11 @@ function rejectSuggestion() {
   width: 100%;
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   padding: 10px 12px;
+=======
+  padding: 8px 12px;
+>>>>>>> Stashed changes
 =======
   padding: 8px 12px;
 >>>>>>> Stashed changes
@@ -594,8 +690,13 @@ function rejectSuggestion() {
   outline: none;
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   border-color: #8b5cf6;
   box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+=======
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1);
+>>>>>>> Stashed changes
 =======
   border-color: #a78bfa;
   box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1);
@@ -615,6 +716,9 @@ function rejectSuggestion() {
 .options-row {
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
   display: flex;
@@ -636,7 +740,11 @@ function rejectSuggestion() {
 
 .option-select {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   padding: 6px 10px;
+=======
+  padding: 4px 8px;
+>>>>>>> Stashed changes
 =======
   padding: 4px 8px;
 >>>>>>> Stashed changes
@@ -644,6 +752,7 @@ function rejectSuggestion() {
   border: 1px solid var(--color-border, #e5e7eb);
   border-radius: 4px;
   background: white;
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
   color: var(--color-text-primary, #1a1a1a);
   cursor: pointer;
@@ -659,6 +768,11 @@ function rejectSuggestion() {
 }
 
 >>>>>>> Stashed changes
+=======
+  cursor: pointer;
+}
+
+>>>>>>> Stashed changes
 .option-select:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -667,6 +781,7 @@ function rejectSuggestion() {
 /* Generate Button */
 .generate-btn {
   width: 100%;
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
   display: flex;
   align-items: center;
@@ -728,6 +843,8 @@ function rejectSuggestion() {
   width: 100%;
 =======
 >>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
   padding: 10px 16px;
   background: #8b5cf6;
   border: none;
@@ -767,7 +884,11 @@ function rejectSuggestion() {
 
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 /* Error Message */
+=======
+/* Error */
+>>>>>>> Stashed changes
 =======
 /* Error */
 >>>>>>> Stashed changes
@@ -781,8 +902,11 @@ function rejectSuggestion() {
   margin-top: 12px;
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   padding: 10px 12px;
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
   padding: 8px 12px;
