@@ -119,6 +119,7 @@ class Podcast_Influence_Tracker {
         require_once PIT_PLUGIN_DIR . 'includes/admin/class-settings.php';
         require_once PIT_PLUGIN_DIR . 'includes/admin/class-admin-bulk-tools.php';
         require_once PIT_PLUGIN_DIR . 'includes/admin/class-admin-migration-v4.php';
+        require_once PIT_PLUGIN_DIR . 'includes/admin/class-admin-notifications-test.php';
 
         // COST TRACKING
         require_once PIT_PLUGIN_DIR . 'includes/class-cost-tracker.php';
@@ -292,6 +293,7 @@ class Podcast_Influence_Tracker {
         add_filter('cron_schedules', [$this, 'add_cron_schedules']);
 
         PIT_Admin_Page::init();
+        PIT_Admin_Notifications_Test::init();
         PIT_Admin_Bulk_Tools::get_instance();
         // PIT_Admin_Migration_V4::init(); // Migration complete - uncomment if rollback needed
         PIT_Shortcodes::init();
