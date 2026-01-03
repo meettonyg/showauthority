@@ -1,9 +1,9 @@
 <?php
 /**
- * Virtual Pages Handler
+ * Notification Settings Shortcode
  *
- * Creates virtual pages for plugin functionality without requiring
- * actual WordPress pages to be created.
+ * Renders notification settings UI via shortcode.
+ * Usage: [guestify_notification_settings]
  *
  * @package Podcast_Influence_Tracker
  * @since 4.2.0
@@ -13,83 +13,27 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class PIT_Virtual_Pages {
+class PIT_Notification_Settings_Shortcode {
 
     /**
-     * Virtual pages configuration
-     *
-     * @var array
-     */
-    private static $pages = [
-        'account/notifications' => [
-            'title'    => 'Notification Settings',
-            'template' => 'notification-settings',
-        ],
-    ];
-
-    /**
-     * Initialize virtual pages
+     * Initialize shortcode
      */
     public static function init() {
-        add_action('init', [__CLASS__, 'add_rewrite_rules']);
-        add_filter('query_vars', [__CLASS__, 'add_query_vars']);
-        add_action('template_redirect', [__CLASS__, 'handle_virtual_page']);
+        add_shortcode('guestify_notification_settings', [__CLASS__, 'render']);
     }
 
     /**
-     * Add rewrite rules for virtual pages
-     */
-    public static function add_rewrite_rules() {
-        add_rewrite_rule(
-            '^account/notifications/?$',
-            'index.php?pit_virtual_page=notification-settings',
-            'top'
-        );
-    }
-
-    /**
-     * Add custom query vars
+     * Render the notification settings
      *
-     * @param array $vars Existing query vars
-     * @return array Modified query vars
+     * @return string HTML output
      */
-    public static function add_query_vars($vars) {
-        $vars[] = 'pit_virtual_page';
-        return $vars;
-    }
-
-    /**
-     * Handle virtual page template
-     */
-    public static function handle_virtual_page() {
-        $virtual_page = get_query_var('pit_virtual_page');
-
-        if (empty($virtual_page)) {
-            return;
-        }
-
-        // Require login for all virtual pages
+    public static function render($atts = []) {
+        // Require login
         if (!is_user_logged_in()) {
-            wp_redirect(wp_login_url(home_url($_SERVER['REQUEST_URI'])));
-            exit;
+            return '<div class="pit-notification-settings__message pit-notification-settings__message--error">Please <a href="' . esc_url(wp_login_url(get_permalink())) . '">log in</a> to view notification settings.</div>';
         }
 
-        switch ($virtual_page) {
-            case 'notification-settings':
-                self::render_notification_settings();
-                break;
-        }
-    }
-
-    /**
-     * Render notification settings page
-     */
-    private static function render_notification_settings() {
-        // Get current user settings via REST API class
-        $user_id = get_current_user_id();
-
-        // Start output
-        get_header();
+        ob_start();
         ?>
         <div class="pit-notification-settings">
             <div class="pit-notification-settings__container">
@@ -248,7 +192,6 @@ class PIT_Virtual_Pages {
             let settings = {};
             let saving = false;
 
-            // Fetch current settings
             async function loadSettings() {
                 try {
                     const response = await fetch(restUrl + 'notifications/settings', {
@@ -268,7 +211,6 @@ class PIT_Virtual_Pages {
                 }
             }
 
-            // Save settings
             async function saveSettings() {
                 if (saving) return;
                 saving = true;
@@ -306,10 +248,6 @@ class PIT_Virtual_Pages {
                     msgDiv.style.display = 'block';
                     setTimeout(() => { msgDiv.style.display = 'none'; }, 3000);
                 }
-            }
-
-            function toggleSetting(key) {
-                settings[key] = !settings[key];
             }
 
             function render() {
@@ -367,7 +305,6 @@ class PIT_Virtual_Pages {
 
                 app.innerHTML = html;
 
-                // Attach event listeners
                 app.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
                     checkbox.addEventListener('change', function() {
                         settings[this.dataset.key] = this.checked;
@@ -377,20 +314,10 @@ class PIT_Virtual_Pages {
                 document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
             }
 
-            // Initialize
             loadSettings();
         })();
         </script>
         <?php
-        get_footer();
-        exit;
-    }
-
-    /**
-     * Flush rewrite rules on activation
-     */
-    public static function activate() {
-        self::add_rewrite_rules();
-        flush_rewrite_rules();
+        return ob_get_clean();
     }
 }
