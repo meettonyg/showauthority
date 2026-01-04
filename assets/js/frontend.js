@@ -1,5 +1,5 @@
 /**
- * Frontend JavaScript for Podcast Influence Tracker
+ * Frontend JavaScript for Guestify Interview Tracker
  *
  * Handles interactive features for shortcodes
  */

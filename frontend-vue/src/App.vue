@@ -2,7 +2,7 @@
   <div id="app">
     <header class="app-header">
       <div class="container">
-        <h1>Podcast Influence Tracker</h1>
+        <h1>Guestify Interview Tracker</h1>
         <nav>
           <router-link to="/">Home</router-link>
           <router-link to="/podcasts">Podcasts</router-link>
@@ -17,7 +17,7 @@
 
     <footer class="app-footer">
       <div class="container">
-        <p>&copy; 2024 Podcast Influence Tracker</p>
+        <p>&copy; 2024 Guestify Interview Tracker</p>
       </div>
     </footer>
   </div>
@@ -27,7 +27,9 @@
 import { onMounted } from 'vue'
 
 onMounted(() => {
-  console.log('Podcast Influence Tracker loaded')
+  if (import.meta.env.DEV) {
+    console.log('Guestify Interview Tracker loaded')
+  }
 })
 </script>
 

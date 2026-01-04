@@ -1,7 +1,7 @@
 {
   "name": "podcast-influence-frontend",
   "version": "1.0.0",
-  "description": "Headless Vue 3 frontend for Podcast Influence Tracker",
+  "description": "Headless Vue 3 frontend for Guestify Interview Tracker",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

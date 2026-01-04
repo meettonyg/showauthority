@@ -1,6 +1,6 @@
 # Shortcodes and Integrations Reference
 
-Comprehensive documentation for all WordPress shortcodes and third-party integrations available in the Podcast Influence Tracker plugin.
+Comprehensive documentation for all WordPress shortcodes and third-party integrations available in the Guestify Interview Tracker plugin.
 
 ## Table of Contents
 

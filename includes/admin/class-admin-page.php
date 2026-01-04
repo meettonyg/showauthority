@@ -24,8 +24,8 @@ class PIT_Admin_Page {
     public static function add_menu_pages() {
         // Main menu page
         add_menu_page(
-            __('Podcast Influence Tracker', 'podcast-influence-tracker'),
-            __('Podcast Influence', 'podcast-influence-tracker'),
+            __('Guestify Interview Tracker', 'podcast-influence-tracker'),
+            __('Guestify', 'podcast-influence-tracker'),
             'manage_options',
             'podcast-influence',
             [__CLASS__, 'render_dashboard_page'],
@@ -120,7 +120,7 @@ class PIT_Admin_Page {
     public static function render_dashboard_page() {
         ?>
         <div class="wrap">
-            <h1><?php _e('Podcast Influence Tracker - Dashboard', 'podcast-influence-tracker'); ?></h1>
+            <h1><?php _e('Guestify Interview Tracker - Dashboard', 'podcast-influence-tracker'); ?></h1>
 
             <div id="pit-app-dashboard">
                 <p><?php _e('Loading...', 'podcast-influence-tracker'); ?></p>
