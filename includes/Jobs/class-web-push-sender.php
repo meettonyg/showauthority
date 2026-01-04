@@ -384,19 +384,18 @@ class PIT_Web_Push_Sender {
 
         $details = openssl_pkey_get_details($key);
 
-        // Export private key (32 bytes)
-        openssl_pkey_export($key, $pem);
-        preg_match('/-----BEGIN EC PRIVATE KEY-----(.+?)-----END EC PRIVATE KEY-----/s', $pem, $matches);
-        $der = base64_decode($matches[1]);
+        if (!isset($details['ec']) || !isset($details['ec']['d']) || !isset($details['ec']['x']) || !isset($details['ec']['y'])) {
+            return false;
+        }
 
-        // Extract private key from DER (last 32 bytes before the OID)
-        $private_raw = substr($der, 7, 32);
+        // Private key is the 'd' component (32 bytes for P-256)
+        $private_raw = $details['ec']['d'];
 
-        // Public key is x || y (64 bytes total)
-        $public_raw = $details['ec']['x'] . $details['ec']['y'];
+        // Public key is x || y (64 bytes total), prefixed with 0x04 for uncompressed format
+        $public_raw = "\x04" . $details['ec']['x'] . $details['ec']['y'];
 
         return [
-            'public_key'  => self::base64url_encode("\x04" . $public_raw),
+            'public_key'  => self::base64url_encode($public_raw),
             'private_key' => self::base64url_encode($private_raw),
         ];
     }
