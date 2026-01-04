@@ -27,7 +27,9 @@
 import { onMounted } from 'vue'
 
 onMounted(() => {
-  console.log('Guestify Interview Tracker loaded')
+  if (import.meta.env.DEV) {
+    console.log('Guestify Interview Tracker loaded')
+  }
 })
 </script>
 
