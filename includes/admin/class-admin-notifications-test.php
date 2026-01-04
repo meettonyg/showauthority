@@ -208,19 +208,41 @@ class PIT_Admin_Notifications_Test {
     private static function handle_generate_vapid() {
         $keys = PIT_Web_Push_Sender::generate_vapid_keys();
 
-        if ($keys) {
+        if ($keys && !empty($keys['public_key']) && !empty($keys['private_key'])) {
             PIT_Web_Push_Sender::save_vapid_keys($keys['public_key'], $keys['private_key']);
-            add_settings_error(
-                'pit_notifications',
-                'vapid_generated',
-                __('VAPID keys generated successfully!', 'podcast-influence-tracker'),
-                'success'
-            );
+
+            // Verify the save worked
+            $saved_public = get_option(PIT_Web_Push_Sender::VAPID_PUBLIC_KEY_OPTION, '');
+            $saved_private = get_option(PIT_Web_Push_Sender::VAPID_PRIVATE_KEY_OPTION, '');
+
+            if (!empty($saved_public) && !empty($saved_private)) {
+                add_settings_error(
+                    'pit_notifications',
+                    'vapid_generated',
+                    __('VAPID keys generated and saved successfully!', 'podcast-influence-tracker'),
+                    'success'
+                );
+            } else {
+                add_settings_error(
+                    'pit_notifications',
+                    'vapid_save_failed',
+                    __('VAPID keys generated but failed to save to database.', 'podcast-influence-tracker'),
+                    'error'
+                );
+            }
         } else {
+            $error_msg = 'Failed to generate VAPID keys.';
+            if (!function_exists('openssl_pkey_new')) {
+                $error_msg .= ' OpenSSL extension not available.';
+            } elseif ($keys === false) {
+                $error_msg .= ' Key generation returned false.';
+            } else {
+                $error_msg .= ' Keys array incomplete: public=' . (isset($keys['public_key']) ? 'yes' : 'no') . ', private=' . (isset($keys['private_key']) ? 'yes' : 'no');
+            }
             add_settings_error(
                 'pit_notifications',
                 'vapid_failed',
-                __('Failed to generate VAPID keys. Make sure OpenSSL is available.', 'podcast-influence-tracker'),
+                $error_msg,
                 'error'
             );
         }
