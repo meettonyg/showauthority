@@ -171,4 +171,33 @@ class PIT_Appearance_Repository {
             'verified' => (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE manually_verified = 1"),
         ];
     }
+
+    /**
+     * Get upcoming interviews for notifications
+     *
+     * Returns appearances with record_date on the specified date
+     * that haven't been notified yet.
+     *
+     * @param string $target_date Date to check (Y-m-d format)
+     * @return array
+     */
+    public static function get_upcoming_interviews($target_date) {
+        global $wpdb;
+
+        $appearances_table = $wpdb->prefix . 'pit_guest_appearances';
+        $podcasts_table = $wpdb->prefix . 'pit_podcasts';
+        $notifications_table = $wpdb->prefix . 'pit_notifications';
+
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT a.*, p.title as podcast_name
+             FROM {$appearances_table} a
+             JOIN {$podcasts_table} p ON a.podcast_id = p.id
+             WHERE a.record_date = %s
+               AND a.id NOT IN (
+                   SELECT appearance_id FROM {$notifications_table}
+                   WHERE type = 'interview_soon' AND appearance_id IS NOT NULL
+               )",
+            $target_date
+        ), ARRAY_A);
+    }
 }
