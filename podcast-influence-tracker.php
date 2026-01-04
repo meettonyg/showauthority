@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: Podcast Influence Tracker
+ * Plugin Name: Guestify Interview Tracker
  * Plugin URI: https://github.com/meettonyg/showauthority
- * Description: Track and analyze social media influence metrics for podcasts with intelligent guest management
+ * Description: Comprehensive interview and podcast guest management with intelligent tracking, social metrics, and network analysis
  * Version: 4.0.0
  * Author: Guestify
  * Author URI: https://guestify.com

@@ -1,6 +1,6 @@
-# Podcast Influence Tracker - Vue 3 Frontend
+# Guestify Interview Tracker - Vue 3 Frontend
 
-Headless Vue 3 frontend for the Podcast Influence Tracker WordPress plugin.
+Headless Vue 3 frontend for the Guestify Interview Tracker WordPress plugin.
 
 ## Features
 
@@ -22,7 +22,7 @@ Headless Vue 3 frontend for the Podcast Influence Tracker WordPress plugin.
 ## Prerequisites
 
 - Node.js 16+ and npm
-- WordPress site with Podcast Influence Tracker plugin installed
+- WordPress site with Guestify Interview Tracker plugin installed
 
 ## Setup
 

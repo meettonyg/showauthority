@@ -1,5 +1,5 @@
 /**
- * Podcast Influence Tracker - Vue 3 Admin App
+ * Guestify Interview Tracker - Vue 3 Admin App
  *
  * Progressive loading admin interface with real-time updates
  */

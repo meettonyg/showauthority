@@ -1,10 +1,10 @@
-# Podcast Influence Tracker
+# Guestify Interview Tracker
 
-A WordPress plugin for tracking podcast influence metrics and managing guest intelligence with a hybrid "just-in-time" strategy for cost-effective data enrichment.
+A WordPress plugin for comprehensive interview and podcast guest management with intelligent tracking, social metrics, and network analysis.
 
 ## Overview
 
-The Podcast Influence Tracker provides comprehensive podcast and guest management with intelligent deduplication, network analysis, and social media metrics tracking. It uses a three-layer architecture that optimizes both user experience and API costs.
+The Guestify Interview Tracker provides comprehensive podcast and guest management with intelligent deduplication, network analysis, and social media metrics tracking. It uses a three-layer architecture that optimizes both user experience and API costs.
 
 ## Key Features
 
