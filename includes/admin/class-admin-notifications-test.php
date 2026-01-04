@@ -405,6 +405,16 @@ class PIT_Admin_Notifications_Test {
                             </td>
                         </tr>
                         <tr>
+                            <td><strong><?php _e('Web Push Library', 'podcast-influence-tracker'); ?></strong></td>
+                            <td>
+                                <?php if (PIT_Web_Push_Sender::is_library_available()): ?>
+                                    <span style="color: green;">✓ <?php _e('Installed (minishlink/web-push)', 'podcast-influence-tracker'); ?></span>
+                                <?php else: ?>
+                                    <span style="color: orange;">⚠ <?php _e('Not installed - Run: composer install', 'podcast-influence-tracker'); ?></span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <tr>
                             <td><strong><?php _e('Your Push Subscriptions', 'podcast-influence-tracker'); ?></strong></td>
                             <td><?php echo count($user_subscriptions); ?> <?php _e('device(s)', 'podcast-influence-tracker'); ?></td>
                         </tr>
@@ -552,22 +562,29 @@ class PIT_Admin_Notifications_Test {
                 </p>
             </div>
 
-            <!-- Encryption Warning -->
-            <div class="card" style="max-width: 800px; margin-bottom: 20px; border-left: 4px solid #dba617;">
-                <h2><?php _e('⚠️ Important: Production Encryption', 'podcast-influence-tracker'); ?></h2>
+            <!-- Encryption Status -->
+            <?php if (PIT_Web_Push_Sender::is_library_available()): ?>
+            <div class="card" style="max-width: 800px; margin-bottom: 20px; border-left: 4px solid #46b450;">
+                <h2><?php _e('✓ Production Ready', 'podcast-influence-tracker'); ?></h2>
                 <p>
-                    <?php _e('The current push notification implementation uses a <strong>placeholder encryption</strong>. Push services (Chrome, Firefox, etc.) will <strong>reject</strong> unencrypted payloads.', 'podcast-influence-tracker'); ?>
-                </p>
-                <p>
-                    <?php _e('For production use, you must install the web-push library:', 'podcast-influence-tracker'); ?>
-                </p>
-                <code style="display: block; padding: 10px; background: #f0f0f0; margin: 10px 0;">
-                    composer require minishlink/web-push
-                </code>
-                <p>
-                    <?php _e('Then update the PIT_Web_Push_Sender class to use proper RFC 8291 encryption.', 'podcast-influence-tracker'); ?>
+                    <?php _e('The <strong>minishlink/web-push</strong> library is installed. Push notifications use proper RFC 8291 encryption and will work with all push services (Chrome, Firefox, Edge, etc.).', 'podcast-influence-tracker'); ?>
                 </p>
             </div>
+            <?php else: ?>
+            <div class="card" style="max-width: 800px; margin-bottom: 20px; border-left: 4px solid #dba617;">
+                <h2><?php _e('⚠️ Install Web Push Library', 'podcast-influence-tracker'); ?></h2>
+                <p>
+                    <?php _e('Push notifications require the <strong>minishlink/web-push</strong> library for proper encryption. Without it, push services will reject notifications.', 'podcast-influence-tracker'); ?>
+                </p>
+                <p><?php _e('Run this command in the plugin directory:', 'podcast-influence-tracker'); ?></p>
+                <code style="display: block; padding: 10px; background: #f0f0f0; margin: 10px 0;">
+                    composer install
+                </code>
+                <p class="description">
+                    <?php _e('If Composer is not installed on your server, you can run it locally and upload the vendor folder.', 'podcast-influence-tracker'); ?>
+                </p>
+            </div>
+            <?php endif; ?>
 
         </div>
         <?php
