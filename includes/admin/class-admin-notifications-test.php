@@ -194,6 +194,12 @@ class PIT_Admin_Notifications_Test {
                 self::handle_create_table();
                 break;
         }
+
+        // Redirect to refresh the page with updated data
+        // Store settings errors in transient so they persist through redirect
+        set_transient('settings_errors', get_settings_errors(), 30);
+        wp_safe_redirect(admin_url('admin.php?page=podcast-influence-notifications-test&settings-updated=true'));
+        exit;
     }
 
     /**
@@ -309,6 +315,22 @@ class PIT_Admin_Notifications_Test {
      * Render the admin page
      */
     public static function render_page() {
+        // Retrieve settings errors from transient (after redirect)
+        if (isset($_GET['settings-updated'])) {
+            $errors = get_transient('settings_errors');
+            if ($errors) {
+                foreach ($errors as $error) {
+                    add_settings_error(
+                        $error['setting'],
+                        $error['code'],
+                        $error['message'],
+                        $error['type']
+                    );
+                }
+                delete_transient('settings_errors');
+            }
+        }
+
         $vapid_configured = PIT_Web_Push_Sender::is_configured();
         $vapid_public_key = get_option(PIT_Web_Push_Sender::VAPID_PUBLIC_KEY_OPTION, '');
         $table_exists = PIT_Push_Subscriptions_Schema::table_exists();
